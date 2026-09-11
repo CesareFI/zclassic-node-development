@@ -4276,6 +4276,22 @@ bool CheckBlockHeader(const CBlockHeader& block, CValidationState& state, bool f
     return true;
 }
 
+static bool LogCheckTransactionFailure(const CBlock& block, size_t txIndex,
+                                      const CTransaction& tx, const CValidationState& state)
+{
+    int nDoS = 0;
+    state.IsInvalid(nDoS);
+    return error("CheckBlock(): CheckTransaction failed: block=%s tx_index=%u txid=%s "
+                 "version=%d overwintered=%d versionGroupId=0x%08x expiryHeight=%u "
+                 "vin=%u vout=%u joinsplits=%u sapling_spends=%u sapling_outputs=%u "
+                 "valueBalance=%d reject_reason=%s reject_code=%u dos_score=%d",
+                 block.GetHash().ToString(), txIndex, tx.GetHash().ToString(),
+                 tx.nVersion, tx.fOverwintered, tx.nVersionGroupId, tx.nExpiryHeight,
+                 tx.vin.size(), tx.vout.size(), tx.vjoinsplit.size(),
+                 tx.vShieldedSpend.size(), tx.vShieldedOutput.size(), tx.valueBalance,
+                 state.GetRejectReason(), state.GetRejectCode(), nDoS);
+}
+
 bool CheckBlock(const CBlock& block, CValidationState& state,
                 libzcash::ProofVerifier& verifier,
                 bool fCheckPOW, bool fCheckMerkleRoot, bool fCheckSizeLimits)
@@ -4328,9 +4344,11 @@ bool CheckBlock(const CBlock& block, CValidationState& state,
                                  REJECT_INVALID, "bad-cb-multiple");
 
         // Check transactions
-        BOOST_FOREACH(const CTransaction& tx, block.vtx)
+        for (size_t txIndex = 0; txIndex < block.vtx.size(); ++txIndex) {
+            const CTransaction& tx = block.vtx[txIndex];
             if (!CheckTransaction(tx, state, verifier))
-                return error("CheckBlock(): CheckTransaction failed");
+                return LogCheckTransactionFailure(block, txIndex, tx, state);
+        }
 
         unsigned int nSigOps = 0;
         BOOST_FOREACH(const CTransaction& tx, block.vtx)

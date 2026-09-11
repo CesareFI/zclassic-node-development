@@ -1,8 +1,10 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
+#include <limits>
 
 #include "consensus/validation.h"
 #include "main.h"
+#include "util.h"
 #include "utiltest.h"
 #include "zcash/Proof.hpp"
 
@@ -338,4 +340,119 @@ TEST_F(ContextualCheckBlockTest, BlockSaplingRulesRejectOtherTx) {
         SCOPED_TRACE("BlockSaplingRulesRejectOverwinterTx");
         ExpectInvalidBlockFromTx(CTransaction(mtx), 100, "bad-sapling-tx-version-group-id");
     }
+}
+
+// Diagnostic-only regression coverage. No peers, chain data, or proof parameters.
+namespace {
+class ConsoleLogCapture {
+    const bool previous = fPrintToConsole;
+    bool active = true;
+public:
+    ConsoleLogCapture() {
+        testing::internal::CaptureStdout();
+        fPrintToConsole = true;
+    }
+    ~ConsoleLogCapture() {
+        if (active) testing::internal::GetCapturedStdout();
+        fPrintToConsole = previous;
+    }
+    std::string Finish() {
+        const std::string text = testing::internal::GetCapturedStdout();
+        active = false;
+        return text;
+    }
+};
+
+CMutableTransaction DiagnosticCoinbase() {
+    CMutableTransaction tx;
+    tx.vin.resize(1);
+    tx.vin[0].scriptSig = CScript() << 1 << OP_0;
+    tx.vout.push_back(CTxOut(0, CScript() << OP_TRUE));
+    return tx;
+}
+
+void ExpectDiagnostic(const CBlock& block, size_t index, const std::string& fields,
+                      const std::string& reason, int dos) {
+    auto verifier = libzcash::ProofVerifier::Strict();
+    CValidationState direct, state;
+    ConsoleLogCapture capture;
+    EXPECT_FALSE(CheckTransaction(block.vtx[index], direct, verifier));
+    EXPECT_FALSE(CheckBlock(block, state, verifier, false, false));
+    const std::string log = capture.Finish();
+    const std::string expected = strprintf(
+        "ERROR: CheckBlock(): CheckTransaction failed: block=%s tx_index=%u txid=%s ",
+        block.GetHash().ToString(), index, block.vtx[index].GetHash().ToString()) + fields +
+        strprintf(" reject_reason=%s reject_code=16 dos_score=%d\n", reason, dos);
+    EXPECT_NE(std::string::npos, log.find(expected));
+    EXPECT_EQ(log.find(expected), log.rfind(expected));
+    EXPECT_EQ(reason, state.GetRejectReason());
+    EXPECT_EQ(direct.GetRejectReason(), state.GetRejectReason());
+    EXPECT_EQ(direct.GetRejectCode(), state.GetRejectCode());
+    EXPECT_EQ(direct.GetDebugMessage(), state.GetDebugMessage());
+    EXPECT_EQ(direct.CorruptionPossible(), state.CorruptionPossible());
+    EXPECT_EQ(direct.IsError(), state.IsError());
+    int directDoS = -1, blockDoS = -1;
+    EXPECT_TRUE(direct.IsInvalid(directDoS));
+    EXPECT_TRUE(state.IsInvalid(blockDoS));
+    EXPECT_EQ(dos, blockDoS);
+    EXPECT_EQ(directDoS, blockDoS);
+}
+} // namespace
+
+TEST(CheckBlock, DiagnosticCoinbaseIndexZero) {
+    CMutableTransaction tx = DiagnosticCoinbase();
+    tx.nVersion = 0;
+    CBlock block;
+    block.vtx.push_back(tx);
+    ExpectDiagnostic(block, 0,
+        "version=0 overwintered=0 versionGroupId=0x00000000 expiryHeight=0 "
+        "vin=1 vout=1 joinsplits=0 sapling_spends=0 sapling_outputs=0 valueBalance=0",
+        "bad-txns-version-too-low", 100);
+}
+
+TEST(CheckBlock, DiagnosticSaplingCountsAndSignedBalance) {
+    CBlock block;
+    block.vtx.push_back(DiagnosticCoinbase());
+    CMutableTransaction tx = DiagnosticCoinbase();
+    tx.vin[0].prevout = COutPoint(uint256S("01"), 0);
+    block.vtx.push_back(tx); // A valid transaction before the failing one.
+    tx.fOverwintered = true;
+    tx.nVersion = SAPLING_TX_VERSION;
+    tx.nVersionGroupId = SAPLING_VERSION_GROUP_ID;
+    tx.nExpiryHeight = 478600;
+    tx.vin.push_back(CTxIn(COutPoint(uint256S("02"), 1)));
+    tx.vout.resize(3, CTxOut(0, CScript()));
+    tx.vout[0].nValue = -1; // Rejected before any proof verification.
+    tx.vjoinsplit.resize(1);
+    tx.vjoinsplit[0].proof = libzcash::GrothProof{};
+    SpendDescription spend;
+    spend.zkproof.fill(0);
+    spend.spendAuthSig.fill(0);
+    tx.vShieldedSpend.assign(2, spend);
+    OutputDescription output;
+    output.encCiphertext.fill(0);
+    output.outCiphertext.fill(0);
+    output.zkproof.fill(0);
+    tx.vShieldedOutput.assign(4, output);
+    tx.valueBalance = std::numeric_limits<CAmount>::min();
+    tx.joinSplitSig.fill(0);
+    tx.bindingSig.fill(0);
+    block.vtx.push_back(tx);
+    ExpectDiagnostic(block, 2,
+        "version=4 overwintered=1 versionGroupId=0x892f2085 expiryHeight=478600 "
+        "vin=2 vout=3 joinsplits=1 sapling_spends=2 sapling_outputs=4 "
+        "valueBalance=-9223372036854775808", "bad-txns-vout-negative", 100);
+}
+
+TEST(CheckBlock, DiagnosticTenPointRejection) {
+    CBlock block;
+    block.vtx.push_back(DiagnosticCoinbase());
+    CMutableTransaction tx = DiagnosticCoinbase();
+    tx.vin[0].prevout = COutPoint(uint256S("03"), 0);
+    tx.vout.clear();
+    block.vtx.push_back(tx);
+    ExpectDiagnostic(block, 1,
+        "version=1 overwintered=0 versionGroupId=0x00000000 expiryHeight=0 "
+        "vin=1 vout=0 joinsplits=0 sapling_spends=0 sapling_outputs=0 valueBalance=0",
+        "bad-txns-vout-empty", 10);
 }
