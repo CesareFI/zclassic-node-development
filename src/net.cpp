@@ -24,6 +24,8 @@
 #include <fcntl.h>
 #endif
 
+#include <memory>
+
 #include <boost/filesystem.hpp>
 #include <boost/thread.hpp>
 
@@ -353,20 +355,14 @@ CNode* FindNode(const CService& addr)
     return NULL;
 }
 
-CNode* ConnectNode(CAddress addrConnect, const char *pszDest)
+bool ConnectNode(CAddress addrConnect, const char *pszDest, CSemaphoreGrant *grantOutbound, bool fOneShot)
 {
-    if (pszDest == NULL) {
-        if (IsLocal(addrConnect))
-            return NULL;
-
-        // Keep the peer alive between lookup and acquiring its reference.
+    if (!pszDest && IsLocal(addrConnect))
+        return false;
+    {
         LOCK(cs_vNodes);
-        CNode* pnode = FindNode((CService)addrConnect);
-        if (pnode)
-        {
-            pnode->AddRef();
-            return pnode;
-        }
+        if (pszDest ? FindNode(std::string(pszDest)) : FindNode((CService)addrConnect))
+            return false;
     }
 
     /// debug print
@@ -383,30 +379,35 @@ CNode* ConnectNode(CAddress addrConnect, const char *pszDest)
         if (!IsSelectableSocket(hSocket)) {
             LogPrintf("Cannot create connection: non-selectable socket created (fd >= FD_SETSIZE ?)\n");
             CloseSocket(hSocket);
-            return NULL;
+            return false;
         }
 
         addrman.Attempt(addrConnect);
 
-        // Add node
-        CNode* pnode = new CNode(hSocket, addrConnect, pszDest ? pszDest : "", false);
-        pnode->AddRef();
-
+        // Initialize ownership and download roles before publishing to the
+        // socket thread. A failed/duplicate attempt remains owned locally.
+        std::unique_ptr<CNode> pnode(new CNode(hSocket, addrConnect, pszDest ? pszDest : "", false));
         {
             LOCK(cs_vNodes);
-            vNodes.push_back(pnode);
+            // Another connection attempt may have completed while we connected.
+            if (pszDest ? FindNode(std::string(pszDest)) : FindNode((CService)addrConnect))
+                return false;
+            pnode->fNetworkNode = true;
+            pnode->fOneShot = fOneShot;
+            if (grantOutbound)
+                grantOutbound->MoveTo(pnode->grantOutbound);
+            pnode->AddRef(); // The connected/disconnected lists own this reference.
+            vNodes.push_back(pnode.get());
+            pnode.release();
+            return true;
         }
-
-        pnode->nTimeConnected = GetTime();
-
-        return pnode;
     } else if (!proxyConnectionFailed) {
         // If connecting to the node failed, and failure is not caused by a problem connecting to
         // the proxy, mark this as an attempt.
         addrman.Attempt(addrConnect);
     }
 
-    return NULL;
+    return false;
 }
 
 void CNode::CloseSocketDisconnect()
@@ -980,6 +981,7 @@ void ThreadSocketHandler()
         //
         // Disconnect nodes
         //
+        std::vector<NodeId> disconnected;
         {
             LOCK(cs_vNodes);
             // Disconnect unused nodes
@@ -1002,9 +1004,14 @@ void ThreadSocketHandler()
                     if (pnode->fNetworkNode || pnode->fInbound)
                         pnode->Release();
                     vNodesDisconnected.push_back(pnode);
+                    disconnected.push_back(pnode->GetId());
                 }
             }
         }
+        // Validation callbacks acquire cs_main. Never hold cs_vNodes here.
+        // Release requests now, even while references postpone object deletion.
+        for (NodeId id : disconnected)
+            g_signals.DisconnectNode(id);
         {
             // Delete disconnected nodes
             list<CNode*> vNodesDisconnectedCopy = vNodesDisconnected;
@@ -1518,18 +1525,9 @@ bool OpenNetworkConnection(const CAddress& addrConnect, CSemaphoreGrant *grantOu
     } else if (FindNode(std::string(pszDest)))
         return false;
 
-    CNode* pnode = ConnectNode(addrConnect, pszDest);
-    boost::this_thread::interruption_point();
-
-    if (!pnode)
-        return false;
-    if (grantOutbound)
-        grantOutbound->MoveTo(pnode->grantOutbound);
-    pnode->fNetworkNode = true;
-    if (fOneShot)
-        pnode->fOneShot = true;
-
-    return true;
+    // ConnectNode publishes a fully initialized, list-owned node. Returning a
+    // raw peer pointer here would race immediate remote disconnect/deletion.
+    return ConnectNode(addrConnect, pszDest, grantOutbound, fOneShot);
 }
 
 

@@ -91,6 +91,7 @@ uint64_t nPruneTarget = 0;
 /* If the tip is older than this (in seconds), the node is considered to be in initial block download.
  */
 int64_t nMaxTipAge = DEFAULT_MAX_TIP_AGE;
+int nMaxBlocksInTransitPerPeer = MAX_BLOCKS_IN_TRANSIT_PER_PEER;
 
 boost::optional<unsigned int> expiryDeltaArg = boost::none;
 
@@ -288,6 +289,8 @@ struct CNodeState {
     CService address;
     //! Whether we have a fully established connection.
     bool fCurrentlyConnected;
+    //! Download lifecycle ended, even if references keep the peer object alive.
+    bool fDownloadStopped;
     //! Accumulated misbehaviour score for this peer.
     int nMisbehavior;
     //! Whether this peer should be disconnected and banned (unless whitelisted).
@@ -317,6 +320,7 @@ struct CNodeState {
 
     CNodeState() {
         fCurrentlyConnected = false;
+        fDownloadStopped = false;
         nMisbehavior = 0;
         fShouldBan = false;
         pindexBestKnownBlock = NULL;
@@ -353,7 +357,7 @@ void UpdatePreferredDownload(CNode* node, CNodeState* state)
     nPreferredDownload -= state->fPreferredDownload;
 
     // Whether this node should be marked as a preferred download node.
-    state->fPreferredDownload = (!node->fInbound || node->fWhitelisted) && !node->fOneShot && !node->fClient;
+    state->fPreferredDownload = !state->fDownloadStopped && (!node->fInbound || node->fWhitelisted) && !node->fOneShot && !node->fClient;
 
     nPreferredDownload += state->fPreferredDownload;
 }
@@ -373,6 +377,14 @@ void InitializeNode(NodeId nodeid, const CNode *pnode) {
 }
 
 void StopBlockDownload(CNodeState& state);
+
+void DisconnectNode(NodeId nodeid)
+{
+    LOCK(cs_main);
+    CNodeState* state = State(nodeid);
+    if (state != NULL)
+        StopBlockDownload(*state);
+}
 
 void FinalizeNode(NodeId nodeid) {
     LOCK(cs_main);
@@ -417,6 +429,7 @@ bool MarkBlockAsReceived(const uint256& hash) {
 void StopBlockDownload(CNodeState& state)
 {
     AssertLockHeld(cs_main);
+    state.fDownloadStopped = true;
     while (!state.vBlocksInFlight.empty()) {
         const uint256 hash = state.vBlocksInFlight.front().hash;
         const bool removed = MarkBlockAsReceived(hash);
@@ -437,6 +450,7 @@ void MarkBlockAsInFlight(NodeId nodeid, const uint256& hash, const Consensus::Pa
     CNodeState *state = State(nodeid);
     assert(state != NULL);
 
+    assert(!state->fDownloadStopped);
     // Make sure it's not listed somewhere already.
     MarkBlockAsReceived(hash);
 
@@ -519,6 +533,8 @@ void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<con
     CNodeState *state = State(nodeid);
     assert(state != NULL);
 
+    if (state->fDownloadStopped)
+        return;
     // Make sure pindexBestKnownBlock is up to date, we'll need it.
     ProcessBlockAvailability(nodeid);
 
@@ -595,6 +611,12 @@ void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<con
 
 } // anon namespace
 
+CBlockDownloadStats GetBlockDownloadStats()
+{
+    LOCK(cs_main);
+    return {mapBlocksInFlight.size(), nQueuedValidatedHeaders, nPreferredDownload, nSyncStarted};
+}
+
 bool GetNodeStateStats(NodeId nodeid, CNodeStateStats &stats) {
     LOCK(cs_main);
     CNodeState *state = State(nodeid);
@@ -626,6 +648,7 @@ void RegisterNodeSignals(CNodeSignals& nodeSignals)
     nodeSignals.ProcessMessages.connect(&ProcessMessages);
     nodeSignals.SendMessages.connect(&SendMessages);
     nodeSignals.InitializeNode.connect(&InitializeNode);
+    nodeSignals.DisconnectNode.connect(&DisconnectNode);
     nodeSignals.FinalizeNode.connect(&FinalizeNode);
 }
 
@@ -635,6 +658,7 @@ void UnregisterNodeSignals(CNodeSignals& nodeSignals)
     nodeSignals.ProcessMessages.disconnect(&ProcessMessages);
     nodeSignals.SendMessages.disconnect(&SendMessages);
     nodeSignals.InitializeNode.disconnect(&InitializeNode);
+    nodeSignals.DisconnectNode.disconnect(&DisconnectNode);
     nodeSignals.FinalizeNode.disconnect(&FinalizeNode);
 }
 
@@ -6479,8 +6503,9 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
                     // not a direct successor.
                     pfrom->PushMessage("getheaders", chainActive.GetLocator(pindexBestHeader), inv.hash);
                     CNodeState *nodestate = State(pfrom->GetId());
-                    if (chainActive.Tip()->GetBlockTime() > GetAdjustedTime() - chainparams.GetConsensus().PoWTargetSpacing(pindexBestHeader->nHeight) * 20 &&
-                        nodestate->nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
+                    if (!nodestate->fDownloadStopped && !pfrom->fDisconnect &&
+                        chainActive.Tip()->GetBlockTime() > GetAdjustedTime() - chainparams.GetConsensus().PoWTargetSpacing(pindexBestHeader->nHeight) * 20 &&
+                        nodestate->nBlocksInFlight < nMaxBlocksInTransitPerPeer) {
                         vToFetch.push_back(inv);
                         // Mark block as in flight already, even though the actual "getdata" message only goes out
                         // later (within the same cs_main lock, though).
@@ -7295,6 +7320,10 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         BOOST_FOREACH(const CBlockReject& reject, state.rejects)
             pto->PushMessage("reject", (string)"block", reject.chRejectCode, reject.strRejectReason, reject.hashBlock);
         state.rejects.clear();
+        if (pto->fDisconnect || state.fDownloadStopped) {
+            StopBlockDownload(state);
+            return true;
+        }
 
         // Start block sync
         if (pindexBestHeader == NULL)
@@ -7406,10 +7435,10 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         // Message: getdata (blocks)
         //
         vector<CInv> vGetData;
-        if (!pto->fDisconnect && !pto->fClient && (fFetch || !IsInitialBlockDownload()) && state.nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
+        if (!pto->fDisconnect && !pto->fClient && (fFetch || !IsInitialBlockDownload()) && state.nBlocksInFlight < nMaxBlocksInTransitPerPeer) {
             vector<const CBlockIndex*> vToDownload;
             NodeId staller = -1;
-            FindNextBlocksToDownload(pto->GetId(), MAX_BLOCKS_IN_TRANSIT_PER_PEER - state.nBlocksInFlight, vToDownload, staller);
+            FindNextBlocksToDownload(pto->GetId(), nMaxBlocksInTransitPerPeer - state.nBlocksInFlight, vToDownload, staller);
             BOOST_FOREACH(const CBlockIndex *pindex, vToDownload) {
                 vGetData.push_back(CInv(MSG_BLOCK, pindex->GetBlockHash()));
                 MarkBlockAsInFlight(pto->GetId(), pindex->GetBlockHash(), consensusParams, pindex);

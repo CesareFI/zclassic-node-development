@@ -25,6 +25,7 @@ def snapshot(cli):
 
     chain = rpc("getblockchaininfo")
     peers = rpc("getpeerinfo")
+    download = chain.get("blockdownload", {})
     return {
         "time": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "active_height": chain["blocks"], "header_height": chain["headers"],
@@ -32,10 +33,12 @@ def snapshot(cli):
         "inbound": sum(bool(peer["inbound"]) for peer in peers),
         "outbound": sum(not peer["inbound"] for peer in peers),
         "download_peers": [peer["id"] for peer in peers if peer.get("inflight")],
-        # Global counters are copied from one internally consistent peer snapshot.
-        # With no peers the RPC does not expose them: report unknown, not zero.
-        "global_blocks_in_flight": peers[0].get("global_blocks_in_flight") if peers else None,
-        "global_validated_blocks_in_flight": peers[0].get("global_validated_blocks_in_flight") if peers else None,
+        # Current daemons expose counters even without peers; older ones may not.
+        "global_blocks_in_flight": download.get("blocks_in_flight", peers[0].get("global_blocks_in_flight") if peers else None),
+        "global_validated_blocks_in_flight": download.get("validated_blocks_in_flight", peers[0].get("global_validated_blocks_in_flight") if peers else None),
+        "preferred_download_peers": download.get("preferred_peers"),
+        "header_sync_peers": download.get("header_sync_peers"),
+        "max_blocks_per_peer": download.get("max_blocks_per_peer"),
         "peers": [{key: peer[key] for key in FIELDS if key in peer} for peer in peers],
     }
 

@@ -238,6 +238,9 @@ BOOST_AUTO_TEST_CASE(rpc_disconnect_and_ban_connected_peers)
         }
     } listed(&first, &second, &other);
     CNode::ClearBanned();
+    const int references = first.GetRefCount();
+    BOOST_CHECK(!ConnectNode(first.addr, nullptr));
+    BOOST_CHECK_EQUAL(first.GetRefCount(), references);
     BOOST_CHECK_THROW(CallRPC("disconnectnode missing"), runtime_error);
     BOOST_CHECK_NO_THROW(CallRPC("disconnectnode first"));
     BOOST_CHECK(first.fDisconnect);

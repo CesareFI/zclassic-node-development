@@ -9,6 +9,7 @@
 #include "utiltime.h"
 
 #include <boost/test/unit_test.hpp>
+#include <boost/test/data/test_case.hpp>
 #include <fstream>
 #include <memory>
 #include <array>
@@ -20,6 +21,7 @@ extern bool ProcessMessage(CNode*, std::string, CDataStream&, int64_t);
 namespace {
 struct DownloadSetup : TestingSetup {
     std::vector<CBlock> blocks;
+    const int savedDownloadLimit = nMaxBlocksInTransitPerPeer;
     const int64_t start = 1800000000000000LL;
 
     DownloadSetup()
@@ -49,7 +51,7 @@ struct DownloadSetup : TestingSetup {
         BOOST_REQUIRE(blocks.front().GetHash() == Params().GetConsensus().hashGenesisBlock);
     }
 
-    ~DownloadSetup() { SetMockTimeMicros(0); }
+    ~DownloadSetup() { SetMockTimeMicros(0); nMaxBlocksInTransitPerPeer = savedDownloadLimit; }
 
     void Headers(CNode& peer)
     {
@@ -149,6 +151,35 @@ BOOST_AUTO_TEST_CASE(headers_do_not_hide_stall_and_healthy_peer_advances_chain)
     BOOST_CHECK_EQUAL(Stats(healthy).nGlobalValidatedBlocksInFlight, 0);
 }
 
+BOOST_AUTO_TEST_CASE(socket_disconnect_releases_requests_before_finalization)
+{
+    CNode stalled(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "A", true);
+    CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "B", true);
+    Headers(stalled);
+    BOOST_REQUIRE(SendMessages(&stalled, false));
+    BOOST_REQUIRE_EQUAL(Stats(stalled).nBlocksInFlight, 128);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 1);
+    // Socket removal signals download cleanup while other references retain A.
+    GetNodeSignals().DisconnectNode(stalled.GetId());
+    GetNodeSignals().DisconnectNode(stalled.GetId());
+    BOOST_CHECK_EQUAL(Stats(stalled).nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(Stats(healthy).nGlobalValidatedBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 0);
+    Headers(stalled); // A queued message must not revive its download lifecycle.
+    BOOST_REQUIRE(SendMessages(&stalled, false));
+    BOOST_CHECK_EQUAL(Stats(stalled).nBlocksInFlight, 0);
+    Headers(healthy);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_CHECK_EQUAL(Stats(healthy).nBlocksInFlight, 128);
+    BOOST_CHECK_EQUAL(Stats(healthy).vHeightInFlight.front(), 1);
+    // Late finalization must not release or double-subtract B's reassigned work.
+    GetNodeSignals().FinalizeNode(stalled.GetId());
+    GetNodeSignals().DisconnectNode(stalled.GetId());
+    BOOST_CHECK_EQUAL(Stats(healthy).nBlocksInFlight, 128);
+    BOOST_CHECK_EQUAL(Stats(healthy).nGlobalValidatedBlocksInFlight, 128);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 1);
+}
+
 BOOST_AUTO_TEST_CASE(randomized_receipt_reassignment_and_repeated_cleanup)
 {
     std::array<std::unique_ptr<CNode>, 4> peers;
@@ -214,6 +245,38 @@ BOOST_AUTO_TEST_CASE(randomized_receipt_reassignment_and_repeated_cleanup)
     GetNodeSignals().InitializeNode(peers.front()->GetId(), peers.front().get());
     BOOST_CHECK_EQUAL(Stats(*peers.front()).nGlobalBlocksInFlight, 0);
     BOOST_CHECK_EQUAL(Stats(*peers.front()).nGlobalValidatedBlocksInFlight, 0);
+}
+
+BOOST_DATA_TEST_CASE(download_limits_bound_requests_and_recover,
+                     boost::unit_test::data::make(std::vector<int>{16, 32, 64, 128}))
+{
+    nMaxBlocksInTransitPerPeer = sample;
+    CNode stalled(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "A", true);
+    CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "B", true);
+    Headers(stalled);
+    BOOST_REQUIRE(SendMessages(&stalled, false));
+    BOOST_REQUIRE_EQUAL(Stats(stalled).nBlocksInFlight, sample);
+    BOOST_REQUIRE(SendMessages(&stalled, false));
+    BOOST_REQUIRE_EQUAL(Stats(stalled).nBlocksInFlight, sample);
+    Headers(healthy);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    const auto laterHeights = Stats(healthy).vHeightInFlight;
+    BOOST_REQUIRE_EQUAL(laterHeights.size(), std::min(sample, 129 - sample));
+    for (int height : laterHeights) Deliver(healthy, height);
+    BOOST_REQUIRE_EQUAL(chainActive.Height(), 0);
+    SetMockTimeMicros(start + 301000000LL);
+    Headers(stalled);
+    BOOST_REQUIRE(SendMessages(&stalled, false));
+    BOOST_CHECK(stalled.fDisconnect);
+    BOOST_CHECK_EQUAL(Stats(healthy).nGlobalBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(Stats(healthy).nGlobalValidatedBlocksInFlight, 0);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    const auto takeover = Stats(healthy).vHeightInFlight;
+    BOOST_REQUIRE_EQUAL(takeover.size(), sample);
+    BOOST_REQUIRE_EQUAL(takeover.front(), 1);
+    for (int height : takeover) Deliver(healthy, height);
+    BOOST_CHECK_EQUAL(chainActive.Height(), std::min(2 * sample, 129));
+    BOOST_CHECK_EQUAL(Stats(healthy).nGlobalBlocksInFlight, 0);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

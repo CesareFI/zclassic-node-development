@@ -46,6 +46,10 @@ path as receipt, releases header-sync and preferred-download roles, and supports
 repeated cleanup. Timeout handling invokes it before object destruction, so a
 healthy peer can take over even while other references retain the old peer.
 `FinalizeNode` uses the same cleanup and tolerates repeat finalization.
+The socket thread also signals cleanup immediately after removing a connection,
+outside the peer-list lock. This covers remote and administrative disconnects
+even when another reference postpones destruction. A terminal download-state
+flag prevents queued messages from reviving request or header-sync roles.
 
 The deterministic test uses real OG blocks 0–129, not generated blocks. It
 feeds valid headers to A, records its 128 requests, lets B supply block 129,
@@ -158,12 +162,19 @@ The `setban` RPC previously repeatedly looked up the first matching peer until
 the socket thread removed it. It also used that borrowed pointer outside the
 peer-list lock. The corrected traversal holds the lock and marks every matching
 peer once. `disconnectnode` now holds the same lock from lookup through use,
-and `ConnectNode` holds it while finding an existing peer and acquiring its
-reference. These changes do not alter consensus or ban policy.
+and outbound creation now refuses duplicate connections without acquiring an
+extra reference. Previously that path incremented a reference that had no
+matching release. New peers receive their network ownership, one-shot flag,
+and outbound permit before publication to the socket thread. `ConnectNode`
+returns a success flag so the caller does not dereference a peer that might
+already have disconnected. Disconnect flags and reference counts are atomic;
+reference release asserts against underflow. These changes do not alter consensus or ban policy.
 
 A regression keeps connected peer objects alive and listed while invoking the
 RPC. Before the traversal fix it timed out after 20 seconds; afterwards it
 returns and flags both matching peers while leaving an unrelated peer connected.
+A duplicate-connection regression failed before the ownership fix with two
+assertions, including a reference count of 1 instead of 0; it passes afterwards.
 The RPC and download suites pass together. An additional seeded 1000-operation
 test derives its accounting model from emitted block requests, interleaves
 cross-peer and duplicate block deliveries with repeated peer finalization, and
@@ -179,4 +190,39 @@ Use `--json --watch=60` for one machine-readable sample per minute. It uses
 read-only RPCs and does not change node state. Preferred-download eligibility
 and peers actually holding requests are reported separately. When no peer
 exists, the current RPC cannot expose global counters and the report leaves
-those values unknown instead of assuming zero.
+those values unknown instead of assuming zero on older builds. The new
+`getblockchaininfo.blockdownload` object exposes global request counts,
+preferred-download and header-sync peer counts, and the configured request
+limit even with zero peers.
+
+## Bounded scheduling and further verification
+
+`-maxblocksinflight` accepts integers from 1 through 128; its default remains
+128. The ordinary download scheduler and direct inventory-request path use
+the same startup-only bound. Nine invalid arguments, including overflow and
+trailing junk, are rejected before database startup. Parameterized tests verify
+request caps and normal block recovery at 16, 32, 64, and 128.
+
+The real socket test also passes with both A and B dialed through `addnode`:
+both are outbound preferred-download peers, A times out after 300.08 seconds
+while continuing header traffic, and B advances the chain to 129 without a
+restart. Two distinct loopback IPs respect the existing connection-per-IP
+policy. No production peer-selection policy was relaxed for the test.
+
+The larger benchmark fixture contains 4096 consecutive OG blocks copied from
+the frozen snapshot (SHA256
+`4a382be44d8add0f95c17e4bc6eb8a414cf3e37b38779a95c738f42fec9bbdd3`).
+An initial smoke run reached 4033 within 180 seconds while compilation competed
+for CPU, then stopped cleanly at the harness deadline. This is not a valid
+limit comparison. The short harness test passes at all four limits. Quiet-host
+measurements and stalled-peer comparisons remain outstanding; no performance
+claim or default change is justified yet.
+
+A package installation caused `needrestart` to restart production automatically
+at 07:08 UTC. The unit stopped through RPC, logged shutdown completion, and
+systemd reported success; mining remained off. It loaded the already tested
+limit-option build, SHA256
+`84732b84c233277dd2a16aea5674dab0ce2c08aa6e331c1f99442035c82d67b9`.
+Subsequent package installations must set `NEEDRESTART_MODE=l` to prevent
+unplanned restarts. The latest socket lifecycle and outbound ownership changes
+have not yet been deliberately deployed to production.

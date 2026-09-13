@@ -35,12 +35,13 @@ def compact(data, offset=0):
     return int.from_bytes(data[offset + 1:end], "little"), end
 
 
-def fixture():
-    data = (ROOT / "src/test/data/zclassic-download-130.dat").read_bytes()
-    if hashlib.sha256(data).hexdigest() != "4ae8e7c4a2b2fb5b925ecc18752bf517dad39dd0a965a8c44d4fee29360ba2b6":
+def fixture(path=None, checksum="4ae8e7c4a2b2fb5b925ecc18752bf517dad39dd0a965a8c44d4fee29360ba2b6"):
+    data = (path or ROOT / "src/test/data/zclassic-download-130.dat").read_bytes()
+    if hashlib.sha256(data).hexdigest() != checksum:
         raise ValueError("fixture checksum mismatch")
     blocks, headers, offset = {}, [], 0
-    for height in range(130):
+    height = 0
+    while offset < len(data):
         if data[offset:offset + 4] != MAGIC:
             raise ValueError("fixture network mismatch")
         size = struct.unpack_from("<I", data, offset + 4)[0]
@@ -50,17 +51,19 @@ def fixture():
         blocks[hash256(header)] = (height, block)
         headers.append(header)
         offset += size + 8
+        height += 1
     if offset != len(data):
         raise ValueError("fixture framing mismatch")
     return blocks, headers
 
 
 class Peer(threading.Thread):
-    def __init__(self, port, name, blocks, headers, deliver):
+    def __init__(self, port, name, blocks, headers, deliver, connection=None):
         super().__init__(name=name, daemon=True)
-        self.sock = socket.create_connection(("127.0.0.1", port), timeout=5)
+        self.sock = connection or socket.create_connection(("127.0.0.1", port), timeout=5)
         self.sock.settimeout(0.5)
         self.blocks, self.headers, self.deliver = blocks, headers, deliver
+        self.header_heights = {hash256(header): height for height, header in enumerate(headers)}
         self.requested = threading.Event()
         self.disconnected = threading.Event()
         self.stop_event = threading.Event()
@@ -73,8 +76,9 @@ class Peer(threading.Thread):
         self.sock.sendall(MAGIC + command.encode().ljust(12, b"\0") +
                           struct.pack("<I", len(payload)) + hash256(payload)[:4] + payload)
 
-    def send_headers(self):
-        payload = b"\x81" + b"".join(header + b"\0" for header in self.headers[1:])
+    def send_headers(self, start=1):
+        batch = self.headers[start:start + 160]
+        payload = bytes([len(batch)]) + b"".join(header + b"\0" for header in batch)
         self.send("headers", payload)
         self.header_messages += 1
 
@@ -84,7 +88,16 @@ class Peer(threading.Thread):
         elif command == b"verack":
             self.send_headers()
         elif command == b"getheaders":
-            self.send_headers()
+            count, offset = compact(payload, 4)  # Serialized locator starts with version.
+            if count > 101 or len(payload) != offset + 32 * (count + 1):
+                raise ValueError("invalid getheaders locator")
+            start = 1
+            for index in range(count):
+                locator = payload[offset + index * 32:offset + (index + 1) * 32]
+                if locator in self.header_heights:
+                    start = self.header_heights[locator] + 1
+                    break
+            self.send_headers(start)
         elif command == b"ping":
             self.send("pong", payload)
         elif command == b"getdata":
@@ -112,12 +125,12 @@ class Peer(threading.Thread):
             agent = ("/OG-download-test-" + self.name + ":1/").encode()
             self.send("version", struct.pack("<iQq", 170011, 1, int(time.time())) +
                       addr + addr + os.urandom(8) + bytes([len(agent)]) + agent +
-                      struct.pack("<i?", 129, False))
+                      struct.pack("<i?", len(self.headers) - 1, False))
             buffer = bytearray()
             next_headers = time.monotonic() + 30
             while not self.stop_event.is_set():
                 if not self.deliver and self.requested.is_set() and time.monotonic() >= next_headers:
-                    self.send_headers()
+                    self.send_headers(max(1, len(self.headers) - 159))
                     next_headers = time.monotonic() + 30
                 try:
                     data = self.sock.recv(65536)
@@ -157,6 +170,7 @@ def main():
     parser.add_argument("--daemon", type=pathlib.Path, default=ROOT / "src/zclassicd")
     parser.add_argument("--cli", type=pathlib.Path, default=ROOT / "src/zclassic-cli")
     parser.add_argument("--timeout", type=int, default=390)
+    parser.add_argument("--outbound", action="store_true", help="Have the daemon dial A and B through addnode")
     parser.add_argument("--churn", type=int, default=2, help="Peers torn down with 128 pending requests before A")
     parser.add_argument("--rpcport", type=int, default=18623)
     parser.add_argument("--port", type=int, default=18633)
@@ -179,7 +193,18 @@ def main():
                "-dnsseed=0", "-listenonion=0", "-upnp=0", "-natpmp=0", "-maxconnections=32",
                "-rpcport=" + str(args.rpcport), "-port=" + str(args.port), "-bind=127.0.0.1",
                "-printtoconsole=1", "-debug=net"]
-    report = {"command": command, "pass": False}
+    listeners = []
+    if args.outbound:
+        for index, port in enumerate((args.port + 1, args.port + 2), 1):
+            host = "127.0.0." + str(index)
+            listener = socket.socket()
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            listener.bind((host, port))
+            listener.listen(4)
+            listener.settimeout(20)
+            listeners.append(listener)
+            command.append("-addnode=" + host + ":" + str(port))
+    report = {"command": command, "pass": False, "outbound_test": args.outbound}
     peers = []
     with (output / "daemon.log").open("w") as log:
         daemon = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
@@ -211,15 +236,23 @@ def main():
                     time.sleep(0.1)
                 assert not churned.errors, churned.errors
                 report["churn"].append({"name": name, "requests": len(churned.requests)})
-            stalled = Peer(args.port, "A", blocks, headers, False)
+            stalled = Peer(args.port, "A", blocks, headers, False,
+                           listeners[0].accept()[0] if listeners else None)
             peers.append(stalled)
             stalled.start()
             assert stalled.requested.wait(20), "A never received requests"
             assert stalled.requests == list(range(1, 129)), stalled.requests
-            healthy = Peer(args.port, "B", blocks, headers, True)
+            healthy = Peer(args.port, "B", blocks, headers, True,
+                           listeners[1].accept()[0] if listeners else None)
             peers.append(healthy)
             healthy.start()
             assert healthy.requested.wait(20), "B never received requests"
+            download_peers = [peer for peer in rpc("getpeerinfo")
+                              if peer["subver"] in ("/OGdownloadtestA:1/", "/OGdownloadtestB:1/")]
+            assert len(download_peers) == 2
+            assert all(peer["inbound"] != args.outbound for peer in download_peers)
+            if args.outbound:
+                assert all(peer["preferred_download"] for peer in download_peers)
             deadline = time.monotonic() + args.timeout
             samples = []
             while time.monotonic() < deadline:
@@ -249,6 +282,8 @@ def main():
         except Exception as error:
             report["error"] = repr(error)
         finally:
+            for listener in listeners:
+                listener.close()
             for peer in peers:
                 peer.finish()
             try:

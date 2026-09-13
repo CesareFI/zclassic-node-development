@@ -439,6 +439,7 @@ std::string HelpMessage(HelpMessageMode mode)
     strUsage += HelpMessageOpt("-listenonion", strprintf(_("Automatically create Tor hidden service (default: %d)"), DEFAULT_LISTEN_ONION));
     strUsage += HelpMessageOpt("-natpmp", strprintf(_("Open the listen port on the router automatically via NAT-PMP/PCP, so peers can reach you (no UPnP). Maps only your own listen port (default: %d)"), DEFAULT_NATPMP));
     strUsage += HelpMessageOpt("-maxconnections=<n>", strprintf(_("Maintain at most <n> connections to peers (default: %u)"), DEFAULT_MAX_PEER_CONNECTIONS));
+    strUsage += HelpMessageOpt("-maxblocksinflight=<n>", strprintf(_("Request at most <n> blocks per peer (1-%u, default: %u)"), MAX_BLOCKS_IN_TRANSIT_PER_PEER, MAX_BLOCKS_IN_TRANSIT_PER_PEER));
     strUsage += HelpMessageOpt("-maxreceivebuffer=<n>", strprintf(_("Maximum per-connection receive buffer, <n>*1000 bytes (default: %u)"), 5000));
     strUsage += HelpMessageOpt("-maxsendbuffer=<n>", strprintf(_("Maximum per-connection send buffer, <n>*1000 bytes (default: %u)"), 1000));
     strUsage += HelpMessageOpt("-onion=<ip:port>", strprintf(_("Use separate SOCKS5 proxy to reach peers via Tor hidden services (default: %s)"), "-proxy"));
@@ -1648,6 +1649,13 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
         if (SoftSetBoolArg("-rescan", true))
             LogPrintf("%s: parameter interaction: -zapwallettxes=<mode> -> setting -rescan=1\n", __func__);
     }
+
+    int64_t blockDownloadLimit = MAX_BLOCKS_IN_TRANSIT_PER_PEER;
+    if ((mapArgs.count("-maxblocksinflight") &&
+         !ParseInt64(mapArgs["-maxblocksinflight"], &blockDownloadLimit)) ||
+        blockDownloadLimit < 1 || blockDownloadLimit > MAX_BLOCKS_IN_TRANSIT_PER_PEER)
+        return InitError(strprintf(_("-maxblocksinflight must be an integer from 1 to %u."), MAX_BLOCKS_IN_TRANSIT_PER_PEER));
+    nMaxBlocksInTransitPerPeer = static_cast<int>(blockDownloadLimit);
 
     // Make sure enough file descriptors are available
     int nBind = std::max((int)mapArgs.count("-bind") + (int)mapArgs.count("-whitebind"), 1);

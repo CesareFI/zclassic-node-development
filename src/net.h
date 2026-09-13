@@ -73,7 +73,7 @@ CNode* FindNode(const CNetAddr& ip);
 CNode* FindNode(const CSubNet& subNet);
 CNode* FindNode(const std::string& addrName);
 CNode* FindNode(const CService& ip);
-CNode* ConnectNode(CAddress addrConnect, const char *pszDest = NULL);
+bool ConnectNode(CAddress addrConnect, const char *pszDest = NULL, CSemaphoreGrant *grantOutbound = NULL, bool fOneShot = false);
 bool OpenNetworkConnection(const CAddress& addrConnect, CSemaphoreGrant *grantOutbound = NULL, const char *strDest = NULL, bool fOneShot = false);
 unsigned short GetListenPort();
 bool BindListenPort(const CService &bindAddr, std::string& strError, bool fWhitelisted = false);
@@ -105,6 +105,7 @@ struct CNodeSignals
     boost::signals2::signal<bool (CNode*), CombinerAll> ProcessMessages;
     boost::signals2::signal<bool (CNode*, bool), CombinerAll> SendMessages;
     boost::signals2::signal<void (NodeId, const CNode*)> InitializeNode;
+    boost::signals2::signal<void (NodeId)> DisconnectNode;
     boost::signals2::signal<void (NodeId)> FinalizeNode;
 };
 
@@ -281,7 +282,7 @@ public:
     bool fInbound;
     bool fNetworkNode;
     bool fSuccessfullyConnected;
-    bool fDisconnect;
+    std::atomic<bool> fDisconnect;
     // We use fRelayTxes for two purposes -
     // a) it allows us to not relay tx invs before receiving the peer's version message
     // b) the peer may tell us in its version message that we should not relay tx invs
@@ -291,7 +292,7 @@ public:
     CSemaphoreGrant grantOutbound;
     CCriticalSection cs_filter;
     CBloomFilter* pfilter;
-    int nRefCount;
+    std::atomic<int> nRefCount;
     NodeId id;
 protected:
 
@@ -379,8 +380,9 @@ public:
 
     int GetRefCount()
     {
-        assert(nRefCount >= 0);
-        return nRefCount;
+        const int count = nRefCount.load();
+        assert(count >= 0);
+        return count;
     }
 
     // requires LOCK(cs_vRecvMsg)
@@ -411,7 +413,8 @@ public:
 
     void Release()
     {
-        nRefCount--;
+        const int previous = nRefCount.fetch_sub(1);
+        assert(previous > 0);
     }
 
 
