@@ -68,6 +68,7 @@ unsigned int SendBufferSize();
 
 void AddOneShot(const std::string& strDest);
 void AddressCurrentlyConnected(const CService& addr);
+// Returned pointers are borrowed; callers must hold cs_vNodes while using them.
 CNode* FindNode(const CNetAddr& ip);
 CNode* FindNode(const CSubNet& subNet);
 CNode* FindNode(const std::string& addrName);

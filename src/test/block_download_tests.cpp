@@ -11,6 +11,9 @@
 #include <boost/test/unit_test.hpp>
 #include <fstream>
 #include <memory>
+#include <array>
+#include <map>
+#include <random>
 
 extern bool ProcessMessage(CNode*, std::string, CDataStream&, int64_t);
 
@@ -144,6 +147,73 @@ BOOST_AUTO_TEST_CASE(headers_do_not_hide_stall_and_healthy_peer_advances_chain)
     BOOST_CHECK(chainActive.Tip()->GetBlockHash() == blocks.back().GetHash());
     BOOST_CHECK_EQUAL(Stats(healthy).nGlobalBlocksInFlight, 0);
     BOOST_CHECK_EQUAL(Stats(healthy).nGlobalValidatedBlocksInFlight, 0);
+}
+
+BOOST_AUTO_TEST_CASE(randomized_receipt_reassignment_and_repeated_cleanup)
+{
+    std::array<std::unique_ptr<CNode>, 4> peers;
+    for (auto& peer : peers) {
+        peer.reset(new CNode(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "mixed", true));
+        Headers(*peer);
+    }
+    // Reference model comes from outbound wire requests, not internal counters.
+    std::map<uint256, size_t> expected;
+    std::mt19937 random(0x5a434c);
+    for (unsigned step = 0; step < 1000; ++step) {
+        const size_t owner = random() % peers.size();
+        const unsigned operation = random() % 4;
+        if (operation < 2) {
+            BOOST_REQUIRE(SendMessages(peers[owner].get(), false));
+            for (const auto& frame : peers[owner]->vSendMsg) {
+                if (frame.size() == 1) continue; // In-memory transport sentinel.
+                CDataStream stream(frame, SER_NETWORK, PROTOCOL_VERSION);
+                CMessageHeader header(Params().MessageStart());
+                stream >> header;
+                if (header.GetCommand() != "getdata") continue;
+                std::vector<CInv> requests;
+                stream >> requests;
+                for (const auto& request : requests) {
+                    if (request.type != MSG_BLOCK) continue;
+                    BOOST_CHECK(expected.emplace(request.hash, owner).second);
+                }
+            }
+            peers[owner]->vSendMsg.clear();
+            peers[owner]->vSendMsg.push_back(CSerializeData(1, 0));
+            peers[owner]->nSendSize = 1;
+        } else if (operation == 2 && !expected.empty()) {
+            auto request = expected.begin();
+            std::advance(request, random() % expected.size());
+            const int height = mapBlockIndex.at(request->first)->nHeight;
+            expected.erase(request);
+            // Any peer may deliver a requested block, including a different owner.
+            Deliver(*peers[owner], height);
+            Deliver(*peers[owner], height); // Duplicate receipt must not subtract twice.
+        } else {
+            GetNodeSignals().FinalizeNode(peers[owner]->GetId());
+            GetNodeSignals().FinalizeNode(peers[owner]->GetId());
+            for (auto it = expected.begin(); it != expected.end();) {
+                if (it->second == owner) it = expected.erase(it);
+                else ++it;
+            }
+            CNodeStateStats absent;
+            BOOST_CHECK(!GetNodeStateStats(peers[owner]->GetId(), absent));
+            GetNodeSignals().InitializeNode(peers[owner]->GetId(), peers[owner].get());
+            Headers(*peers[owner]);
+        }
+        std::array<size_t, 4> queued{};
+        for (const auto& entry : expected) ++queued[entry.second];
+        for (size_t index = 0; index < peers.size(); ++index) {
+            const auto stats = Stats(*peers[index]);
+            BOOST_CHECK_EQUAL(stats.nBlocksInFlight, queued[index]);
+            BOOST_CHECK_EQUAL(stats.nValidatedBlocksInFlight, queued[index]);
+            BOOST_CHECK_EQUAL(stats.nGlobalBlocksInFlight, expected.size());
+            BOOST_CHECK_EQUAL(stats.nGlobalValidatedBlocksInFlight, expected.size());
+        }
+    }
+    for (auto& peer : peers) GetNodeSignals().FinalizeNode(peer->GetId());
+    GetNodeSignals().InitializeNode(peers.front()->GetId(), peers.front().get());
+    BOOST_CHECK_EQUAL(Stats(*peers.front()).nGlobalBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(Stats(*peers.front()).nGlobalValidatedBlocksInFlight, 0);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

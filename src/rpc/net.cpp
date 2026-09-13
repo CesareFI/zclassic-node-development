@@ -254,6 +254,7 @@ UniValue disconnectnode(const UniValue& params, bool fHelp)
             + HelpExampleRpc("disconnectnode", "\"192.168.0.6:8033\"")
         );
 
+    LOCK(cs_vNodes);
     CNode* pNode = FindNode(params[0].get_str());
     if (pNode == NULL)
         throw JSONRPCError(RPC_CLIENT_NODE_NOT_CONNECTED, "Node not found in connected nodes");
@@ -570,9 +571,13 @@ UniValue setban(const UniValue& params, bool fHelp)
 
         isSubnet ? CNode::Ban(subNet, banTime, absolute) : CNode::Ban(netAddr, banTime, absolute);
 
-        //disconnect possible nodes
-        while(CNode *bannedNode = (isSubnet ? FindNode(subNet) : FindNode(netAddr)))
-            bannedNode->fDisconnect = true;
+        // Hold the list lock for pointer lifetime and visit each peer once.
+        // Disconnected peers remain listed until the socket thread removes them.
+        LOCK(cs_vNodes);
+        for (CNode* node : vNodes) {
+            if (isSubnet ? subNet.Match(node->addr) : (CNetAddr)node->addr == netAddr)
+                node->fDisconnect = true;
+        }
     }
     else if(strCommand == "remove")
     {

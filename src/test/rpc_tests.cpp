@@ -7,6 +7,7 @@
 
 #include "key_io.h"
 #include "netbase.h"
+#include "net.h"
 #include "utilstrencodings.h"
 
 #include "test/test_bitcoin.h"
@@ -215,6 +216,38 @@ BOOST_AUTO_TEST_CASE(json_parse_errors)
     // BTC addresses should fail parsing
     BOOST_CHECK_THROW(ParseNonRFCJSONValue("175tWpb8K1S7NmH4Zx6rewF9WQrcZv245W"), std::runtime_error);
     BOOST_CHECK_THROW(ParseNonRFCJSONValue("3J98t1WpEZ73CNmQviecrnyiWrnqRhWNL"), std::runtime_error);
+}
+
+// Keep peers alive and listed while RPC executes: flagging a disconnect must
+// not wait for the socket thread to destroy a peer, or repeatedly find it.
+BOOST_AUTO_TEST_CASE(rpc_disconnect_and_ban_connected_peers)
+{
+    CNode first(INVALID_SOCKET, CAddress(CService("192.0.2.1", 8033)), "first", true);
+    CNode second(INVALID_SOCKET, CAddress(CService("192.0.2.2", 8033)), "second", true);
+    CNode other(INVALID_SOCKET, CAddress(CService("198.51.100.1", 8033)), "other", true);
+    struct ListedPeers {
+        ListedPeers(CNode* a, CNode* b, CNode* c) {
+            LOCK(cs_vNodes);
+            BOOST_REQUIRE(vNodes.empty());
+            vNodes = {a, b, c};
+        }
+        ~ListedPeers() {
+            LOCK(cs_vNodes);
+            vNodes.clear();
+            CNode::ClearBanned();
+        }
+    } listed(&first, &second, &other);
+    CNode::ClearBanned();
+    BOOST_CHECK_THROW(CallRPC("disconnectnode missing"), runtime_error);
+    BOOST_CHECK_NO_THROW(CallRPC("disconnectnode first"));
+    BOOST_CHECK(first.fDisconnect);
+    BOOST_CHECK(!second.fDisconnect);
+    BOOST_CHECK(!other.fDisconnect);
+    BOOST_CHECK_NO_THROW(CallRPC("setban 192.0.2.0/24 add"));
+    BOOST_CHECK(first.fDisconnect);
+    BOOST_CHECK(second.fDisconnect);
+    BOOST_CHECK(!other.fDisconnect);
+    BOOST_CHECK_EQUAL(vNodes.size(), 3U);
 }
 
 BOOST_AUTO_TEST_CASE(rpc_ban)

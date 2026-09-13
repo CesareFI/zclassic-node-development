@@ -359,7 +359,8 @@ CNode* ConnectNode(CAddress addrConnect, const char *pszDest)
         if (IsLocal(addrConnect))
             return NULL;
 
-        // Look for an existing connection
+        // Keep the peer alive between lookup and acquiring its reference.
+        LOCK(cs_vNodes);
         CNode* pnode = FindNode((CService)addrConnect);
         if (pnode)
         {

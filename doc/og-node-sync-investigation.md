@@ -55,8 +55,21 @@ After timeout B takes over blocks 1–128 and normal block processing advances
 A separate test checks teardown accounting after repeated peer churn.
 
 Both tests failed before the cleanup fix (14 failed assertions) and passed
-after it. This is a deterministic message-processing test with an in-memory
-outbound transport; a full socket-level recovery test remains additional work.
+after it. The deterministic test uses an in-memory outbound transport.
+A separate real-socket test (`qa/rpc-tests/og-download-stall.py`) also passed:
+A sent eleven header messages while withholding 128 requested blocks, timed
+out after 300.11 seconds, and B supplied all blocks through 129 without a
+restart. The isolated daemon stopped through RPC with exit status zero.
+With two preceding peer teardowns, each holding 128 requests, the same socket
+test failed on the preserved original daemon (no recovery within 390 seconds)
+and passed on the fixed daemon (A disconnected after 300.14 seconds). Both
+processes stopped normally through RPC.
+
+An isolated build with address and undefined-behavior sanitizers passed the
+15 download, main, and denial-of-service cases, including leak detection.
+The sandbox's tracing prevented LeakSanitizer from running; the full test was
+therefore repeated on the host and exited successfully. Dependency coverage
+is limited to the code built with sanitizer instrumentation.
 
 ## Block 478544 and historical validation
 
@@ -89,10 +102,18 @@ historical validation rules is allowed under its prohibition on consensus
 parameter changes. No consensus parameter or validation rule has been changed.
 
 The ban list contained both seed addresses despite their demonstrated ability
-to serve the requested block. Historical validation rejection is a plausible
-reason for those bans; the original daemon did not retain debug logging, so
-the historical ban cause has not been directly observed. No blanket unban has
-been performed.
+to serve the requested block. After deployment, the journal directly recorded
+the size rejection, CheckBlock failure, and bans of those serving addresses.
+Thus the validation failure also removes useful block sources. The original
+unlogged bans cannot individually be attributed with certainty. No blanket
+unban has been performed.
+
+The native transaction deserializer reports that the block's second transaction,
+`e3eeb123a79945cc74e6107422b124dc130ddd4b61fe5c74087317c256c79700`,
+is 125811 bytes, version 4 with the Overwinter flag and 74 JoinSplits. It has
+no Sapling spends or outputs. The block's computed Merkle root matches its
+header. These checks locate the size failure but do not establish full
+contextual or proof validity.
 
 ## Hypothesis status
 
@@ -113,17 +134,49 @@ The original journal records an empty `MAINPID` causing
 `ExecStop=/bin/kill -TERM $MAINPID` to fail, and a previous shutdown ending in
 SIGKILL. The original unit is backed up in the evidence directory.
 
-The staged unit in `contrib/systemd/zclassic.service` supervises foreground
+The installed unit in `contrib/systemd/zclassic.service` supervises foreground
 execution, stops through `zclassic-cli`, allows 15 minutes for flushing, and
 disables escalation to SIGKILL. A separate temporary datadir test using the
 original daemon exited normally via RPC stop in 0.52 seconds with mining off.
-The unit passed `systemd-analyze verify`. Production deployment and shutdown
-under its actual database load remain to be validated.
+The unit passed `systemd-analyze verify`. Production then stopped gracefully
+under its actual database load in approximately 17 seconds, with systemd
+Result=success and exit status zero. A consistent blocks/chainstate snapshot
+was copied while stopped for isolated diagnosis. Production restarted under
+foreground supervision with the networking fix and new RPC counters; its
+height remains 478543 because the separate size rejection is unchanged.
 
 ## Remaining acceptance work
 
 The production node is not fixed yet. Historical compatibility and full block
 validation, continued production progress past the next 128-block boundary,
-socket-level stalled-peer recovery, sustained useful outbound connections,
-production graceful shutdown, sanitizers, and the 16/32/64/128 performance
+sustained useful outbound connections, sanitizers, and the 16/32/64/128 performance
 comparison are still required. No chainstate or block files have been deleted.
+
+## Additional peer lifetime safety
+
+The `setban` RPC previously repeatedly looked up the first matching peer until
+the socket thread removed it. It also used that borrowed pointer outside the
+peer-list lock. The corrected traversal holds the lock and marks every matching
+peer once. `disconnectnode` now holds the same lock from lookup through use,
+and `ConnectNode` holds it while finding an existing peer and acquiring its
+reference. These changes do not alter consensus or ban policy.
+
+A regression keeps connected peer objects alive and listed while invoking the
+RPC. Before the traversal fix it timed out after 20 seconds; afterwards it
+returns and flags both matching peers while leaving an unrelated peer connected.
+The RPC and download suites pass together. An additional seeded 1000-operation
+test derives its accounting model from emitted block requests, interleaves
+cross-peer and duplicate block deliveries with repeated peer finalization, and
+checks all per-peer and global counters after every operation. It passes. This is not a claim that all legacy
+networking data races have been eliminated.
+
+## Operator report
+
+Run `python3 contrib/diagnostics/sync-status.py --datadir=/root/.zclassic` for
+active/header heights, IBD, connection directions, peers holding block requests,
+request ages, remaining deadlines, stall duration, and global counters.
+Use `--json --watch=60` for one machine-readable sample per minute. It uses
+read-only RPCs and does not change node state. Preferred-download eligibility
+and peers actually holding requests are reported separately. When no peer
+exists, the current RPC cannot expose global counters and the report leaves
+those values unknown instead of assuming zero.
