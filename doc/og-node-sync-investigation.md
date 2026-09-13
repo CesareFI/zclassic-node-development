@@ -725,3 +725,31 @@ with exit zero and no peer errors or sanitizer findings. Evidence:
 mission/preferred-headers-wire-{after,asan}/result.json.
 Use qa/rpc-tests/og-download-stall.py --preferred-recovery to reproduce the mixed
 inbound/outbound scenario; B only sends headers in response to getheaders.
+
+
+## Sparse address-table recovery
+
+Address selection could return no usable address despite a nonempty table. A
+new deterministic case produced six empty results in 128 selections with one
+new address. The old probing loop also slept 100ms every 1000 empty slots,
+while holding the address-manager mutex, up to about 20 seconds per failed
+search. This can delay reconnect attempts, address processing, and shutdown.
+
+Selection now samples at most 1024 random positions before a bounded reservoir
+scan of occupied slots. The fallback always returns an entry for a nonempty
+table, preserves the weight of multiple new-table references, and allocates no
+additional table. New/tried choice and recent-failure penalties are retained.
+The common helper removes the duplicated probing loops and all sleeps under
+the mutex. It does not change address validity or network-group policy.
+
+The sparse-table regression failed before the fix and passes after it, including
+recent repeated failures and tried-only exclusion during new-only selection.
+The legacy selection test now checks eligibility and coverage across all seven
+addresses and ports instead of requiring four exact pseudorandom outputs.
+All 26 addrman/addrdb tests pass normally (0.725s) and under ASan/UBSan/leak
+checking (3.635s). Normal and instrumented daemons each pass 16 alternating
+inbound/outbound teardown rounds with concurrent RPC/ping readers, validate
+through fixture height 129, clear request counters, and stop normally. Both
+isolated fixtures restart from their saved peer tables, retain height 129 with
+mining disabled, and stop with exit zero. Evidence: mission/addrman-sparse-*.
+Production synchronization beyond the historical size rejection is not claimed.

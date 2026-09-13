@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-13 21:47 UTC. Read before starting a new task.
+Updated: 2026-09-13 21:49 UTC. Read before starting a new task.
 
 ## Objective and constraints
 
@@ -13,8 +13,8 @@ changes, or sub-agents. The current user requests continuous autonomous work.
 ## Branch and latest validated work
 
 - Branch: `fix/og-node-sync-20260913`.
-- Latest committed unit: `dc4beef1d`, malformed address-manager parser recovery.
-- Preferred header-discovery milestone validated and ready to commit (see git log).
+- Latest committed unit: `55cf564aa`, preferred outbound header discovery.
+- `dc4beef1d`: malformed address-manager parser recovery.
 - `c214ec7de`: complete address-manager cleanup.
 - `9b3d73993`: bounded peer database loader.
 - `d2afd7586`: test-daemon failure reporting and graceful cleanup.
@@ -191,3 +191,18 @@ all ports; revised26-case suite passes in0.66s. Recent-failure checks were added
 subsequently and need a fresh build/run. ASan build session26755 is still running;
 latest test source must be copied/rebuilt after it completes. Normal/ASan wire
 header runs have completed and both owned daemons stopped. No production action.
+
+
+## Bounded address selection validated
+
+Final26 addrman/addrdb cases PASS normal0.725s and ASan/UBSan/leak3.635s.
+This includes sparse new/tried tables, new-only exclusion, recent repeated
+failure penalties, and selection coverage across both tables/non-default ports.
+Normal and ASan actual daemons each pass16 inbound/outbound protocol teardown
+rounds with concurrent RPC/ping reads, validate129, clear counters, and stop0.
+Restarting only those completed isolated fixtures loads their saved4178-byte
+peers.dat, retains129 with miningoff, and stops0 (1.073/0.818s). No sanitizer
+findings. Evidence mission/addrman-sparse-{final-after,final-asan-after}.log,
+addrman-sparse-wire-{normal,asan}/, and addrman-sparse-restart.log.
+Ready for a separate commit; source production executable/datadir untouched.
+Next reproduce unlocked size()/Add diagnostic reads with ThreadSanitizer.

@@ -199,6 +199,10 @@ private:
     //! list of "new" buckets
     int vvNew[ADDRMAN_NEW_BUCKET_COUNT][ADDRMAN_BUCKET_SIZE];
 
+    //! Select an occupied slot with bounded work, even in a sparse table.
+    template<size_t BucketCount>
+    int SelectTableEntry(const int (&table)[BucketCount][ADDRMAN_BUCKET_SIZE]);
+
 protected:
     //! secret key to randomize bucket select with
     uint256 nKey;

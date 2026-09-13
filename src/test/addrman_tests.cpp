@@ -9,6 +9,7 @@
 #include "hash.h"
 #include "random.h"
 #include <limits>
+#include <set>
 
 using namespace std;
 
@@ -168,6 +169,32 @@ BOOST_AUTO_TEST_CASE(all_truncated_prefixes_leave_empty_manager)
     BOOST_CHECK_EQUAL(loaded.size(), 1);
     BOOST_REQUIRE(loaded.Find(address) != nullptr);
     BOOST_CHECK_EQUAL(loaded.Find(address)->ToString(), address.ToString());
+}
+
+BOOST_AUTO_TEST_CASE(sparse_nonempty_tables_always_select_an_address)
+{
+    const CAddress address(CService("250.1.1.1", 8333));
+    const CNetAddr source("252.2.2.2");
+    for (bool tried : {false, true}) {
+        CAddrManTest addrman;
+        addrman.MakeDeterministic();
+        BOOST_REQUIRE(addrman.Add(address, source));
+        if (tried) addrman.Good(address);
+        for (unsigned round = 0; round < 128; ++round) {
+            BOOST_TEST_CONTEXT("tried=" << tried << " round=" << round) {
+                BOOST_CHECK_EQUAL(addrman.Select().ToString(), address.ToString());
+                BOOST_CHECK_EQUAL(addrman.size(), 1);
+            }
+        }
+        // New-only selection must still exclude a tried-only table.
+        BOOST_CHECK_EQUAL(addrman.Select(true).IsValid(), !tried);
+        for (unsigned attempt = 0; attempt < 16; ++attempt)
+            addrman.Attempt(address);
+        // Recent repeated failures reduce selection probability, but may not
+        // make the only eligible address disappear or prevent termination.
+        for (unsigned round = 0; round < 8; ++round)
+            BOOST_CHECK_EQUAL(addrman.Select().ToString(), address.ToString());
+    }
 }
 
 BOOST_AUTO_TEST_CASE(clear_forgets_addresses_and_allows_reinsertion)
@@ -342,11 +369,24 @@ BOOST_AUTO_TEST_CASE(addrman_select)
     // Test 11: 6 addrs + 1 addr from last test = 7.
     BOOST_CHECK(addrman.size() == 7);
 
-    // Test 12: Select pulls from new and tried regardless of port number.
-    BOOST_CHECK(addrman.Select().ToString() == "250.4.6.6:8333");
-    BOOST_CHECK(addrman.Select().ToString() == "250.3.2.2:9999");
-    BOOST_CHECK(addrman.Select().ToString() == "250.3.3.3:9999");
-    BOOST_CHECK(addrman.Select().ToString() == "250.4.4.4:8333");
+    // Test 12: Exercise eligibility across both tables and all ports without
+    // coupling the test to a particular random-number consumption sequence.
+    const std::set<std::string> expected = {
+        addr1.ToString(), addr2.ToString(), addr3.ToString(), addr4.ToString(),
+        addr5.ToString(), addr6.ToString(), addr7.ToString()};
+    const std::set<std::string> expectedNew = {
+        addr2.ToString(), addr3.ToString(), addr4.ToString()};
+    std::set<std::string> seen, seenNew;
+    for (unsigned round = 0; round < 128; ++round) {
+        const auto selected = addrman.Select().ToString();
+        const auto selectedNew = addrman.Select(true).ToString();
+        BOOST_CHECK_EQUAL(expected.count(selected), 1);
+        BOOST_CHECK_EQUAL(expectedNew.count(selectedNew), 1);
+        seen.insert(selected);
+        seenNew.insert(selectedNew);
+    }
+    BOOST_CHECK(seen == expected);
+    BOOST_CHECK(seenNew == expectedNew);
 }
 
 BOOST_AUTO_TEST_CASE(addrman_new_collisions)
