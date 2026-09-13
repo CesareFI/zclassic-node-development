@@ -3,6 +3,7 @@
 
 #include "chainparams.h"
 #include "consensus/validation.h"
+#include "crypto/common.h"
 #include "main.h"
 #include "net.h"
 #include "test/test_bitcoin.h"
@@ -15,10 +16,46 @@
 #include <array>
 #include <map>
 #include <random>
+#include <limits>
 
 extern bool ProcessMessage(CNode*, std::string, CDataStream&, int64_t);
 
 namespace {
+std::vector<char> MalformedFrame(std::mt19937& random, unsigned step)
+{
+    const bool headerPayload = step % 2 == 0;
+    std::vector<char> payload(1 + random() % 100);
+    for (char& byte : payload) byte = static_cast<char>(random());
+    // One incomplete block header; never an unbounded allocation request.
+    if (headerPayload) payload.front() = 1;
+    CMessageHeader header(Params().MessageStart(), headerPayload ? "headers" : "block", payload.size());
+    const uint256 checksum = Hash(payload.begin(), payload.end());
+    header.nChecksum = ReadLE32(checksum.begin());
+    switch (step % 8) {
+    case 0: header.pchMessageStart[0] ^= 1; break;
+    case 1: header.nChecksum ^= 1; break;
+    case 2: header.nMessageSize = MAX_PROTOCOL_MESSAGE_LENGTH + 1; break;
+    case 3: header.nMessageSize = std::numeric_limits<unsigned int>::max(); break;
+    case 4: header.pchCommand[0] = 0x01; break;
+    default: break; // Correct framing, truncated command payload.
+    }
+    CDataStream encoded(SER_NETWORK, PROTOCOL_VERSION);
+    encoded << header;
+    encoded.write(payload.data(), payload.size());
+    return {encoded.begin(), encoded.end()};
+}
+
+void FeedFragments(CNode& peer, const std::vector<char>& frame, std::mt19937& random)
+{
+    LOCK(peer.cs_vRecvMsg);
+    for (size_t offset = 0; offset < frame.size() && !peer.fDisconnect;) {
+        const size_t size = std::min<size_t>(1 + random() % 31, frame.size() - offset);
+        if (!peer.ReceiveMsgBytes(frame.data() + offset, size) || !ProcessMessages(&peer))
+            peer.fDisconnect = true;
+        offset += size;
+    }
+}
+
 struct DownloadSetup : TestingSetup {
     std::vector<CBlock> blocks;
     const int savedDownloadLimit = nMaxBlocksInTransitPerPeer;
@@ -245,6 +282,40 @@ BOOST_AUTO_TEST_CASE(randomized_receipt_reassignment_and_repeated_cleanup)
     GetNodeSignals().InitializeNode(peers.front()->GetId(), peers.front().get());
     BOOST_CHECK_EQUAL(Stats(*peers.front()).nGlobalBlocksInFlight, 0);
     BOOST_CHECK_EQUAL(Stats(*peers.front()).nGlobalValidatedBlocksInFlight, 0);
+}
+
+// Exercise the actual framed ingress path with fragmented hostile messages,
+// while the sender owns requests. Teardown must still permit a healthy takeover.
+BOOST_AUTO_TEST_CASE(fragmented_malformed_messages_release_downloads)
+{
+    std::mt19937 random(0x4f475a43);
+    for (unsigned step = 0; step < 512; ++step) {
+        CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "malformed", true);
+        Headers(peer);
+        BOOST_REQUIRE(SendMessages(&peer, false));
+        BOOST_REQUIRE_EQUAL(Stats(peer).nBlocksInFlight, 128);
+
+        FeedFragments(peer, MalformedFrame(random, step), random);
+        BOOST_REQUIRE(SendMessages(&peer, false));
+        // Remote close may follow any malformed or incomplete frame. Keep the
+        // object alive to ensure cleanup does not depend on final destruction.
+        peer.fDisconnect = true;
+        GetNodeSignals().DisconnectNode(peer.GetId());
+        GetNodeSignals().DisconnectNode(peer.GetId());
+        BOOST_CHECK_EQUAL(Stats(peer).nBlocksInFlight, 0);
+        BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
+        BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 0);
+        BOOST_CHECK_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 0);
+    }
+    CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 1)), "healthy", true);
+    Headers(healthy);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_REQUIRE_EQUAL(Stats(healthy).nBlocksInFlight, 128);
+    Deliver(healthy, 129);
+    for (size_t height = 1; height <= 128; ++height) Deliver(healthy, height);
+    BOOST_CHECK_EQUAL(chainActive.Height(), 129);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 0);
 }
 
 BOOST_DATA_TEST_CASE(download_limits_bound_requests_and_recover,

@@ -1490,15 +1490,13 @@ void ThreadOpenAddedConnections()
         // (keeping in mind that addnode entries can have many IPs if fNameLookup)
         {
             LOCK(cs_vNodes);
-            BOOST_FOREACH(CNode* pnode, vNodes)
-                for (list<vector<CService> >::iterator it = lservAddressesToAdd.begin(); it != lservAddressesToAdd.end(); it++)
-                    BOOST_FOREACH(const CService& addrNode, *(it))
-                        if (pnode->addr == addrNode)
-                        {
-                            it = lservAddressesToAdd.erase(it);
-                            it--;
-                            break;
-                        }
+            for (const CNode* pnode : vNodes) {
+                // remove_if handles first/last/only entries without ever
+                // decrementing begin() or retaining an erased iterator.
+                lservAddressesToAdd.remove_if([pnode](const vector<CService>& addresses) {
+                    return std::find(addresses.begin(), addresses.end(), pnode->addr) != addresses.end();
+                });
+            }
         }
         BOOST_FOREACH(vector<CService>& vserv, lservAddressesToAdd)
         {
