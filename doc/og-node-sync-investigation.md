@@ -753,3 +753,21 @@ through fixture height 129, clear request counters, and stop normally. Both
 isolated fixtures restart from their saved peer tables, retain height 129 with
 mining disabled, and stop with exit zero. Evidence: mission/addrman-sparse-*.
 Production synchronization beyond the historical size rejection is not claimed.
+
+
+## Address-manager count synchronization
+
+Focused ThreadSanitizer tests reproduced concurrent access to the address vector
+through unlocked size(), and diagnostic formatting of nNew after Add() released
+the mutex. The latter was a read through the formatter's const-reference argument;
+logging needs a value snapshot as well as a correctly locked table update.
+
+size() now uses the existing recursive manager mutex. Both Add overloads copy
+the new/tried counts while locked, then log those local values after unlocking.
+Both TSAN reproductions pass after the fix, without suppressions. The 28 relevant
+normal and ASan/UBSan/leak tests pass, including concurrent replacement/read and
+scalar/vector additions with diagnostics enabled. An instrumented daemon passes
+16 alternating inbound/outbound malformed/FIN/RST/RPC teardown cycles with
+concurrent RPC/ping readers, validates height 129, and stops normally. No consensus
+or connection-selection policy changed. Evidence: mission/addrman-counts-* and
+mission/addrman-{add-,}race-*.

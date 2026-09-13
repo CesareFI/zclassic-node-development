@@ -502,6 +502,7 @@ public:
     //! Return the number of (unique) addresses in all tables.
     size_t size() const
     {
+        LOCK(cs);
         return vRandom.size();
     }
 
@@ -522,14 +523,17 @@ public:
     bool Add(const CAddress &addr, const CNetAddr& source, int64_t nTimePenalty = 0)
     {
         bool fRet = false;
+        int triedCount, newCount;
         {
             LOCK(cs);
             Check();
             fRet |= Add_(addr, source, nTimePenalty);
             Check();
+            triedCount = nTried;
+            newCount = nNew;
         }
         if (fRet)
-            LogPrint("addrman", "Added %s from %s: %i tried, %i new\n", addr.ToStringIPPort(), source.ToString(), nTried, nNew);
+            LogPrint("addrman", "Added %s from %s: %i tried, %i new\n", addr.ToStringIPPort(), source.ToString(), triedCount, newCount);
         return fRet;
     }
 
@@ -537,15 +541,18 @@ public:
     bool Add(const std::vector<CAddress> &vAddr, const CNetAddr& source, int64_t nTimePenalty = 0)
     {
         int nAdd = 0;
+        int triedCount, newCount;
         {
             LOCK(cs);
             Check();
             for (std::vector<CAddress>::const_iterator it = vAddr.begin(); it != vAddr.end(); it++)
                 nAdd += Add_(*it, source, nTimePenalty) ? 1 : 0;
             Check();
+            triedCount = nTried;
+            newCount = nNew;
         }
         if (nAdd)
-            LogPrint("addrman", "Added %i addresses from %s: %i tried, %i new\n", nAdd, source.ToString(), nTried, nNew);
+            LogPrint("addrman", "Added %i addresses from %s: %i tried, %i new\n", nAdd, source.ToString(), triedCount, newCount);
         return nAdd > 0;
     }
 

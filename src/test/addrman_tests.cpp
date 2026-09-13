@@ -10,6 +10,8 @@
 #include "random.h"
 #include <limits>
 #include <set>
+#include <atomic>
+#include <thread>
 
 using namespace std;
 
@@ -51,6 +53,28 @@ public:
         CAddrMan::Delete(nId);
     }
 };
+
+namespace {
+struct AddrmanLogSetup {
+    const bool savedDebug = fDebug;
+    const bool hadCategories = mapMultiArgs.count("-debug") != 0;
+    const std::vector<std::string> savedCategories =
+        hadCategories ? mapMultiArgs.at("-debug") : std::vector<std::string>{};
+
+    AddrmanLogSetup()
+    {
+        mapMultiArgs["-debug"] = {"addrman"};
+        fDebug = true;
+    }
+
+    ~AddrmanLogSetup()
+    {
+        fDebug = savedDebug;
+        if (hadCategories) mapMultiArgs["-debug"] = savedCategories;
+        else mapMultiArgs.erase("-debug");
+    }
+};
+}
 
 BOOST_FIXTURE_TEST_SUITE(addrman_tests, BasicTestingSetup)
 
@@ -195,6 +219,66 @@ BOOST_AUTO_TEST_CASE(sparse_nonempty_tables_always_select_an_address)
         for (unsigned round = 0; round < 8; ++round)
             BOOST_CHECK_EQUAL(addrman.Select().ToString(), address.ToString());
     }
+}
+
+BOOST_AUTO_TEST_CASE(address_counts_during_concurrent_replacement)
+{
+    CAddrMan addrman;
+    const CAddress address(CService("250.1.1.1", 8033));
+    const CNetAddr source("252.2.2.2");
+    std::atomic<bool> started{false};
+    std::atomic<bool> invalidCount{false};
+    std::thread writer([&] {
+        started = true;
+        for (unsigned round = 0; round < 1000; ++round) {
+            addrman.Clear();
+            addrman.Add(address, source);
+        }
+    });
+    std::thread reader([&] {
+        while (!started.load()) std::this_thread::yield();
+        for (unsigned round = 0; round < 100000; ++round) {
+            if (addrman.size() > 1) invalidCount = true;
+        }
+    });
+    writer.join();
+    reader.join();
+    BOOST_CHECK(!invalidCount.load());
+    BOOST_CHECK_EQUAL(addrman.size(), 1);
+}
+
+BOOST_AUTO_TEST_CASE(concurrent_address_additions_and_replacement)
+{
+    AddrmanLogSetup logging;
+    CAddrMan addrman;
+    const CAddress first(CService("250.1.1.1", 8033));
+    const CAddress second(CService("250.2.2.2", 8033));
+    const CNetAddr source("252.2.2.2");
+    const std::vector<CAddress> batch{second};
+    std::atomic<bool> started{false};
+    std::thread replace([&] {
+        started = true;
+        for (unsigned round = 0; round < 1000; ++round) {
+            addrman.Clear();
+            addrman.Add(first, source);
+        }
+    });
+    std::thread add([&] {
+        while (!started.load()) std::this_thread::yield();
+        for (unsigned round = 0; round < 10000; ++round) {
+            addrman.Add(batch, source);
+            addrman.Add(second, source);
+        }
+    });
+    replace.join();
+    add.join();
+    BOOST_CHECK_GE(addrman.size(), 1);
+    BOOST_CHECK_LE(addrman.size(), 2);
+    CDataStream encoded(SER_DISK, CLIENT_VERSION);
+    encoded << addrman;
+    CAddrMan loaded;
+    BOOST_REQUIRE_NO_THROW(encoded >> loaded);
+    BOOST_CHECK_EQUAL(loaded.size(), addrman.size());
 }
 
 BOOST_AUTO_TEST_CASE(clear_forgets_addresses_and_allows_reinsertion)

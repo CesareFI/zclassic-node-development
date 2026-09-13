@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-13 21:49 UTC. Read before starting a new task.
+Updated: 2026-09-13 22:00 UTC. Read before starting a new task.
 
 ## Objective and constraints
 
@@ -13,7 +13,8 @@ changes, or sub-agents. The current user requests continuous autonomous work.
 ## Branch and latest validated work
 
 - Branch: `fix/og-node-sync-20260913`.
-- Latest committed unit: `55cf564aa`, preferred outbound header discovery.
+- Latest committed unit: `549a2f43a`, bounded sparse address selection.
+- `55cf564aa`: preferred outbound header discovery.
 - `dc4beef1d`: malformed address-manager parser recovery.
 - `c214ec7de`: complete address-manager cleanup.
 - `9b3d73993`: bounded peer database loader.
@@ -206,3 +207,38 @@ findings. Evidence mission/addrman-sparse-{final-after,final-asan-after}.log,
 addrman-sparse-wire-{normal,asan}/, and addrman-sparse-restart.log.
 Ready for a separate commit; source production executable/datadir untouched.
 Next reproduce unlocked size()/Add diagnostic reads with ThreadSanitizer.
+
+
+## Address-manager count races: active reproduction
+
+Committed bounded selection is549a2f43a. New uncommitted concurrency unit cases
+exercise replacement versus size reads and scalar/vector additions. A focused
+TSAN harness reproduced the size() vector race (exit66) in
+mission/addrman-race-before-tsan.log. Header/implementation fix not yet applied.
+Harness links TSAN libraries but compiles current root inline header methods;
+unchanged Add_ implementation is from the existing TSAN worktree. An initial
+Add diagnostic harness lacked normal -debug config initialization and exposed
+LogAcceptCategory inserting the missing config key concurrently; that initial
+harness failure is preserved separately. Configured Add harness is compiling
+and will isolate counter reads. No production activity or external network.
+
+
+## Address-manager count races validated, 22:00 UTC
+
+The size() race and Add() diagnostic count race both reproduced under focused
+ThreadSanitizer harnesses (exit66). With size() taking cs and Add() snapshotting
+nTried/nNew before unlocking, both focused TSAN reproductions PASS. Regression
+sources: mission/addrman-race.cpp and addrman-add-race.cpp; before/after logs
+under those prefixes. Configured Add baseline is *before-configured-tsan.log.
+No suppression was used. Committed regression candidates exercise concurrent
+replacement/read, scalar/vector additions, enabled diagnostics, and roundtrip.
+All28 addrman/addrdb tests PASS normal0.795s and ASan/UBSan/leak4.099s.
+Actual instrumented daemon also PASS16 malformed/FIN/RST/RPC teardown cycles
+with RPC/ping observers, height129, zero observer errors, and normal stop0.
+The count-lock milestone is ready to commit. Network/consensus policy unchanged.
+
+Next independent test candidates (not yet fixes): notfound responses are ignored,
+so a peer explicitly unable to serve an assigned block retains all requests until
+the deadline. New unit cases exercise immediate release/takeover, cross-peer
+ownership protection, and malformed/oversized/truncated notfound messages.
+Baseline build/test is in progress; src/main.cpp is still unchanged for this.
