@@ -3,6 +3,7 @@
 import argparse
 import datetime
 import json
+import math
 import pathlib
 import subprocess
 import time
@@ -65,21 +66,28 @@ def main():
     parser.add_argument("--json", action="store_true", help="One JSON object per sample")
     parser.add_argument("--watch", type=float, default=0, help="Repeat every N seconds (minimum 1); default once")
     args = parser.parse_args()
-    if args.watch < 0 or (0 < args.watch < 1):
+    if not math.isfinite(args.watch) or args.watch < 0 or (0 < args.watch < 1):
         parser.error("--watch must be zero or at least one second")
     cli = [str(args.cli), "-datadir=" + str(args.datadir), "-rpcclienttimeout=10"]
     try:
         while True:
-            state = snapshot(cli)
-            if args.json:
-                print(json.dumps(state), flush=True)
+            try:
+                state = snapshot(cli)
+            except (RuntimeError, subprocess.TimeoutExpired, ValueError, OSError) as error:
+                if not args.watch:
+                    parser.exit(1, str(error) + "\n")
+                failed = {"time": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                          "error": str(error)}
+                print(json.dumps(failed) if args.json else
+                      "{time} sample unavailable: {error}".format(**failed), flush=True)
             else:
-                render(state)
+                if args.json:
+                    print(json.dumps(state), flush=True)
+                else:
+                    render(state)
             if not args.watch:
                 return 0
             time.sleep(args.watch)
-    except (RuntimeError, subprocess.TimeoutExpired, ValueError, OSError) as error:
-        parser.exit(1, str(error) + "\n")
     except KeyboardInterrupt:
         return 0
 
