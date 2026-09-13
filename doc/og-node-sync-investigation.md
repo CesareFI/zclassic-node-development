@@ -458,7 +458,8 @@ To run the benchmark harness against the included short fixture without mining:
 python3 qa/rpc-tests/og-download-bench.py \
   --output /tmp/og-download-benchmark-new \
   --fixture src/test/data/zclassic-download-130.dat \
-  --sha256 4ae8e7c4a2b2fb5b925ecc18752bf517dad39dd0a965a8c44d4fee29360ba2b6
+  --sha256 4ae8e7c4a2b2fb5b925ecc18752bf517dad39dd0a965a8c44d4fee29360ba2b6 \
+  --tcp-nodelay
 ```
 
 Use a newly named output directory and this branch's built daemon. `--stall`
@@ -467,3 +468,41 @@ through at least height 4097 and rejects recovery only through the ordinary
 request timeout. Larger fixtures must be supplied with their SHA256. The
 harness retains each datadir, logs, samples, binary/fixture/harness checksums,
 RPC availability gaps, and final accounting assertions.
+
+
+The matching-TCP window comparison also passed at every limit. All eight fixture
+sockets reported `TCP_NODELAY` changing from 0 to 1. The setting changed measured
+completion times by at most 1.3 seconds in these cases:
+
+| Limit | A disconnected, seconds | Target reached, seconds | Peak RSS MiB |
+|---|---:|---:|---:|
+| 16 | 43.34 | 139.81 | 95.17 |
+| 32 | 26.99 | 123.25 | 95.42 |
+| 64 | 21.57 | 117.12 | 95.31 |
+| 128 | 20.99 | 117.20 | 95.77 |
+
+Every run reached 4608, released all requests, and stopped normally. The
+limit-dependent window-fill time remained after matching TCP settings; it
+cannot be attributed to the fixture's previous Nagle setting in this model.
+The harness now exposes `--tcp-nodelay` and records actual socket option values.
+Results are in `mission/bench-4609-window-nodelay`. The window-result check also
+rejects incomplete peer reports or an ordinary request timeout, with a small
+report-level check covering those failure cases.
+
+
+Healthy downloads with matching TCP settings also pass at every limit, with
+no RPC availability gaps, duplicate requests, or swap use. Completion times for
+16/32/64/128 were 97.01/97.60/99.09/98.10 seconds, consistent with the earlier
+three-run pipelined comparison. All sockets reported the requested option
+value, all final request counters were zero, and all daemons stopped normally.
+These confirmation results are in `mission/bench-4096-healthy-nodelay`.
+
+The selected production default remains **128**. In the measured serial
+service-delay workload it provided the best throughput; in the matching-TCP
+window test it matched 64's recovery time. Peak RSS differed by about 1 MiB
+across limits, and the ordinary stalled-peer deadline was the same. Smaller
+limits reduced abandoned request counts and short sampled gaps behind the
+active tip, but did not materially lower memory use or shorten the ordinary
+timeout here. This is a conservative choice from the measured workloads,
+not a claim that 128 is optimal on every connection or for later-chain blocks.
+The bounded startup option remains available for operator-specific measurement.

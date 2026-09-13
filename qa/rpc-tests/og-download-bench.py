@@ -13,6 +13,7 @@ import math
 import os
 import pathlib
 import queue
+import socket
 import threading
 import subprocess
 import time
@@ -27,8 +28,12 @@ class RPCUnavailable(RuntimeError):
 
 
 class BenchPeer(WIRE.Peer):
-    def __init__(self, *args, latency, bandwidth, delay_mode, **kwargs):
+    def __init__(self, *args, latency, bandwidth, delay_mode, tcp_nodelay, **kwargs):
         super().__init__(*args, **kwargs)
+        self.initial_tcp_nodelay = self.sock.getsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY)
+        if tcp_nodelay:
+            self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        self.tcp_nodelay = self.sock.getsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY)
         self.latency, self.bandwidth = latency, bandwidth
         self.delay_mode = delay_mode
         self.send_lock = threading.Lock()
@@ -127,6 +132,14 @@ def check_complete(chain, peers, headers, stall, limit):
     return duplicates
 
 
+def window_stall_before_deadline(report):
+    initial = (report.get("initial_stalled_peers") or [{}])[0]
+    request_timeout = initial.get("block_download_deadline", 0) - initial.get("oldest_request_time", 0)
+    disconnected = report.get("a_disconnect_seconds")
+    window_stall = any("is stalling block download" in line for line in report["disconnect_events"])
+    return bool(window_stall and disconnected is not None and disconnected < request_timeout)
+
+
 def run(args, blocks, headers, limit, repeat):
     output = args.output / f"limit-{limit}-run-{repeat}"
     output.mkdir(parents=True)
@@ -175,7 +188,7 @@ def run(args, blocks, headers, limit, repeat):
                 peer = BenchPeer(args.port, name, blocks, headers,
                                  not (args.stall and name == "A"),
                                  latency=args.latency_ms / 1000, bandwidth=args.bandwidth_kib * 1024,
-                                 delay_mode=args.delay_mode)
+                                 delay_mode=args.delay_mode, tcp_nodelay=args.tcp_nodelay)
                 peers.append(peer)
                 peer.start()
                 if args.stall and name == "A":
@@ -253,6 +266,8 @@ def run(args, blocks, headers, limit, repeat):
                 report["pass"], report["shutdown_error"] = False, repr(error)
             report["peers"] = [{"requests": len(peer.wire_requests), "delivered": len(peer.delivered),
                                 "bytes_sent": peer.bytes_sent, "errors": peer.errors,
+                                "initial_tcp_nodelay": peer.initial_tcp_nodelay,
+                                "tcp_nodelay": peer.tcp_nodelay,
                                 "header_messages": peer.header_messages,
                                 "first_response_seconds": (peer.first_block - peer.first_request
                                     if peer.first_block is not None and peer.first_request is not None else None)}
@@ -261,12 +276,7 @@ def run(args, blocks, headers, limit, repeat):
                                    if "is stalling block download, disconnecting" in line
                                    or "Timeout downloading block" in line]
     if args.require_window_stall:
-        initial = report.get("initial_stalled_peers", [{}])[0]
-        request_timeout = initial.get("block_download_deadline", 0) - initial.get("oldest_request_time", 0)
-        disconnected = report.get("a_disconnect_seconds")
-        window_stall = any("is stalling block download" in line for line in report["disconnect_events"])
-        report["window_stall_before_request_timeout"] = bool(
-            window_stall and disconnected is not None and disconnected < request_timeout)
+        report["window_stall_before_request_timeout"] = window_stall_before_deadline(report)
         if not report["window_stall_before_request_timeout"]:
             report["pass"] = False
             report["window_stall_error"] = "required window stall did not precede the request deadline"
@@ -288,6 +298,8 @@ def main():
     parser.add_argument("--stall", action="store_true")
     parser.add_argument("--require-window-stall", action="store_true",
                         help="Require download-window recovery before A's ordinary request deadline")
+    parser.add_argument("--tcp-nodelay", action="store_true",
+                        help="Disable Nagle on fixture peers, matching the daemon's TCP setting")
     parser.add_argument("--delay-mode", choices=("latency", "service"), default="latency",
                         help="Pipelined block-response latency, or serial per-getdata service delay")
     parser.add_argument("--latency-ms", type=float, default=100)
@@ -316,6 +328,7 @@ def main():
                 "sample_ms": args.sample_ms}
     manifest.update({"limits": args.limits, "repeat": args.repeat, "stall": args.stall,
                      "require_window_stall": args.require_window_stall,
+                     "fixture_peer_tcp_nodelay_requested": args.tcp_nodelay,
                      "timeout_seconds": args.timeout, "request_counting": "on getdata receipt"})
     (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     for repeat in range(args.repeat):
