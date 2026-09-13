@@ -1,0 +1,21 @@
+[Unit]
+Description=Original Zclassic Full Node
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Foreground execution lets systemd supervise the actual daemon directly.
+Type=simple
+ExecStart=/opt/zclassic-money/src/zclassicd -datadir=/root/.zclassic -daemon=0 -printtoconsole=1
+ExecStop=/opt/zclassic-money/src/zclassic-cli -datadir=/root/.zclassic -rpcclienttimeout=60 stop
+Restart=on-failure
+RestartSec=15
+KillSignal=SIGTERM
+KillMode=control-group
+# Database flushes can be slow under memory pressure. Never escalate a timeout
+# to SIGKILL: retain the process for diagnosis instead of interrupting its flush.
+TimeoutStopSec=15min
+SendSIGKILL=no
+
+[Install]
+WantedBy=multi-user.target

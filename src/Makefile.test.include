@@ -5,6 +5,7 @@ TEST_BINARY=test/test_bitcoin$(EXEEXT)
 
 
 EXTRA_DIST += \
+	test/data/zclassic-download-130.dat \
 	test/bctest.py \
 	test/bitcoin-util-test.py \
 	test/data/bitcoin-util-test.json \
@@ -56,6 +57,7 @@ BITCOIN_TESTS =\
   test/base64_tests.cpp \
   test/bech32_tests.cpp \
   test/bip32_tests.cpp \
+  test/block_download_tests.cpp \
   test/bootstrap_snapshot_protocol_tests.cpp \
   test/bloom_tests.cpp \
   test/checkblock_tests.cpp \
@@ -113,7 +115,7 @@ BITCOIN_TESTS += \
 endif
 
 test_test_bitcoin_SOURCES = $(BITCOIN_TESTS) $(JSON_TEST_FILES) $(RAW_TEST_FILES)
-test_test_bitcoin_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) -I$(builddir)/test/ $(TESTDEFS) $(EVENT_CFLAGS)
+test_test_bitcoin_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) -I$(builddir)/test/ $(TESTDEFS) $(EVENT_CFLAGS) -DTEST_DATA_DIR=$(abs_srcdir)/test/data
 test_test_bitcoin_LDADD =
 if ENABLE_WALLET
 test_test_bitcoin_LDADD += $(LIBBITCOIN_WALLET)

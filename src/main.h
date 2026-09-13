@@ -283,6 +283,15 @@ struct CNodeStateStats {
     int nSyncHeight;
     int nCommonHeight;
     std::vector<int> vHeightInFlight;
+    int nBlocksInFlight;
+    int nValidatedBlocksInFlight;
+    uint64_t nGlobalBlocksInFlight;
+    int nGlobalValidatedBlocksInFlight;
+    bool fPreferredDownload;
+    int64_t nOldestRequest;
+    uint256 hashOldestRequest;
+    int64_t nDownloadDeadline;
+    int64_t nStallingSince;
 };
 
 struct CDiskTxPos : public CDiskBlockPos

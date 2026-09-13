@@ -13,6 +13,8 @@ int64_t GetTime();
 int64_t GetTimeMillis();
 int64_t GetTimeMicros();
 void SetMockTime(int64_t nMockTimeIn);
+/** Override the request clock in deterministic tests; zero restores real time. */
+void SetMockTimeMicros(int64_t time);
 void MilliSleep(int64_t n);
 
 std::string DateTimeStrFormat(const char* pszFormat, int64_t nTime);

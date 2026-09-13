@@ -814,6 +814,7 @@ UniValue getblockchaininfo(const UniValue& params, bool fHelp)
     UniValue obj(UniValue::VOBJ);
     obj.push_back(Pair("chain",                 Params().NetworkIDString()));
     obj.push_back(Pair("blocks",                (int)chainActive.Height()));
+    obj.push_back(Pair("initialblockdownload",  IsInitialBlockDownload()));
     obj.push_back(Pair("headers",               pindexBestHeader ? pindexBestHeader->nHeight : -1));
     // Best estimate of the network tip height. Headers sync ahead of blocks during
     // IBD, so this is >= "blocks" while catching up and equals it once synced. GUI

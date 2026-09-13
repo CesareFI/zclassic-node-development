@@ -10,12 +10,19 @@
 #include "utiltime.h"
 
 #include <chrono>
+#include <atomic>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/thread.hpp>
 
 using namespace std;
 
 static int64_t nMockTime = 0;  //! For unit testing
+static std::atomic<int64_t> nMockTimeMicros{0};
+
+void SetMockTimeMicros(int64_t time)
+{
+    nMockTimeMicros.store(time, std::memory_order_relaxed);
+}
 
 int64_t GetTime()
 {
@@ -37,6 +44,8 @@ int64_t GetTimeMillis()
 
 int64_t GetTimeMicros()
 {
+    const int64_t mock = nMockTimeMicros.load(std::memory_order_relaxed);
+    if (mock) return mock;
     return std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
 }

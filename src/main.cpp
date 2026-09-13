@@ -372,21 +372,20 @@ void InitializeNode(NodeId nodeid, const CNode *pnode) {
     state.fInbound = pnode->fInbound;
 }
 
+void StopBlockDownload(CNodeState& state);
+
 void FinalizeNode(NodeId nodeid) {
     LOCK(cs_main);
     CNodeState *state = State(nodeid);
-
-    if (state->fSyncStarted)
-        nSyncStarted--;
+    if (state == NULL)
+        return;
 
     if (state->nMisbehavior == 0 && state->fCurrentlyConnected) {
         AddressCurrentlyConnected(state->address);
     }
 
-    BOOST_FOREACH(const QueuedBlock& entry, state->vBlocksInFlight)
-        mapBlocksInFlight.erase(entry.hash);
+    StopBlockDownload(*state);
     EraseOrphansFor(nodeid);
-    nPreferredDownload -= state->fPreferredDownload;
 
     mapNodeState.erase(nodeid);
 }
@@ -394,9 +393,14 @@ void FinalizeNode(NodeId nodeid) {
 // Requires cs_main.
 // Returns a bool indicating whether we requested this block.
 bool MarkBlockAsReceived(const uint256& hash) {
+    AssertLockHeld(cs_main);
     map<uint256, pair<NodeId, list<QueuedBlock>::iterator> >::iterator itInFlight = mapBlocksInFlight.find(hash);
     if (itInFlight != mapBlocksInFlight.end()) {
         CNodeState *state = State(itInFlight->second.first);
+        assert(state != NULL);
+        assert(state->nBlocksInFlight > 0);
+        assert(!itInFlight->second.second->fValidatedHeaders ||
+               (nQueuedValidatedHeaders > 0 && state->nBlocksInFlightValidHeaders > 0));
         nQueuedValidatedHeaders -= itInFlight->second.second->fValidatedHeaders;
         state->nBlocksInFlightValidHeaders -= itInFlight->second.second->fValidatedHeaders;
         state->vBlocksInFlight.erase(itInFlight->second.second);
@@ -408,8 +412,28 @@ bool MarkBlockAsReceived(const uint256& hash) {
     return false;
 }
 
+// Release requests and download roles together, before the last CNode reference
+// disappears. FinalizeNode may call this again after a timeout: it is idempotent.
+void StopBlockDownload(CNodeState& state)
+{
+    AssertLockHeld(cs_main);
+    while (!state.vBlocksInFlight.empty()) {
+        const uint256 hash = state.vBlocksInFlight.front().hash;
+        const bool removed = MarkBlockAsReceived(hash);
+        assert(removed);
+    }
+    assert(state.nBlocksInFlight == 0);
+    assert(state.nBlocksInFlightValidHeaders == 0);
+    nPreferredDownload -= state.fPreferredDownload;
+    state.fPreferredDownload = false;
+    nSyncStarted -= state.fSyncStarted;
+    state.fSyncStarted = false;
+    state.nStallingSince = 0;
+}
+
 // Requires cs_main.
 void MarkBlockAsInFlight(NodeId nodeid, const uint256& hash, const Consensus::Params& consensusParams, const CBlockIndex *pindex = NULL) {
+    AssertLockHeld(cs_main);
     CNodeState *state = State(nodeid);
     assert(state != NULL);
 
@@ -579,6 +603,16 @@ bool GetNodeStateStats(NodeId nodeid, CNodeStateStats &stats) {
     stats.nMisbehavior = state->nMisbehavior;
     stats.nSyncHeight = state->pindexBestKnownBlock ? state->pindexBestKnownBlock->nHeight : -1;
     stats.nCommonHeight = state->pindexLastCommonBlock ? state->pindexLastCommonBlock->nHeight : -1;
+    stats.vHeightInFlight.clear();
+    stats.nBlocksInFlight = state->nBlocksInFlight;
+    stats.nValidatedBlocksInFlight = state->nBlocksInFlightValidHeaders;
+    stats.nGlobalBlocksInFlight = mapBlocksInFlight.size();
+    stats.nGlobalValidatedBlocksInFlight = nQueuedValidatedHeaders;
+    stats.fPreferredDownload = state->fPreferredDownload;
+    stats.nOldestRequest = state->vBlocksInFlight.empty() ? 0 : state->vBlocksInFlight.front().nTime;
+    stats.hashOldestRequest = state->vBlocksInFlight.empty() ? uint256() : state->vBlocksInFlight.front().hash;
+    stats.nDownloadDeadline = state->vBlocksInFlight.empty() ? 0 : state->vBlocksInFlight.front().nTimeDisconnect;
+    stats.nStallingSince = state->nStallingSince;
     BOOST_FOREACH(const QueuedBlock& queue, state->vBlocksInFlight) {
         if (queue.pindex)
             stats.vHeightInFlight.push_back(queue.pindex->nHeight);
@@ -7364,6 +7398,9 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                 pto->fDisconnect = true;
             }
         }
+
+        if (pto->fDisconnect)
+            StopBlockDownload(state);
 
         //
         // Message: getdata (blocks)

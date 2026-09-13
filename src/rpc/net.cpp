@@ -102,6 +102,17 @@ UniValue getpeerinfo(const UniValue& params, bool fHelp)
             "    \"startingheight\": n,       (numeric) The starting height (block) of the peer\n"
             "    \"banscore\": n,             (numeric) The ban score\n"
             "    \"synced_headers\": n,       (numeric) The last header we have in common with this peer\n"
+            "    \"preferred_download\": true, (boolean) Whether this is a preferred block source\n"
+            "    \"blocks_in_flight\": n,      (numeric) Outstanding block requests to this peer\n"
+            "    \"validated_blocks_in_flight\": n, (numeric) Requests with validated headers\n"
+            "    \"global_blocks_in_flight\": n, (numeric) Outstanding requests across all peers\n"
+            "    \"global_validated_blocks_in_flight\": n, (numeric) Global validated-header request count\n"
+            "    \"oldest_block_request\": \"hash\", (string, optional) Oldest requested block\n"
+            "    \"oldest_request_time\": n,   (numeric, optional) Request time, Unix seconds\n"
+            "    \"oldest_request_age\": n,    (numeric, optional) Age in seconds\n"
+            "    \"block_download_deadline\": n, (numeric, optional) Timeout deadline, Unix seconds\n"
+            "    \"block_download_timeout_remaining\": n, (numeric, optional) Seconds until timeout\n"
+            "    \"block_stall_duration\": n,  (numeric) Download-window stall duration in seconds\n"
             "    \"synced_blocks\": n,        (numeric) The last block we have in common with this peer\n"
             "    \"inflight\": [\n"
             "       n,                        (numeric) The heights of blocks we're currently asking from this peer\n"
@@ -156,6 +167,21 @@ UniValue getpeerinfo(const UniValue& params, bool fHelp)
                 heights.push_back(height);
             }
             obj.push_back(Pair("inflight", heights));
+            const int64_t now = GetTimeMicros();
+            obj.push_back(Pair("preferred_download", statestats.fPreferredDownload));
+            obj.push_back(Pair("blocks_in_flight", statestats.nBlocksInFlight));
+            obj.push_back(Pair("validated_blocks_in_flight", statestats.nValidatedBlocksInFlight));
+            obj.push_back(Pair("global_blocks_in_flight", statestats.nGlobalBlocksInFlight));
+            obj.push_back(Pair("global_validated_blocks_in_flight", statestats.nGlobalValidatedBlocksInFlight));
+            if (statestats.nOldestRequest) {
+                obj.push_back(Pair("oldest_block_request", statestats.hashOldestRequest.GetHex()));
+                obj.push_back(Pair("oldest_request_time", statestats.nOldestRequest / 1000000));
+                obj.push_back(Pair("oldest_request_age", std::max<int64_t>(0, now - statestats.nOldestRequest) / 1000000.0));
+                obj.push_back(Pair("block_download_deadline", statestats.nDownloadDeadline / 1000000));
+                obj.push_back(Pair("block_download_timeout_remaining", std::max<int64_t>(0, statestats.nDownloadDeadline - now) / 1000000.0));
+            }
+            obj.push_back(Pair("block_stall_duration", statestats.nStallingSince ?
+                               std::max<int64_t>(0, now - statestats.nStallingSince) / 1000000.0 : 0.0));
         }
         obj.push_back(Pair("whitelisted", stats.fWhitelisted));
 
