@@ -52,6 +52,51 @@ public:
 
 BOOST_FIXTURE_TEST_SUITE(addrman_tests, BasicTestingSetup)
 
+BOOST_AUTO_TEST_CASE(clear_forgets_addresses_and_allows_reinsertion)
+{
+    CAddrManTest addrman;
+    const CNetAddr source("252.2.2.2");
+    const CAddress fresh(CService("250.1.1.1", 8333));
+    const CAddress tried(CService("250.2.2.2", 8333));
+    BOOST_REQUIRE(addrman.Add(fresh, source));
+    BOOST_REQUIRE(addrman.Add(tried, source));
+    addrman.Good(tried);
+
+    addrman.Clear();
+    BOOST_CHECK_EQUAL(addrman.size(), 0);
+    // Empty selection alone does not prove the lookup indexes were cleared.
+    BOOST_REQUIRE(addrman.Find(fresh) == nullptr);
+    BOOST_REQUIRE(addrman.Find(tried) == nullptr);
+    BOOST_REQUIRE(addrman.Add(fresh, source));
+    BOOST_CHECK_EQUAL(addrman.size(), 1);
+    BOOST_CHECK_EQUAL(addrman.Select().ToString(), fresh.ToString());
+    addrman.Clear();
+    addrman.Clear();
+    BOOST_CHECK_EQUAL(addrman.size(), 0);
+    BOOST_CHECK(addrman.Find(fresh) == nullptr);
+}
+
+BOOST_AUTO_TEST_CASE(deserialization_replaces_existing_lookup_indexes)
+{
+    const CNetAddr source("252.2.2.2");
+    const CAddress oldAddress(CService("250.1.1.1", 8333));
+    const CAddress replacement(CService("250.2.2.2", 8333));
+    CAddrManTest loaded;
+    BOOST_REQUIRE(loaded.Add(oldAddress, source));
+    loaded.Good(oldAddress);
+
+    CAddrMan original;
+    BOOST_REQUIRE(original.Add(replacement, source));
+    CDataStream encoded(SER_DISK, CLIENT_VERSION);
+    encoded << original;
+    encoded >> loaded;
+    BOOST_CHECK_EQUAL(loaded.size(), 1);
+    // A stale address-to-ID entry would now point to the replacement address.
+    BOOST_CHECK(loaded.Find(oldAddress) == nullptr);
+    BOOST_REQUIRE(loaded.Find(replacement) != nullptr);
+    BOOST_CHECK_EQUAL(loaded.Find(replacement)->ToString(), replacement.ToString());
+}
+
 BOOST_AUTO_TEST_CASE(addrman_simple)
 {
     CAddrManTest addrman;

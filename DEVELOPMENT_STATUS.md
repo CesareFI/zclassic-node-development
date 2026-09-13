@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-13 17:30 UTC. Read before starting a new task.
+Updated: 2026-09-13 17:37 UTC. Read before starting a new task.
 
 ## Objective and constraints
 
@@ -13,9 +13,8 @@ changes, Goal mode, or sub-agents.
 ## Branch and latest validated work
 
 - Branch: `fix/og-node-sync-20260913`.
-- Latest committed unit: `d2afd7586`, test-daemon failure reporting and graceful
-  cleanup. The bounded peer database loader described below is tested and ready
-  to commit with this status file; use `git log -1` for its resulting hash.
+- Latest committed unit: `9b3d73993`, bounded peer database loader.
+- `d2afd7586`: test-daemon failure reporting and graceful cleanup.
 - `2e3263f63`: saturated peer eviction coverage.
 - `f5f95715f`: HTTP buffered-event socket ownership.
 - `3608da448`: synchronized peer sockets, metadata, I/O statistics, and ping state.
@@ -71,9 +70,9 @@ counts and indices, key/header/checksum). No consensus code changed.
   57 cases, 77.791s. Logs `mission/addrdb-{unit,asan}-after*`.
 - Oversized-file workload RSS: 91,216 to 27,192 KiB; time 0.19 to 0.06 seconds.
   This is a malformed-file microbenchmark, not a whole-node RAM claim.
-- Normal and ASan actual-daemon smoke PASS: six peer teardowns each, height129,
+- Normal and ASan actual-daemon smoke PASS: six peer teardowns each, height 129,
   global counters zero, normal stop. `mission/addrdb-wire-{normal,asan}`.
-- Both restart checks loaded the test-created peers.dat and retained height129;
+- Both restart checks loaded the test-created peers.dat and retained height 129;
   normal/ASan graceful stops 1.068/0.919s. No sanitizer findings.
 - Initial build macro naming error was corrected. Initial restart check could
   not bind loopback under the sandbox, exited safely, then passed using the
@@ -84,18 +83,45 @@ counts and indices, key/header/checksum). No consensus code changed.
 
 ## Important limit
 
-Captured historical block478544 passed strict historical validation, but current
-code rejects its125,811-byte transaction as bad-txns-oversize after an ungated
+Captured historical block 478544 passed strict historical validation, but current
+code rejects its 125,811-byte transaction as bad-txns-oversize after an ungated
 historical size-limit change. No consensus bypass or rule change was made.
 Production advancement is not claimed. Continue local engineering tasks.
 
 ## Next five tasks
 
-1. Commit the validated bounded peer-file loader and regression cases.
-2. Inspect address-manager deserialization bounds using local malformed fixtures.
+1. Commit tested complete address-manager clear and replacement cleanup.
+2. Reproduce malformed count acceptance and partial deserialization state.
 3. Reproduce any identified accounting/state inconsistency before fixing it.
 4. Run targeted normal/sanitizer checks for the next logical change and commit it.
 5. Continue measured local resource/build/complexity improvements; perf is
    unavailable and external downloads are out of scope.
 
 Resume: `cd /opt/zclassic-money && cat DEVELOPMENT_STATUS.md`.
+
+## Active address-manager review
+
+CAddrMan::Clear resets buckets, counts and the selection vector but leaves
+mapInfo/mapAddr populated. Deserializing into an existing manager can therefore
+leave a stale address lookup pointing at a replacement ID. Both new regression cases FAILED before the fix (exactly two stale-lookup
+assertions, exit 201); mission/addrman-clear-before-suites*. The first attempted
+combined Boost case filter matched no tests (exit 200); reran the whole addrman
+suite to obtain the intended baseline. Candidate Clear now clears both maps
+and holds the existing recursive address-manager mutex while resetting state.
+This tested logical cleanup unit is ready to commit; git log -1 gives its hash.
+Next inspect signed deserialization counts and failure-state recovery.
+
+Normal addrman cleanup build 43086 and ASan/UBSan build 68285 PASS. Targeted
+addrman/addrdb suites 54889 and sanitizer/leak run 40577 PASS (19 cases each).
+Logs: mission/addrman-clear-after* and addrman-clear-asan-after*. All jobs done. No new daemon test is running. This header is widely
+included, so rebuilds are larger than the previous loader-only change.
+
+Follow-up review findings (not changed or yet claimed reproduced):
+- nNew/nTried are deserialized into live signed counters; only upper bounds are
+  checked. Negative values can survive successful parsing.
+- nUBuckets and per-bucket nSize have no lower-bound checks.
+- Unserialize clears first, then mutates live state. A truncated input can leave
+  partial maps/counters after CAddrDB catches the exception and continues startup.
+- size() reads vRandom without cs; Add logs nNew/nTried after releasing cs.
+These are local engineering candidates. Preserve old supported addrman versions
+and table reconstruction when designing malformed-file rejection tests.
