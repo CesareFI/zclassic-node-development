@@ -150,6 +150,23 @@ struct DownloadSetup : TestingSetup {
         BOOST_CHECK_EQUAL(found, 1);
     }
 
+    uint64_t LastPingNonce(CNode& peer)
+    {
+        uint64_t nonce = 0;
+        for (const auto& frame : peer.vSendMsg) {
+            if (frame.size() == 1) continue;
+            CDataStream stream(frame, SER_NETWORK, PROTOCOL_VERSION);
+            CMessageHeader header(Params().MessageStart());
+            stream >> header;
+            if (header.GetCommand() == "ping") {
+                stream >> nonce;
+                BOOST_REQUIRE(stream.empty());
+            }
+        }
+        BOOST_REQUIRE(nonce != 0);
+        return nonce;
+    }
+
     void Churn(unsigned rounds)
     {
         for (unsigned i = 0; i < rounds; ++i) {
@@ -163,6 +180,35 @@ struct DownloadSetup : TestingSetup {
 }
 
 BOOST_FIXTURE_TEST_SUITE(block_download_tests, DownloadSetup)
+
+BOOST_AUTO_TEST_CASE(queued_ping_matches_wire_nonce_and_measures_elapsed_time)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "ping", true);
+    Headers(peer);
+    BOOST_REQUIRE(SendMessages(&peer, false));
+    LastPingNonce(peer);
+    SetMockTimeMicros(start + 1000000);
+    {
+        LOCK(peer.cs_ping);
+        peer.fPingQueued = true;
+    }
+    BOOST_REQUIRE(SendMessages(&peer, false));
+    const uint64_t nonce = LastPingNonce(peer);
+    SetMockTimeMicros(start + 3000000);
+    CDataStream wrong(SER_NETWORK, PROTOCOL_VERSION);
+    wrong << (nonce == std::numeric_limits<uint64_t>::max() ? uint64_t{1} : nonce + 1);
+    BOOST_REQUIRE(ProcessMessage(&peer, "pong", wrong, GetTimeMicros()));
+    CNodeStats pending;
+    peer.copyStats(pending);
+    BOOST_CHECK_EQUAL(pending.dPingWait, 2.0);
+    CDataStream correct(SER_NETWORK, PROTOCOL_VERSION);
+    correct << nonce;
+    BOOST_REQUIRE(ProcessMessage(&peer, "pong", correct, GetTimeMicros()));
+    CNodeStats finished;
+    peer.copyStats(finished);
+    BOOST_CHECK_EQUAL(finished.dPingWait, 0.0);
+    BOOST_CHECK_EQUAL(finished.dPingTime, 2.0);
+}
 
 BOOST_AUTO_TEST_CASE(block_reject_uses_single_byte_wire_code)
 {

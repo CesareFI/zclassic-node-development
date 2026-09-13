@@ -46,17 +46,20 @@ class TeardownSocket:
 
 
 class Observer(threading.Thread):
-    def __init__(self, rpc):
+    def __init__(self, rpc, rpc_pings=False):
         super().__init__(daemon=True)
         self.rpc = rpc
         self.stop_event = threading.Event()
         self.errors = []
         self.samples = 0
+        self.methods = ("getpeerinfo", "getnetworkinfo", "getblockchaininfo", "getinfo")
+        if rpc_pings:
+            self.methods += ("ping",)
 
     def run(self):
         try:
             while not self.stop_event.is_set():
-                for method in ("getpeerinfo", "getnetworkinfo", "getblockchaininfo", "getinfo"):
+                for method in self.methods:
                     self.rpc(method)
                     self.samples += 1
                 self.stop_event.wait(0.02)
@@ -137,6 +140,41 @@ def teardown_round(rpc, args, index, blocks, headers, peers):
             "after": empty}
 
 
+def final_peer(rpc, args, blocks, headers, peers):
+    peer = connected_peer(rpc, args.port, args.rounds, blocks, headers,
+                          deliver=not args.shutdown_pending)
+    peers.append(peer)
+    if args.shutdown_pending:
+        peer.sock = TeardownSocket(peer.sock)
+        peer.sock.expect_reset = True  # RPC stop may reset an active connection.
+    peer.start()
+    if args.shutdown_pending:
+        assert peer.requested.wait(20), "shutdown peer never received requests"
+        assert peer.requests == list(range(1, 129)), peer.requests
+        state = rpc("getblockchaininfo")
+        assert state["blocks"] == 0, state
+        assert state["blockdownload"]["blocks_in_flight"] == 128, state
+        assert state["blockdownload"]["validated_blocks_in_flight"] == 128, state
+        return {"height": 0, "pending_at_stop": state["blockdownload"]}
+
+    def reached_tip():
+        state = rpc("getblockchaininfo")
+        return state if state["blocks"] == 129 else False
+    chain = wait_until(reached_tip, 90)
+    assert chain["bestblockhash"] == WIRE.hash256(headers[129])[::-1].hex()
+    assert sorted(peer.delivered) == list(range(1, 130)), peer.delivered
+    peer.finish()
+    return {"height": 129, "final_accounting": wait_until(lambda: check_empty(rpc))}
+
+
+def finish_peers(peers, report):
+    for peer in peers:
+        peer.finish()
+    report["peer_errors"] = [peer.errors for peer in peers]
+    if any(peer.errors or peer.is_alive() for peer in peers):
+        report["pass"] = False
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=pathlib.Path, required=True)
@@ -145,6 +183,10 @@ def main():
     parser.add_argument("--rounds", type=int, default=48)
     parser.add_argument("--malformed", action="store_true",
                         help="Also provoke message-thread and oversized-frame disconnects")
+    parser.add_argument("--shutdown-pending", action="store_true",
+                        help="Finish by stopping with 128 outstanding requests instead of recovering")
+    parser.add_argument("--rpc-pings", action="store_true",
+                        help="Queue pings concurrently with peer-stat reads")
     parser.add_argument("--rpcport", type=int, default=18723)
     parser.add_argument("--port", type=int, default=18733)
     args = parser.parse_args()
@@ -189,7 +231,7 @@ def main():
                 except RuntimeError:
                     return False
             assert wait_until(ready, 90)["generate"] is False
-            observer = Observer(rpc)
+            observer = Observer(rpc, args.rpc_pings)
             observer.start()
             for index in range(args.rounds):
                 report["rounds"].append(teardown_round(rpc, args, index, blocks, headers, peers))
@@ -200,20 +242,10 @@ def main():
                                      ("oversize", "Oversized message from peer=")):
                     expected = sum(row["mode"] == mode for row in report["rounds"])
                     assert daemon_log.count(marker) == expected, (mode, expected)
-            healthy = connected_peer(rpc, args.port, args.rounds, blocks, headers, True)
-            peers.append(healthy)
-            healthy.start()
-            def reached_tip():
-                state = rpc("getblockchaininfo")
-                return state if state["blocks"] == 129 else False
-            chain = wait_until(reached_tip, 90)
-            assert chain["bestblockhash"] == WIRE.hash256(headers[129])[::-1].hex()
-            assert sorted(healthy.delivered) == list(range(1, 130)), healthy.delivered
-            healthy.finish()
-            report["final_accounting"] = wait_until(lambda: check_empty(rpc))
+            report.update(final_peer(rpc, args, blocks, headers, peers))
             assert rpc("getmininginfo")["generate"] is False
             assert daemon.poll() is None, "daemon exited during recovery"
-            report.update({"pass": True, "height": 129, "no_restart": True})
+            report.update({"pass": True, "no_restart": True})
         except Exception as error:
             report["error"] = repr(error)
         finally:
@@ -224,19 +256,20 @@ def main():
                 report["observer_errors"] = observer.errors
                 if observer.is_alive() or observer.errors:
                     report["pass"] = False
-            for peer in peers:
-                peer.finish()
-            report["peer_errors"] = [peer.errors for peer in peers]
-            if any(peer.errors or peer.is_alive() for peer in peers):
-                report["pass"] = False
+            if not args.shutdown_pending:
+                finish_peers(peers, report)
             try:
+                start = time.monotonic()
                 report["stop"] = rpc("stop")
                 report["exit"] = daemon.wait(timeout=90)
+                report["shutdown_seconds"] = time.monotonic() - start
                 if report["exit"] != 0:
                     report["pass"] = False
             except Exception as error:
                 report["shutdown_error"] = repr(error)
                 report["pass"] = False
+            finally:
+                finish_peers(peers, report)
     (output / "result.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report, indent=2))
     return 0 if report["pass"] else 1

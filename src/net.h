@@ -246,31 +246,39 @@ public:
 /** Information about a peer */
 class CNode
 {
+private:
+    // Never hold this mutex while acquiring send/receive or global node locks.
+    mutable CCriticalSection cs_hSocket;
+    SOCKET hSocket;
+
 public:
     // socket
     uint64_t nServices;
-    SOCKET hSocket;
+    SOCKET GetSocket() const;
+    int SendToSocket(const char* data, size_t size, int flags);
+    int ReceiveFromSocket(char* data, size_t size, int flags);
     CDataStream ssSend;
     size_t nSendSize; // total size of all vSendMsg entries
     size_t nSendOffset; // offset inside the first vSendMsg already sent
-    uint64_t nSendBytes;
+    std::atomic<uint64_t> nSendBytes;
     std::deque<CSerializeData> vSendMsg;
     CCriticalSection cs_vSend;
 
     std::deque<CInv> vRecvGetData;
     std::deque<CNetMessage> vRecvMsg;
     CCriticalSection cs_vRecvMsg;
-    uint64_t nRecvBytes;
+    std::atomic<uint64_t> nRecvBytes;
     int nRecvVersion;
 
-    int64_t nLastSend;
-    int64_t nLastRecv;
+    // Independently sampled by RPC and timeout checks while I/O updates them.
+    std::atomic<int64_t> nLastSend;
+    std::atomic<int64_t> nLastRecv;
     int64_t nTimeConnected;
     int64_t nTimeOffset;
     CAddress addr;
     std::string addrName;
     CService addrLocal;
-    int nVersion;
+    std::atomic<int> nVersion;
     // strSubVer is whatever byte array we read from the wire. However, this field is intended
     // to be printed out, displayed to humans in various forms and so on. So we sanitize it and
     // store the sanitized version in cleanSubVer. The original should be used when dealing with
@@ -345,6 +353,8 @@ public:
     bool fBootstrapParamManifestSent;
 
     // Ping time measurement:
+    // Protect the nonce and timestamps as one state, including RPC snapshots.
+    CCriticalSection cs_ping;
     // The pong reply we're expecting, or 0 if no pong expected.
     uint64_t nPingNonceSent;
     // Time (in usec) the last ping was sent, or 0 if no ping was ever sent.

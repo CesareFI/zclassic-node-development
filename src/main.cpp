@@ -6083,6 +6083,9 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
 
     if (strCommand == "version")
     {
+        // Publish handshake metadata and download roles under the same lock
+        // used by RPC snapshots and peer disconnect accounting.
+        LOCK(cs_main);
         // Each connection can only send one version message
         if (pfrom->nVersion != 0)
         {
@@ -6095,11 +6098,14 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
         CAddress addrMe;
         CAddress addrFrom;
         uint64_t nNonce = 1;
-        vRecv >> pfrom->nVersion >> pfrom->nServices >> nTime >> addrMe;
+        int nVersion;
+        vRecv >> nVersion;
+        pfrom->nVersion = nVersion;
+        vRecv >> pfrom->nServices >> nTime >> addrMe;
         if (pfrom->nVersion < MIN_PEER_PROTO_VERSION)
         {
             // disconnect from peers older than this proto version
-            LogPrintf("peer=%d using obsolete version %i; disconnecting\n", pfrom->id, pfrom->nVersion);
+            LogPrintf("peer=%d using obsolete version %i; disconnecting\n", pfrom->id, pfrom->nVersion.load());
             pfrom->PushMessage("reject", strCommand, REJECT_OBSOLETE,
                                strprintf("Version must be %d or greater", MIN_PEER_PROTO_VERSION));
             pfrom->fDisconnect = true;
@@ -6111,7 +6117,7 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
         auto currentEpoch = CurrentEpoch(GetHeight(), params);
         if (pfrom->nVersion < params.vUpgrades[currentEpoch].nProtocolVersion)
         {
-            LogPrintf("peer=%d using obsolete version %i; disconnecting\n", pfrom->id, pfrom->nVersion);
+            LogPrintf("peer=%d using obsolete version %i; disconnecting\n", pfrom->id, pfrom->nVersion.load());
             pfrom->PushMessage("reject", strCommand, REJECT_OBSOLETE,
                             strprintf("Version must be %d or greater",
                             params.vUpgrades[currentEpoch].nProtocolVersion));
@@ -6159,7 +6165,7 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
 
         // Change version
         pfrom->PushMessage("verack");
-        pfrom->ssSend.SetVersion(min(pfrom->nVersion, PROTOCOL_VERSION));
+        pfrom->ssSend.SetVersion(min(pfrom->nVersion.load(), PROTOCOL_VERSION));
 
         if (!pfrom->fInbound)
         {
@@ -6200,7 +6206,7 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
             remoteAddr = ", peeraddr=" + pfrom->addr.ToString();
 
         LogPrintf("receive version message: %s: version %d, blocks=%d, us=%s, peer=%d%s\n",
-                  pfrom->cleanSubVer, pfrom->nVersion,
+                  pfrom->cleanSubVer, pfrom->nVersion.load(),
                   pfrom->nStartingHeight, addrMe.ToString(), pfrom->id,
                   remoteAddr);
 
@@ -6220,7 +6226,7 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
 
     else if (strCommand == "verack")
     {
-        pfrom->SetRecvVersion(min(pfrom->nVersion, PROTOCOL_VERSION));
+        pfrom->SetRecvVersion(min(pfrom->nVersion.load(), PROTOCOL_VERSION));
 
         // Mark this node as currently connected, so we update its timestamp later.
         if (pfrom->fNetworkNode) {
@@ -6236,7 +6242,7 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
     else if (pfrom->nVersion < chainparams.GetConsensus().vUpgrades[
         CurrentEpoch(GetHeight(), chainparams.GetConsensus())].nProtocolVersion)
     {
-        LogPrintf("peer=%d using obsolete version %i; disconnecting\n", pfrom->id, pfrom->nVersion);
+        LogPrintf("peer=%d using obsolete version %i; disconnecting\n", pfrom->id, pfrom->nVersion.load());
         pfrom->PushMessage("reject", strCommand, REJECT_OBSOLETE,
                             strprintf("Version must be %d or greater",
                             chainparams.GetConsensus().vUpgrades[
@@ -6934,6 +6940,7 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
 
     else if (strCommand == "pong")
     {
+        LOCK(pfrom->cs_ping);
         int64_t pingUsecEnd = nTimeReceived;
         uint64_t nonce = 0;
         size_t nAvail = vRecv.in_avail();
@@ -7214,6 +7221,29 @@ bool ProcessMessages(CNode* pfrom)
 }
 
 
+static void MaybeSendPing(CNode* peer)
+{
+    const bool noncePing = peer->nVersion > BIP0031_VERSION;
+    uint64_t nonce = 0;
+    {
+        LOCK(peer->cs_ping);
+        const bool automatic = peer->nPingNonceSent == 0 &&
+            peer->nPingUsecStart + PING_INTERVAL * 1000000 < GetTimeMicros();
+        if (!peer->fPingQueued && !automatic)
+            return;
+        while (nonce == 0)
+            GetRandBytes((unsigned char*)&nonce, sizeof(nonce));
+        peer->fPingQueued = false;
+        peer->nPingUsecStart = GetTimeMicros();
+        peer->nPingNonceSent = noncePing ? nonce : 0;
+    }
+    // Do not acquire the send mutex while holding the ping-state mutex.
+    if (noncePing)
+        peer->PushMessage("ping", nonce);
+    else
+        peer->PushMessage("ping");
+}
+
 bool SendMessages(CNode* pto, bool fSendTrickle)
 {
     const Consensus::Params& consensusParams = Params().GetConsensus();
@@ -7225,31 +7255,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         //
         // Message: ping
         //
-        bool pingSend = false;
-        if (pto->fPingQueued) {
-            // RPC ping request by user
-            pingSend = true;
-        }
-        if (pto->nPingNonceSent == 0 && pto->nPingUsecStart + PING_INTERVAL * 1000000 < GetTimeMicros()) {
-            // Ping automatically sent as a latency probe & keepalive.
-            pingSend = true;
-        }
-        if (pingSend) {
-            uint64_t nonce = 0;
-            while (nonce == 0) {
-                GetRandBytes((unsigned char*)&nonce, sizeof(nonce));
-            }
-            pto->fPingQueued = false;
-            pto->nPingUsecStart = GetTimeMicros();
-            if (pto->nVersion > BIP0031_VERSION) {
-                pto->nPingNonceSent = nonce;
-                pto->PushMessage("ping", nonce);
-            } else {
-                // Peer is too old to support ping command with nonce, pong will never arrive.
-                pto->nPingNonceSent = 0;
-                pto->PushMessage("ping");
-            }
-        }
+        MaybeSendPing(pto);
 
         SendQueuedBootstrapSnapshotChunk(pto);
 

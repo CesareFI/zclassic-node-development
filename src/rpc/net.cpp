@@ -56,6 +56,7 @@ UniValue ping(const UniValue& params, bool fHelp)
     LOCK2(cs_main, cs_vNodes);
 
     BOOST_FOREACH(CNode* pNode, vNodes) {
+        LOCK(pNode->cs_ping);
         pNode->fPingQueued = true;
     }
 

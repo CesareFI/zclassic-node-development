@@ -410,13 +410,36 @@ bool ConnectNode(CAddress addrConnect, const char *pszDest, CSemaphoreGrant *gra
     return false;
 }
 
+SOCKET CNode::GetSocket() const
+{
+    // A snapshot is sufficient for select bookkeeping. Actual I/O must use the
+    // locked methods below so close cannot recycle the descriptor mid-call.
+    LOCK(cs_hSocket);
+    return hSocket;
+}
+
+int CNode::SendToSocket(const char* data, size_t size, int flags)
+{
+    LOCK(cs_hSocket);
+    return send(hSocket, data, size, flags);
+}
+
+int CNode::ReceiveFromSocket(char* data, size_t size, int flags)
+{
+    LOCK(cs_hSocket);
+    return recv(hSocket, data, size, flags);
+}
+
 void CNode::CloseSocketDisconnect()
 {
     fDisconnect = true;
-    if (hSocket != INVALID_SOCKET)
     {
-        LogPrint("net", "disconnecting peer=%d\n", id);
-        CloseSocket(hSocket);
+        LOCK(cs_hSocket);
+        if (hSocket != INVALID_SOCKET)
+        {
+            LogPrint("net", "disconnecting peer=%d\n", id);
+            CloseSocket(hSocket);
+        }
     }
 
     // in case this fails, we'll empty the recv buffer when the CNode is deleted
@@ -561,6 +584,7 @@ void CNode::copyStats(CNodeStats &stats)
     // since pingtime does not update until the ping is complete, which might take a while.
     // So, if a ping is taking an unusually long time in flight,
     // the caller can immediately detect that this is happening.
+    LOCK(cs_ping);
     int64_t nPingUsecWait = 0;
     if ((0 != nPingNonceSent) && (0 != nPingUsecStart)) {
         nPingUsecWait = GetTimeMicros() - nPingUsecStart;
@@ -676,7 +700,7 @@ void SocketSendData(CNode *pnode)
     while (it != pnode->vSendMsg.end()) {
         const CSerializeData &data = *it;
         assert(data.size() > pnode->nSendOffset);
-        int nBytes = send(pnode->hSocket, &data[pnode->nSendOffset], data.size() - pnode->nSendOffset, MSG_NOSIGNAL | MSG_DONTWAIT);
+        int nBytes = pnode->SendToSocket(&data[pnode->nSendOffset], data.size() - pnode->nSendOffset, MSG_NOSIGNAL | MSG_DONTWAIT);
         if (nBytes > 0) {
             pnode->nLastSend = GetTime();
             pnode->nSendBytes += nBytes;
@@ -717,8 +741,9 @@ static list<CNode*> vNodesDisconnected;
 class CNodeRef {
 public:
     CNodeRef(CNode *pnode) : _pnode(pnode) {
-        LOCK(cs_vNodes);
+        LOCK2(cs_vNodes, pnode->cs_ping);
         _pnode->AddRef();
+        _minPingUsecTime = pnode->nMinPingUsecTime;
     }
 
     ~CNodeRef() {
@@ -728,6 +753,7 @@ public:
 
     CNode& operator *() const {return *_pnode;};
     CNode* operator ->() const {return _pnode;};
+    int64_t GetMinPingTime() const { return _minPingUsecTime; }
 
     CNodeRef& operator =(const CNodeRef& other)
     {
@@ -737,23 +763,26 @@ public:
             _pnode->Release();
             _pnode = other._pnode;
             _pnode->AddRef();
+            _minPingUsecTime = other._minPingUsecTime;
         }
         return *this;
     }
 
     CNodeRef(const CNodeRef& other):
-        _pnode(other._pnode)
+        _pnode(other._pnode), _minPingUsecTime(other._minPingUsecTime)
     {
         LOCK(cs_vNodes);
         _pnode->AddRef();
     }
 private:
     CNode *_pnode;
+    // Keep eviction comparisons stable while network measurements change.
+    int64_t _minPingUsecTime;
 };
 
 static bool ReverseCompareNodeMinPingTime(const CNodeRef &a, const CNodeRef &b)
 {
-    return a->nMinPingUsecTime > b->nMinPingUsecTime;
+    return a.GetMinPingTime() > b.GetMinPingTime();
 }
 
 static bool ReverseCompareNodeTimeConnected(const CNodeRef &a, const CNodeRef &b)
@@ -1075,10 +1104,11 @@ void ThreadSocketHandler()
             LOCK(cs_vNodes);
             BOOST_FOREACH(CNode* pnode, vNodes)
             {
-                if (pnode->hSocket == INVALID_SOCKET)
+                const SOCKET hSocket = pnode->GetSocket();
+                if (hSocket == INVALID_SOCKET)
                     continue;
-                FD_SET(pnode->hSocket, &fdsetError);
-                hSocketMax = max(hSocketMax, pnode->hSocket);
+                FD_SET(hSocket, &fdsetError);
+                hSocketMax = max(hSocketMax, hSocket);
                 have_fds = true;
 
                 // Implement the following logic:
@@ -1099,7 +1129,7 @@ void ThreadSocketHandler()
                 {
                     TRY_LOCK(pnode->cs_vSend, lockSend);
                     if (lockSend && !pnode->vSendMsg.empty()) {
-                        FD_SET(pnode->hSocket, &fdsetSend);
+                        FD_SET(hSocket, &fdsetSend);
                         continue;
                     }
                 }
@@ -1108,7 +1138,7 @@ void ThreadSocketHandler()
                     if (lockRecv && (
                         pnode->vRecvMsg.empty() || !pnode->vRecvMsg.front().complete() ||
                         pnode->GetTotalRecvSize() <= ReceiveFloodSize()))
-                        FD_SET(pnode->hSocket, &fdsetRecv);
+                        FD_SET(hSocket, &fdsetRecv);
                 }
             }
         }
@@ -1159,9 +1189,10 @@ void ThreadSocketHandler()
             //
             // Receive
             //
-            if (pnode->hSocket == INVALID_SOCKET)
+            SOCKET hSocket = pnode->GetSocket();
+            if (hSocket == INVALID_SOCKET)
                 continue;
-            if (FD_ISSET(pnode->hSocket, &fdsetRecv) || FD_ISSET(pnode->hSocket, &fdsetError))
+            if (FD_ISSET(hSocket, &fdsetRecv) || FD_ISSET(hSocket, &fdsetError))
             {
                 TRY_LOCK(pnode->cs_vRecvMsg, lockRecv);
                 if (lockRecv)
@@ -1169,7 +1200,7 @@ void ThreadSocketHandler()
                     {
                         // typical socket buffer is 8K-64K
                         char pchBuf[0x10000];
-                        int nBytes = recv(pnode->hSocket, pchBuf, sizeof(pchBuf), MSG_DONTWAIT);
+                        int nBytes = pnode->ReceiveFromSocket(pchBuf, sizeof(pchBuf), MSG_DONTWAIT);
                         if (nBytes > 0)
                         {
                             if (!pnode->ReceiveMsgBytes(pchBuf, nBytes))
@@ -1203,9 +1234,10 @@ void ThreadSocketHandler()
             //
             // Send
             //
-            if (pnode->hSocket == INVALID_SOCKET)
+            hSocket = pnode->GetSocket();
+            if (hSocket == INVALID_SOCKET)
                 continue;
-            if (FD_ISSET(pnode->hSocket, &fdsetSend))
+            if (FD_ISSET(hSocket, &fdsetSend))
             {
                 TRY_LOCK(pnode->cs_vSend, lockSend);
                 if (lockSend)
@@ -1218,6 +1250,7 @@ void ThreadSocketHandler()
             int64_t nTime = GetTime();
             if (nTime - pnode->nTimeConnected > 60)
             {
+                LOCK(pnode->cs_ping);
                 if (pnode->nLastRecv == 0 || pnode->nLastSend == 0)
                 {
                     LogPrint("net", "socket no message in first 60 seconds, %d %d from %d\n", pnode->nLastRecv != 0, pnode->nLastSend != 0, pnode->id);
@@ -1826,10 +1859,8 @@ public:
 
     ~CNetCleanup()
     {
-        // Close sockets
-        BOOST_FOREACH(CNode* pnode, vNodes)
-            if (pnode->hSocket != INVALID_SOCKET)
-                CloseSocket(pnode->hSocket);
+        // Peer descriptors are closed by CNode destruction below, after all
+        // network threads have stopped. Close listening sockets here.
         BOOST_FOREACH(ListenSocket& hListenSocket, vhListenSocket)
             if (hListenSocket.socket != INVALID_SOCKET)
                 if (!CloseSocket(hListenSocket.socket))

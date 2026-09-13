@@ -567,5 +567,54 @@ actual race between `ThreadSocketHandler` updating `nLastRecv` and `copyStats`
 reading it for `getpeerinfo`. Its first-failure report is preserved in
 `mission/wire-malformed-teardown-tsan`. This is separate from the original
 in-flight accounting root cause, and the passing ASan runs do not disprove it.
-The follow-up race fix is under validation; these results do not establish that
-the networking code is free of races.
+The follow-up race fix and its validation are described below; these results do
+not establish that the networking code is free of races.
+
+### Peer-state concurrency follow-up
+
+ThreadSanitizer subsequently reproduced races in the receive byte counter,
+socket handle, handshake subversion string, and ping nonce/timestamps. The
+candidate makes independently sampled I/O counters and timestamps atomic;
+protects socket syscalls and close with one mutex; publishes version metadata
+and preferred-download roles under `cs_main`; and protects ping state with
+`cs_ping`. Protocol version is atomic for readers outside the chain lock.
+Socket ownership remains private to `CNode`, and eviction compares captured
+minimum-ping values so replies cannot change its ordering during a sort.
+
+The socket mutex is released before attempting the receive-buffer lock during
+disconnect. Ping sending releases its state mutex before queuing a message.
+The extracted `MaybeSendPing` also reduces the branching in `SendMessages`.
+Handshake parsing order, rejection conditions, block validation, and consensus
+parameters are unchanged.
+
+All 38 relevant unit cases passed normally and under ASan/UBSan with leak
+checking, including a new test of queued ping nonce matching and elapsed-time
+statistics. The matching ASan/UBSan daemon also passed real outbound recovery:
+the stalled peer disconnected after 300.107 seconds despite 11 header messages,
+the healthy peer validated through 129, and the daemon stopped normally.
+Evidence: `mission/getinfo-unit-tests.log`, `mission/asan-framed-fuzz.log`, and
+`mission/wire-peer-races-asan-outbound`.
+
+The teardown observer's `--rpc-pings` option exercises ping requests concurrently
+with RPC snapshots. With this option and malformed-frame coverage, the candidate
+passed 50 normal cycles (575 RPC calls), 100 ASan/UBSan cycles (1,295 calls),
+and 100 ThreadSanitizer cycles (1,715 calls). All reached height 129 without
+restart, cleared download accounting, and exited normally. The TSAN run had no
+warnings; ASan/UBSan ran with leak checking enabled. Evidence:
+`mission/wire-malformed-peer-races-{normal,asan}` and
+`mission/wire-malformed-tsan-ping-lock`.
+
+`--shutdown-pending` instead leaves the final peer connected with all 128 block
+requests outstanding and requires normal RPC shutdown. Ten-cycle ASan/UBSan
+and TSAN runs passed, stopping in 0.823 and 0.323 seconds respectively. This
+mode verifies shutdown, not chain recovery; the regular mode verifies recovery.
+Evidence: `mission/wire-pending-stop-asan` and
+`mission/wire-pending-stop-tsan-all`.
+
+A separate TSAN report intermittently interrupts startup before any fixture
+peer connects: libevent epoll descriptor handling overlaps a LevelDB directory
+close. That report also reproduces in a small local libevent HTTP/directory-read
+program without any Zclassic or LevelDB code. It remains an open dependency
+investigation, with no suppressions or event-backend changes. The failed runs
+are retained in `mission/wire-malformed-tsan-handshake-lock` and
+`mission/wire-pending-stop-tsan`; passing peer tests do not resolve that issue.
