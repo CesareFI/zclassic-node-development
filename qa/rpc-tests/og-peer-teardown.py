@@ -51,7 +51,7 @@ class Observer(threading.Thread):
     def run(self):
         try:
             while not self.stop_event.is_set():
-                for method in ("getpeerinfo", "getnetworkinfo", "getblockchaininfo"):
+                for method in ("getpeerinfo", "getnetworkinfo", "getblockchaininfo", "getinfo"):
                     self.rpc(method)
                     self.samples += 1
                 self.stop_event.wait(0.02)

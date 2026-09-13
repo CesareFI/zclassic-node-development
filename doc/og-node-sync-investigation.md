@@ -534,3 +534,14 @@ disconnect can result in a TCP reset rather than EOF. The harness now accepts
 that reset only after requesting disconnect and records it; unexpected resets
 remain errors. Two such reset closures occurred in the passing sanitizer run.
 The original failed result is retained in `mission/wire-teardown-asan`.
+
+
+A follow-up peer-list audit found that `getinfo` still read `vNodes.size()`
+without `cs_vNodes`; its existing chain/wallet locks do not protect concurrent
+socket removal or outbound insertion. That count now uses the peer-list lock,
+matching `getnetworkinfo`. The teardown observer now includes `getinfo`.
+The expanded test passed 48 normal cycles with 2,420 RPC calls and 96 sanitizer
+cycles with 4,512 calls; both recovered to 129 and exited normally. The 37
+relevant unit cases also passed normally and under ASan/UBSan with leak checking.
+Evidence: `mission/wire-teardown-getinfo-{normal,asan}`,
+`mission/getinfo-unit-tests.log`, and `mission/asan-framed-fuzz.log`.
