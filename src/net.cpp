@@ -2046,35 +2046,34 @@ bool CAddrDB::Read(CAddrMan& addr)
     if (filein.IsNull())
         return error("%s: Failed to open file %s", __func__, pathAddr.string());
 
-    // use file size to size memory buffer
-    int fileSize = boost::filesystem::file_size(pathAddr);
-    int dataSize = fileSize - sizeof(uint256);
-    // Don't try to resize to a negative number if file is small
-    if (dataSize < 0)
-        dataSize = 0;
-    vector<unsigned char> vchData;
-    vchData.resize(dataSize);
+    CDataStream ssPeers(SER_DISK, CLIENT_VERSION);
     uint256 hashIn;
 
-    // read data and checksum from file
     try {
-        filein.read((char *)&vchData[0], dataSize);
+        // Measure the opened file, not a path that may have been replaced.
+        if (fseek(filein.Get(), 0, SEEK_END) != 0)
+            return error("%s: Failed to seek address file", __func__);
+        const long fileSize = ftell(filein.Get());
+        // The existing serialization limit comfortably exceeds a full address
+        // table. Check before narrowing, allocating, or accessing the buffer.
+        const long minSize = sizeof(uint256) + MESSAGE_START_SIZE;
+        if (fileSize < minSize || fileSize > MAX_SIZE)
+            return error("%s: Invalid address file size %d", __func__, fileSize);
+        if (fseek(filein.Get(), 0, SEEK_SET) != 0)
+            return error("%s: Failed to rewind address file", __func__);
+
+        // Read directly into the decoding buffer, avoiding a full payload copy.
+        ssPeers.resize(static_cast<size_t>(fileSize) - sizeof(uint256));
+        filein.read(&ssPeers[0], ssPeers.size());
         filein >> hashIn;
-    }
-    catch (const std::exception& e) {
-        return error("%s: Deserialize or I/O error - %s", __func__, e.what());
-    }
-    filein.fclose();
+        filein.fclose();
 
-    CDataStream ssPeers(vchData, SER_DISK, CLIENT_VERSION);
+        // verify stored checksum matches input data
+        uint256 hashTmp = Hash(ssPeers.begin(), ssPeers.end());
+        if (hashIn != hashTmp)
+            return error("%s: Checksum mismatch, data corrupted", __func__);
 
-    // verify stored checksum matches input data
-    uint256 hashTmp = Hash(ssPeers.begin(), ssPeers.end());
-    if (hashIn != hashTmp)
-        return error("%s: Checksum mismatch, data corrupted", __func__);
-
-    unsigned char pchMsgTmp[4];
-    try {
+        unsigned char pchMsgTmp[4];
         // de-serialize file header (network specific magic number) and ..
         ssPeers >> FLATDATA(pchMsgTmp);
 
