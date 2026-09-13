@@ -362,6 +362,27 @@ void UpdatePreferredDownload(CNode* node, CNodeState* state)
     nPreferredDownload += state->fPreferredDownload;
 }
 
+bool CanStartHeaderSync(const CNodeState& state, bool fFetch)
+{
+    AssertLockHeld(cs_main);
+    if (pindexBestHeader->GetBlockTime() > GetAdjustedTime() - 24 * 60 * 60)
+        return true;
+    if (!fFetch)
+        return false;
+    if (nSyncStarted == 0)
+        return true;
+    if (!state.fPreferredDownload)
+        return false;
+
+    // An inbound peer may have started syncing before an outbound connected.
+    // Let one preferred peer discover its chain without waiting for the
+    // inbound to disconnect. Existing requests and validation stay intact.
+    return std::none_of(mapNodeState.begin(), mapNodeState.end(),
+        [](const std::pair<const NodeId, CNodeState>& entry) {
+            return entry.second.fSyncStarted && entry.second.fPreferredDownload;
+        });
+}
+
 // Returns time at which to timeout block request (nTime in microseconds)
 int64_t GetBlockTimeout(int64_t nTime, int nValidatedQueuedBefore, const Consensus::Params &consensusParams, int nHeight)
 {
@@ -7336,8 +7357,9 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             pindexBestHeader = chainActive.Tip();
         bool fFetch = state.fPreferredDownload || (nPreferredDownload == 0 && !pto->fClient && !pto->fOneShot); // Download if this is a nice peer, or we have no nice peers and this one might do.
         if (!state.fSyncStarted && !pto->fClient && !fImporting && !fReindex) {
-            // Only actively request headers from a single peer, unless we're close to today.
-            if ((nSyncStarted == 0 && fFetch) || pindexBestHeader->GetBlockTime() > GetAdjustedTime() - 24 * 60 * 60) {
+            // Keep historical header sync bounded, but allow a preferred peer
+            // to join an inbound sync that started before it connected.
+            if (CanStartHeaderSync(state, fFetch)) {
                 state.fSyncStarted = true;
                 nSyncStarted++;
                 CBlockIndex *pindexStart = pindexBestHeader->pprev ? pindexBestHeader->pprev : pindexBestHeader;

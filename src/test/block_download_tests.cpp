@@ -113,6 +113,30 @@ struct DownloadSetup : TestingSetup {
         BOOST_REQUIRE(ProcessMessage(&peer, "headers", payload, GetTime()));
     }
 
+    void Handshake(CNode& peer, uint64_t services = NODE_NETWORK)
+    {
+        PrepareTransport(peer);
+        peer.nVersion = 0;
+        CDataStream version(SER_NETWORK, PROTOCOL_VERSION);
+        version << PROTOCOL_VERSION << services << GetTime() << CAddress();
+        BOOST_REQUIRE(ProcessMessage(&peer, "version", version, GetTime()));
+        CDataStream verack(SER_NETWORK, PROTOCOL_VERSION);
+        BOOST_REQUIRE(ProcessMessage(&peer, "verack", verack, GetTime()));
+    }
+
+    unsigned Sent(CNode& peer, const std::string& command)
+    {
+        unsigned count = 0;
+        for (const auto& frame : peer.vSendMsg) {
+            if (frame.size() == 1) continue;
+            CDataStream stream(frame, SER_NETWORK, PROTOCOL_VERSION);
+            CMessageHeader header(Params().MessageStart());
+            stream >> header;
+            if (header.GetCommand() == command) ++count;
+        }
+        return count;
+    }
+
     CNodeStateStats Stats(CNode& peer)
     {
         CNodeStateStats stats;
@@ -316,6 +340,89 @@ BOOST_AUTO_TEST_CASE(socket_disconnect_releases_requests_before_finalization)
     BOOST_CHECK_EQUAL(Stats(healthy).nBlocksInFlight, 128);
     BOOST_CHECK_EQUAL(Stats(healthy).nGlobalValidatedBlocksInFlight, 128);
     BOOST_CHECK_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 1);
+}
+
+BOOST_AUTO_TEST_CASE(preferred_peer_discovers_chain_while_inbound_holds_requests)
+{
+    CNode stalled(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "A", true);
+    Handshake(stalled);
+    Headers(stalled);
+    BOOST_REQUIRE(SendMessages(&stalled, false));
+    BOOST_REQUIRE_EQUAL(Stats(stalled).nBlocksInFlight, 128);
+    BOOST_REQUIRE_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 1);
+
+    CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "B", false);
+    Handshake(healthy);
+    BOOST_REQUIRE(Stats(healthy).fPreferredDownload);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    // B only announces its chain after we request headers, as a normal peer
+    // can do. A's existing sync role must not suppress that request.
+    BOOST_REQUIRE_EQUAL(Sent(healthy, "getheaders"), 1);
+    Headers(healthy);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_REQUIRE_EQUAL(Stats(healthy).nBlocksInFlight, 1);
+    Deliver(healthy, 129);
+
+    SetMockTimeMicros(Stats(stalled).nDownloadDeadline + 1);
+    BOOST_REQUIRE(SendMessages(&stalled, false));
+    BOOST_REQUIRE(stalled.fDisconnect);
+    BOOST_CHECK_EQUAL(Stats(stalled).nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
+    // Reconnecting inbound peers are visited first, but cannot reclaim B's
+    // abandoned work while a preferred download peer is connected.
+    for (unsigned round = 0; round < 8; ++round) {
+        CNode reconnect(INVALID_SOCKET, stalled.addr, "reconnect", true);
+        Handshake(reconnect);
+        Headers(reconnect);
+        BOOST_REQUIRE(SendMessages(&reconnect, false));
+        BOOST_CHECK_EQUAL(Stats(reconnect).nBlocksInFlight, 0);
+        BOOST_CHECK_EQUAL(Sent(reconnect, "getheaders"), 0);
+    }
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_REQUIRE_EQUAL(Stats(healthy).nBlocksInFlight, 128);
+    for (size_t height = 1; height <= 128; ++height) Deliver(healthy, height);
+    BOOST_CHECK_EQUAL(chainActive.Height(), 129);
+    BOOST_CHECK(chainActive.Tip()->GetBlockHash() == blocks.back().GetHash());
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(Stats(healthy).nGlobalValidatedBlocksInFlight, 0);
+}
+
+BOOST_AUTO_TEST_CASE(preferred_header_sync_is_bounded_and_reassigned_on_disconnect)
+{
+    CNode inbound(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "inbound", true);
+    Handshake(inbound);
+    BOOST_REQUIRE(SendMessages(&inbound, false));
+    BOOST_REQUIRE_EQUAL(Sent(inbound, "getheaders"), 1);
+
+    CNode first(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "first", false);
+    CNode second(INVALID_SOCKET, CAddress(CService("127.0.0.3", 3)), "second", false);
+    Handshake(first);
+    Handshake(second);
+    BOOST_REQUIRE(SendMessages(&first, false));
+    BOOST_REQUIRE_EQUAL(Sent(first, "getheaders"), 1);
+    BOOST_REQUIRE(SendMessages(&second, false));
+    BOOST_CHECK_EQUAL(Sent(second, "getheaders"), 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 2);
+
+    GetNodeSignals().DisconnectNode(first.GetId());
+    GetNodeSignals().DisconnectNode(first.GetId());
+    BOOST_REQUIRE(SendMessages(&second, false));
+    BOOST_CHECK_EQUAL(Sent(second, "getheaders"), 1);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 2);
+    GetNodeSignals().FinalizeNode(first.GetId());
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 2);
+
+    CNode client(INVALID_SOCKET, CAddress(CService("127.0.0.4", 4)), "client", false);
+    Handshake(client, 0);
+    BOOST_REQUIRE(SendMessages(&client, false));
+    BOOST_CHECK(!Stats(client).fPreferredDownload);
+    BOOST_CHECK_EQUAL(Sent(client, "getheaders"), 0);
+    CNode oneShot(INVALID_SOCKET, CAddress(CService("127.0.0.5", 5)), "one-shot", false);
+    oneShot.fOneShot = true;
+    Handshake(oneShot);
+    BOOST_REQUIRE(SendMessages(&oneShot, false));
+    BOOST_CHECK(!Stats(oneShot).fPreferredDownload);
+    BOOST_CHECK_EQUAL(Sent(oneShot, "getheaders"), 0);
 }
 
 BOOST_AUTO_TEST_CASE(randomized_receipt_reassignment_and_repeated_cleanup)

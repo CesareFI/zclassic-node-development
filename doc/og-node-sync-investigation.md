@@ -683,3 +683,45 @@ stop RPC kept that test failed, while SIGTERM stopped its daemon normally with
 128 pending requests in 0.277 seconds. Evidence:
 `mission/lifecycle-{before,after}-early-exit`,
 `mission/lifecycle-real-pending-stop`, and `mission/lifecycle-real-rpc-failure`.
+
+
+## Preferred outbound header discovery (21:40 UTC follow-up)
+
+The resumed branch already contained the block accounting and timeout fixes.
+A new deterministic regression exposed an additional scheduling problem:
+inbound A can own the historical header-sync role and 128 outstanding block
+requests before preferred outbound B connects. The scheduler checks the global
+header-sync count before asking B for headers. B therefore never advertises its
+known chain if it waits for getheaders, and cannot receive block requests.
+The earlier takeover tests supplied unsolicited headers to both peers and did
+not cover this behavior. The 128 limit is per peer; the lookahead window is 4096.
+
+Both new unit cases failed before the fix with zero getheaders messages to the
+preferred peer. An isolated normal daemon reproduced the same failure with real
+P2P sockets: two inbound disconnect/reconnect cycles released 128 requests each,
+A received 128 requests, and B handshook but received no requests within 20
+seconds. The daemon then stopped normally. Evidence is retained under
+mission/preferred-headers-before.log and preferred-headers-wire-before/.
+
+The scheduler now permits one preferred peer to begin historical header sync
+alongside an existing non-preferred sync. It checks existing peer state under
+cs_main instead of introducing another global counter. Existing block ownership,
+timeouts, near-tip header behavior, validation, and peer ban rules are unchanged.
+This needs neither implementation-name checks nor trusted peer addresses.
+Disconnect cleanup immediately makes the preferred sync role available again,
+even while other references retain the old peer object.
+
+The regression covers B discovering the chain while A owns 128 requests, B
+receiving the next available block, A timing out, eight inbound reconnections
+being unable to reclaim requests, B taking over before A's finalization, and
+normal validation to fixture height 129. A second case bounds preferred header
+sync, checks role reassignment, and excludes clients and one-shot peers.
+All 40 selected download, RPC, main, and DoS cases pass in normal (52.638s) and
+ASan/UBSan/leak (79.482s) builds. Both real-daemon timeout checks also passed after eight reconnect/cleanup
+cycles each: normal A disconnected after 300.037s, ASan/UBSan A after 300.068s,
+despite 11 header messages each. B validated all 129 fixture blocks, final
+in-flight counters were zero, no restart occurred, and both daemons stopped
+with exit zero and no peer errors or sanitizer findings. Evidence:
+mission/preferred-headers-wire-{after,asan}/result.json.
+Use qa/rpc-tests/og-download-stall.py --preferred-recovery to reproduce the mixed
+inbound/outbound scenario; B only sends headers in response to getheaders.

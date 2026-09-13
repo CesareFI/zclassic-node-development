@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-13 21:38 UTC. Read before starting a new task.
+Updated: 2026-09-13 21:47 UTC. Read before starting a new task.
 
 ## Objective and constraints
 
@@ -13,7 +13,9 @@ changes, or sub-agents. The current user requests continuous autonomous work.
 ## Branch and latest validated work
 
 - Branch: `fix/og-node-sync-20260913`.
-- Latest committed unit: `c214ec7de`, complete address-manager cleanup.
+- Latest committed unit: `dc4beef1d`, malformed address-manager parser recovery.
+- Preferred header-discovery milestone validated and ready to commit (see git log).
+- `c214ec7de`: complete address-manager cleanup.
 - `9b3d73993`: bounded peer database loader.
 - `d2afd7586`: test-daemon failure reporting and graceful cleanup.
 - `2e3263f63`: saturated peer eviction coverage.
@@ -91,11 +93,11 @@ Production advancement is not claimed. Continue local engineering tasks.
 
 ## Next five tasks
 
-1. Reproduce preferred outbound header discovery while inbound holds sync role.
-2. Fix/test bounded preferred header sync and immediate role reassignment.
-3. Validate with normal, sanitizer, and actual isolated-daemon peer tests.
-4. Investigate address selection sleeps/empty results with nonempty tables.
-5. Continue safe local reliability improvements with small validated commits.
+1. Finish address-selection sparse-table and recent-failure regressions.
+2. Complete ASan build and rerun make for the latest test-file edits.
+3. Validate bounded address selection normally and under sanitizers.
+4. Run isolated daemon restart/teardown checks for address selection; commit.
+5. Review remaining header-only stalls and address-manager locking with tests.
 
 Resume: `cd /opt/zclassic-money && cat DEVELOPMENT_STATUS.md`.
 
@@ -163,3 +165,29 @@ New preferred-header test hypothesis: while inbound A has fSyncStarted and 128
 requests, outbound B is preferred but receives no getheaders because nSyncStarted
 is nonzero. Existing tests inject headers into both peers, masking this case.
 Two new regression cases are building; production scheduling source unchanged.
+
+
+## Preferred header discovery validated, 21:47 UTC
+
+Two unit cases failed before the fix (exit201, missing getheaders), and the real
+normal daemon failed because quiet preferred B never received requests (normal
+shutdown, no peer errors). After the bounded preferred header-sync fix, all40
+selected normal cases PASS52.638s and ASan/UBSan/leak PASS79.482s. Both real daemon
+mixed-direction recovery runs PASS: eight inbound reconnect cycles each, A
+holds128 blocks, B only advertises headers when asked, timeout300.037/300.068s
+despite11 header messages, B validates129, globals0, normal stop0. Evidence:
+mission/preferred-headers-{before,unit-after,asan-after}.log and wire-{before,
+after,asan}/ under the same prefix. Production untouched, no consensus edits.
+
+Address-selection follow-up is UNCOMMITTED: one usable new address produced six
+empty selections in128 deterministic attempts (mission/addrman-sparse-before.log,
+exit201). Existing code sleeps100ms per1000 probes with cs held, up to20s per
+failed search. Candidate factors the duplicated search, caps random probing,
+and falls back to uniform reservoir sampling of occupied bucket slots; removes
+sleeps and preserves table choice, reference weighting, and chance penalties.
+First normal run passes the new regression but fails four legacy exact-random-
+sequence assertions. Those now test membership/coverage across both tables and
+all ports; revised26-case suite passes in0.66s. Recent-failure checks were added
+subsequently and need a fresh build/run. ASan build session26755 is still running;
+latest test source must be copied/rebuilt after it completes. Normal/ASan wire
+header runs have completed and both owned daemons stopped. No production action.

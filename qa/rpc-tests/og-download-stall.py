@@ -58,11 +58,13 @@ def fixture(path=None, checksum="4ae8e7c4a2b2fb5b925ecc18752bf517dad39dd0a965a8c
 
 
 class Peer(threading.Thread):
-    def __init__(self, port, name, blocks, headers, deliver, connection=None):
+    def __init__(self, port, name, blocks, headers, deliver, connection=None,
+                 announce_headers=True):
         super().__init__(name=name, daemon=True)
         self.sock = connection or socket.create_connection(("127.0.0.1", port), timeout=5)
         self.sock.settimeout(0.5)
         self.blocks, self.headers, self.deliver = blocks, headers, deliver
+        self.announce_headers = announce_headers
         self.header_heights = {hash256(header): height for height, header in enumerate(headers)}
         self.requested = threading.Event()
         self.disconnected = threading.Event()
@@ -86,7 +88,8 @@ class Peer(threading.Thread):
         if command == b"version":
             self.send("verack")
         elif command == b"verack":
-            self.send_headers()
+            if self.announce_headers:
+                self.send_headers()
         elif command == b"getheaders":
             count, offset = compact(payload, 4)  # Serialized locator starts with version.
             if count > 101 or len(payload) != offset + 32 * (count + 1):
@@ -170,7 +173,10 @@ def main():
     parser.add_argument("--daemon", type=pathlib.Path, default=ROOT / "src/zclassicd")
     parser.add_argument("--cli", type=pathlib.Path, default=ROOT / "src/zclassic-cli")
     parser.add_argument("--timeout", type=int, default=390)
-    parser.add_argument("--outbound", action="store_true", help="Have the daemon dial A and B through addnode")
+    direction = parser.add_mutually_exclusive_group()
+    direction.add_argument("--outbound", action="store_true", help="Have the daemon dial A and B through addnode")
+    direction.add_argument("--preferred-recovery", action="store_true",
+                           help="Inbound A stalls; outbound B sends headers only when requested")
     parser.add_argument("--churn", type=int, default=2, help="Peers torn down with 128 pending requests before A")
     parser.add_argument("--rpcport", type=int, default=18623)
     parser.add_argument("--port", type=int, default=18633)
@@ -194,8 +200,9 @@ def main():
                "-rpcport=" + str(args.rpcport), "-port=" + str(args.port), "-bind=127.0.0.1",
                "-printtoconsole=1", "-debug=net"]
     listeners = []
-    if args.outbound:
-        for index, port in enumerate((args.port + 1, args.port + 2), 1):
+    if args.outbound or args.preferred_recovery:
+        for index in ((1, 2) if args.outbound else (2,)):
+            port = args.port + index
             host = "127.0.0." + str(index)
             listener = socket.socket()
             listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -204,7 +211,8 @@ def main():
             listener.settimeout(20)
             listeners.append(listener)
             command.append("-addnode=" + host + ":" + str(port))
-    report = {"command": command, "pass": False, "outbound_test": args.outbound}
+    report = {"command": command, "pass": False, "outbound_test": args.outbound,
+              "preferred_recovery": args.preferred_recovery}
     peers = []
     with (output / "daemon.log").open("w") as log:
         daemon = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
@@ -237,22 +245,25 @@ def main():
                 assert not churned.errors, churned.errors
                 report["churn"].append({"name": name, "requests": len(churned.requests)})
             stalled = Peer(args.port, "A", blocks, headers, False,
-                           listeners[0].accept()[0] if listeners else None)
+                           listeners[0].accept()[0] if args.outbound else None)
             peers.append(stalled)
             stalled.start()
             assert stalled.requested.wait(20), "A never received requests"
             assert stalled.requests == list(range(1, 129)), stalled.requests
             healthy = Peer(args.port, "B", blocks, headers, True,
-                           listeners[1].accept()[0] if listeners else None)
+                           listeners[-1].accept()[0] if listeners else None,
+                           announce_headers=not args.preferred_recovery)
             peers.append(healthy)
             healthy.start()
             assert healthy.requested.wait(20), "B never received requests"
             download_peers = [peer for peer in rpc("getpeerinfo")
                               if peer["subver"] in ("/OGdownloadtestA:1/", "/OGdownloadtestB:1/")]
             assert len(download_peers) == 2
-            assert all(peer["inbound"] != args.outbound for peer in download_peers)
-            if args.outbound:
-                assert all(peer["preferred_download"] for peer in download_peers)
+            for peer in download_peers:
+                outbound = args.outbound or (args.preferred_recovery and
+                                            peer["subver"] == "/OGdownloadtestB:1/")
+                assert peer["inbound"] != outbound
+                assert peer["preferred_download"] == outbound
             deadline = time.monotonic() + args.timeout
             samples = []
             while time.monotonic() < deadline:
