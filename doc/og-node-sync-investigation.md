@@ -668,3 +668,18 @@ Evidence: `mission/wire-eviction-normal-cap32`, `mission/wire-eviction-asan`, an
 `mission/wire-eviction-tsan`. An initial fixture using a total limit of 24 failed
 because it supplied only eight inbound slots; its normal-exit result is retained
 in `mission/wire-eviction-normal`.
+
+The peer regression now preserves an already-exited daemon's status and skips
+the shutdown RPC in that case. RPC shutdown failures or timeouts keep the test
+failed and trigger bounded SIGTERM cleanup of only the child created by the
+test. No SIGKILL is used; an unreaped child is explicitly reported. The
+`test_og_peer_teardown.py` checks use real local child processes for early exits
+0/7, normal RPC stop, RPC failure, and timeout.
+
+A deterministic failing-startup fixture previously lost exit status and reported
+an unrelated missing-cookie shutdown error; it now records exit 1 and no stop
+attempt. A normal local pending-peer run passed. Deliberately failing only the
+stop RPC kept that test failed, while SIGTERM stopped its daemon normally with
+128 pending requests in 0.277 seconds. Evidence:
+`mission/lifecycle-{before,after}-early-exit`,
+`mission/lifecycle-real-pending-stop`, and `mission/lifecycle-real-rpc-failure`.

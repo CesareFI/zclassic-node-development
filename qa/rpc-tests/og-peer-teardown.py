@@ -244,6 +244,41 @@ def run_rounds(rpc, args, blocks, headers, peers, observer, report, output):
             assert daemon_log.count(marker) == expected, (mode, expected)
 
 
+def terminate_test_daemon(daemon, report, timeout):
+    """Graceful fallback for the child created by this test, never SIGKILL."""
+    try:
+        if daemon.poll() is None:
+            report["shutdown_signal"] = "SIGTERM"
+            daemon.terminate()
+        daemon.wait(timeout=timeout)
+    except Exception as error:
+        report["cleanup_error"] = repr(error)
+
+
+def stop_daemon(daemon, rpc, report, timeout=90):
+    start = time.monotonic()
+    report["stop_attempted"] = False
+    try:
+        if daemon.poll() is not None:
+            report["unexpected_exit"] = True
+            report["pass"] = False
+            return
+        report["stop_attempted"] = True
+        report["stop"] = rpc("stop")
+        daemon.wait(timeout=timeout)
+    except Exception as error:
+        report["shutdown_error"] = repr(error)
+        report["pass"] = False
+        terminate_test_daemon(daemon, report, timeout)
+    finally:
+        report["exit"] = daemon.poll()
+        report["shutdown_seconds"] = time.monotonic() - start
+        if report["exit"] != 0:
+            report["pass"] = False
+        if report["exit"] is None:
+            report["still_running"] = True
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=pathlib.Path, required=True)
@@ -324,18 +359,8 @@ def main():
                     report["pass"] = False
             if not args.shutdown_pending:
                 finish_peers(peers, report)
-            try:
-                start = time.monotonic()
-                report["stop"] = rpc("stop")
-                report["exit"] = daemon.wait(timeout=90)
-                report["shutdown_seconds"] = time.monotonic() - start
-                if report["exit"] != 0:
-                    report["pass"] = False
-            except Exception as error:
-                report["shutdown_error"] = repr(error)
-                report["pass"] = False
-            finally:
-                finish_peers(peers, report)
+            stop_daemon(daemon, rpc, report)
+            finish_peers(peers, report)
     (output / "result.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report, indent=2))
     return 0 if report["pass"] else 1

@@ -13,7 +13,8 @@ Continue as a normal Codex session: no Goal mode and no sub-agents.
 ## Branch and latest validated commit
 
 - Branch: `fix/og-node-sync-20260913`.
-- Latest tested commit: `f5f95715f` — HTTP buffered-event socket ownership.
+- Latest tested commit: `2e3263f63` — saturated peer eviction regression.
+- `f5f95715f` fixed HTTP buffered-event socket ownership.
 - `3608da448` synchronized peer sockets, metadata, I/O statistics, and ping state.
 - Earlier tested commits include `2bd9d05cc` (protocol-error teardown),
   `537ec5cb5` (getinfo lock), and `20937a8b3` (completed download benchmarks).
@@ -55,7 +56,7 @@ socket after its final reference removes the event registrations. It uses the
 existing libevent API and backend, with no dependency patch or suppression.
 CreateHTTPServer centralizes this policy and is used by InitHTTPServer and tests.
 
-HTTP work committed as `f5f95715f`. Current uncommitted work adds `--eviction`
+HTTP work committed as `f5f95715f`. Commit `2e3263f63` adds `--eviction`
 coverage to `qa/rpc-tests/og-peer-teardown.py`, saturating 16 inbound slots and
 checking one replacement per new peer while all 129 fixture blocks stay
 assigned exactly once. Initial normal run `92826` failed from a fixture capacity assumption: Zclassic
@@ -97,8 +98,12 @@ Production advancement is not claimed. Continue local engineering tasks.
 
 ## Next five tasks
 
-1. Commit the validated eviction coverage; all new and refactored paths passed.
-2. Improve already-exited test-daemon reporting without extra RPC delays.
+1. Commit lifecycle reporting: unit checks and real pending-peer smoke `80748`
+   passed. Real stop-RPC fault injection `93083` retained failure, sent SIGTERM,
+   and exited normally with 128 pending requests in 0.277s.
+   Uncommitted: extracted shutdown helpers and `test_og_peer_teardown.py`.
+2. Inspect the next bounded local profiling or resource-efficiency task.
+   perf is unavailable locally; do not install/download external tooling.
 3. Profile local eviction selection before considering allocation/hash caching.
 4. Improve test failure reporting so already-exited daemons retain their exit
    status without a pointless RPC shutdown attempt.
@@ -106,3 +111,10 @@ Production advancement is not claimed. Continue local engineering tasks.
    tested logical commits and regular status updates.
 
 Resume: `cd /opt/zclassic-money && cat DEVELOPMENT_STATUS.md`.
+
+Lifecycle before/after evidence: `mission/lifecycle-{before,after}-early-exit`.
+Both intentionally failed startup using /bin/false; before lost exit status and
+reported an unrelated missing-cookie shutdown error. After records exit 1 and
+stop_attempted=false. Real child tests cover early exit 0/7, successful RPC stop,
+RPC failure, and shutdown timeout. Fallback never sends SIGKILL and does not
+convert an RPC failure or timeout into a passing result.
