@@ -879,3 +879,28 @@ B then validates all 129 fixture blocks; request/header-role counters clear and
 both daemons stop with exit zero and no peer/sanitizer errors. Run
 qa/rpc-tests/og-header-discovery.py --response silent for the real-time check.
 Evidence: mission/header-timeout-*. Production remains unchanged.
+
+## Inbound fallback after completed preferred discovery
+
+A preferred outbound that answered empty headers still excluded all inbound
+download sources. An ordinary unit regression reproduced the missing getheaders
+request to a healthy inbound. With the socket fixture configured to admit inbound
+connections, a baseline daemon reproduced the same failure and stopped normally.
+
+The scheduler now asks whether preferred peers are still discovering, already
+own requests, or have validated work beyond the active tip. Those peers retain
+priority. If none can currently provide work after completed discovery, an
+inbound peer can discover and supply blocks. Pending inventory is resolved against
+known headers first, so a recently confirmed preferred announcement retains its
+priority even before that peer's next scheduler visit. Existing preferred flags,
+network-group policy, validation, and peer scoring remain unchanged.
+
+The three new cases and 12 ordinary recovery controls pass 9,955 assertions
+normally (19.640s) and under ASan/UBSan/leak checking (39.049s). Normal and
+instrumented daemons both pass the corrected inbound wire scenario: B validates
+all 129 blocks, A stays connected and preferred, counters clear, and shutdown
+returns zero with no peer/sanitizer findings. Initial wire attempts accidentally
+allowed only eight connections, below this node's 16 reserved outbound slots;
+the isolated inbound fixture now uses 32, and the earlier failures are retained.
+Run qa/rpc-tests/og-header-discovery.py --inbound-fallback --response empty.
+Evidence: mission/inbound-fallback-*. Production remains untouched.

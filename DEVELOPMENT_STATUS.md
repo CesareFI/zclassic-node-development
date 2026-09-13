@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-13 23:55 UTC.
+Updated: 2026-09-13 23:57 UTC.
 
 ## Current mission
 
@@ -16,7 +16,8 @@ reformulation. Current user instruction was read from
 ## Repository and production
 
 - Working directory /opt/zclassic-money, branch fix/og-node-sync-20260913.
-- Latest committed milestone 286036078: header-discovery completion.
+- Latest validated milestone: header-aware inbound fallback (this snapshot).
+- Prior 865993abf: header-response deadlines; 286036078: header completion.
 - Prior a7f7bd07d: peer download role diagnostics.
 - Prior 60548418a: immediate owned-notfound response recovery.
 - Prior milestones: 8edfb0afd address counts; 549a2f43a sparse selection;
@@ -101,8 +102,7 @@ Do not resume the stashed sequence or repeat completed security campaigns.
 
 ## Validated header-response timeout milestone
 
-The staged index contains this milestone, separate from the validated inbound
-fallback changes in the unstaged working tree. Commit timer first, then fallback.
+Committed as 865993abf. All tests finished before the commit.
 
 A 15-minute per-response deadline expires unanswered header exchanges even with
 no block requests. It renews only when validated chain work advances in a full
@@ -125,9 +125,9 @@ retry after replies stop being ignored. No consensus/protocol changes.
 - Evidence: mission/header-timeout-*. Header extension fixture is staged with
   checksum/provenance in src/test/data/README.md.
 
-## Validated next inbound fallback task
+## Validated inbound fallback milestone
 
-Unstaged changes: HasPreferredDownloadSource consults completed discovery and
+HasPreferredDownloadSource consults completed discovery and
 validated available work instead of excluding inbounds merely because an outbound
 remains connected. Pending preferred discovery, assigned work, and validated work
 beyond the active tip retain priority. Known inventory is resolved before deciding.
@@ -143,5 +143,5 @@ beyond the active tip retain priority. Known inventory is resolved before decidi
   {before,after,asan}-capacity. Unit/build logs: mission/inbound-fallback-*.
 - Normal and ASan next candidates are zclassicd-fallback, separately named from
   the completed timer binaries. No production executable/service/data changed.
-- All test/build processes completed. Commit after timer, then measure scheduling
-  overhead using ordinary local state fixtures. Do not resume the paused stash.
+- All test/build processes completed. Next measure scheduling overhead using
+  ordinary local state fixtures. Do not resume the paused stash.

@@ -260,6 +260,79 @@ struct DownloadSetup : TestingSetup {
 
 BOOST_FIXTURE_TEST_SUITE(block_download_tests, DownloadSetup)
 
+BOOST_AUTO_TEST_CASE(inbound_discovers_work_after_preferred_sources_finish_without_headers)
+{
+    CNode outbound(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "A", false);
+    CNode inbound(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "B", true);
+    Handshake(outbound);
+    BOOST_REQUIRE(SendMessages(&outbound, false));
+    Headers(outbound, 0);
+    BOOST_REQUIRE(Stats(outbound).fPreferredDownload);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 0);
+
+    Handshake(inbound);
+    BOOST_REQUIRE(SendMessages(&inbound, false));
+    BOOST_REQUIRE_EQUAL(Sent(inbound, "getheaders"), 1);
+    BOOST_CHECK(!Stats(inbound).fPreferredDownload);
+    Headers(inbound);
+    BOOST_REQUIRE(SendMessages(&inbound, false));
+    BOOST_REQUIRE_EQUAL(Stats(inbound).nBlocksInFlight, 128);
+    for (size_t height = 1; height <= 128; ++height) Deliver(inbound, height);
+    BOOST_REQUIRE(SendMessages(&inbound, false));
+    Deliver(inbound, 129);
+    BOOST_CHECK_EQUAL(chainActive.Height(), 129);
+    BOOST_CHECK(!outbound.fDisconnect);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
+}
+
+BOOST_AUTO_TEST_CASE(preferred_discovery_and_known_work_keep_priority_over_inbound)
+{
+    CNode empty(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "empty", false);
+    CNode preferred(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "preferred", false);
+    CNode inbound(INVALID_SOCKET, CAddress(CService("127.0.0.3", 3)), "inbound", true);
+    Handshake(empty);
+    BOOST_REQUIRE(SendMessages(&empty, false));
+    Headers(empty, 0);
+    Handshake(preferred);
+    Handshake(inbound);
+    BOOST_REQUIRE(SendMessages(&inbound, false));
+    BOOST_CHECK_EQUAL(Sent(inbound, "getheaders"), 0);
+    BOOST_REQUIRE(SendMessages(&preferred, false));
+    Headers(preferred);
+    BOOST_CHECK(!Stats(preferred).fHeaderSyncStarted);
+    // Visit the inbound before the preferred peer has any block assignments.
+    BOOST_REQUIRE(SendMessages(&inbound, false));
+    BOOST_CHECK_EQUAL(Sent(inbound, "getheaders"), 0);
+    BOOST_CHECK_EQUAL(Stats(inbound).nBlocksInFlight, 0);
+    BOOST_REQUIRE(SendMessages(&preferred, false));
+    for (size_t height = 1; height <= 128; ++height) Deliver(preferred, height);
+    BOOST_REQUIRE(SendMessages(&preferred, false));
+    Deliver(preferred, 129);
+    BOOST_REQUIRE(SendMessages(&inbound, false));
+    BOOST_CHECK_EQUAL(Sent(inbound, "getheaders"), 1);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
+}
+
+BOOST_AUTO_TEST_CASE(known_inventory_resolves_before_preferred_source_fallback)
+{
+    CNode preferred(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "A", false);
+    CNode inbound(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "B", true);
+    Handshake(preferred);
+    BOOST_REQUIRE(SendMessages(&preferred, false));
+    Headers(preferred, 0);
+    CDataStream inventory(SER_NETWORK, PROTOCOL_VERSION);
+    inventory << std::vector<CInv>{CInv(MSG_BLOCK, blocks[129].GetHash())};
+    BOOST_REQUIRE(ProcessMessage(&preferred, "inv", inventory, GetTime()));
+    BOOST_CHECK_EQUAL(Stats(preferred).nSyncHeight, -1);
+    Handshake(inbound);
+    Headers(inbound); // The previously unknown outbound announcement is now known.
+    BOOST_REQUIRE(SendMessages(&inbound, false));
+    BOOST_CHECK_EQUAL(Stats(inbound).nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(Stats(preferred).nSyncHeight, 129);
+    BOOST_REQUIRE(SendMessages(&preferred, false));
+    BOOST_CHECK_EQUAL(Stats(preferred).nBlocksInFlight, 128);
+}
+
 BOOST_AUTO_TEST_CASE(unanswered_headers_release_role_without_waiting_for_block_requests)
 {
     CNode silent(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "A", false);

@@ -581,6 +581,30 @@ void ProcessBlockAvailability(NodeId nodeid) {
     }
 }
 
+bool HasPreferredDownloadSource()
+{
+    AssertLockHeld(cs_main);
+    if (nPreferredDownload == 0)
+        return false;
+    const CBlockIndex* tip = chainActive.Tip();
+    for (auto& entry : mapNodeState) {
+        CNodeState& state = entry.second;
+        if (!state.fPreferredDownload)
+            continue;
+        // Reserve priority while an outbound is discovering its chain, or
+        // already owns work. A finished empty response alone cannot exclude
+        // every inbound source indefinitely.
+        if (!state.fSyncCompleted || state.nBlocksInFlight > 0)
+            return true;
+        ProcessBlockAvailability(entry.first);
+        const CBlockIndex* best = state.pindexBestKnownBlock;
+        if (best && best->IsValid(BLOCK_VALID_TREE) &&
+            (!tip || best->nChainWork > tip->nChainWork))
+            return true;
+    }
+    return false;
+}
+
 /** Update tracking information about which blocks a peer is assumed to have. */
 void UpdateBlockAvailability(NodeId nodeid, const uint256 &hash) {
     CNodeState *state = State(nodeid);
@@ -7451,7 +7475,8 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         // Start block sync
         if (pindexBestHeader == NULL)
             pindexBestHeader = chainActive.Tip();
-        bool fFetch = state.fPreferredDownload || (nPreferredDownload == 0 && !pto->fClient && !pto->fOneShot); // Download if this is a nice peer, or we have no nice peers and this one might do.
+        const bool fFetch = state.fPreferredDownload ||
+            (!pto->fClient && !pto->fOneShot && !HasPreferredDownloadSource());
         if (!pto->fClient && !fImporting && !fReindex) {
             // Keep historical header sync bounded, but allow a preferred peer
             // to join an inbound sync that started before it connected.

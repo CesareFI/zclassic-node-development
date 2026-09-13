@@ -6,6 +6,7 @@ A answers with an empty or short header list, or leaves the request unanswered;
 quiet preferred B must then be asked for headers. The silent case waits for the
 real 15-minute response deadline while A continues answering ordinary pings.
 No production datadir, external peer, or mining is used.
+The inbound-fallback variant checks discovery after preferred A answers empty.
 """
 import argparse
 import importlib.util
@@ -69,12 +70,15 @@ def exercise_peers(args, daemon, rpc, listeners, blocks, headers, peers, report)
         wait_for(daemon, lambda: first.header_messages == 1, "A header response")
     if args.response == "short":
         wait_for(daemon, lambda: len(first.requests) == 128, "A block assignments")
-    healthy = WIRE.Peer(0, "B", blocks, headers, True,
-                        listeners[1].accept()[0], announce_headers=False)
+    connection = (socket.create_connection(("127.0.0.1", args.port), timeout=5,
+                                          source_address=("127.0.0.2", 0))
+                  if args.inbound_fallback else listeners[1].accept()[0])
+    healthy = WIRE.Peer(0, "B", blocks, headers, True, connection, announce_headers=False)
     peers.append(healthy)
     healthy.start()
+    wait_for(daemon, healthy.handshaken.is_set, "B handshake")
+    report["before_discovery"] = rpc("getpeerinfo")
     if args.response == "silent":
-        wait_for(daemon, healthy.handshaken.is_set, "B handshake")
         report["before_recovery"] = rpc("getpeerinfo")
         assert len(report["before_recovery"]) == 2
         assert sum(peer["header_sync_started"] for peer in report["before_recovery"]) == 1
@@ -86,7 +90,9 @@ def exercise_peers(args, daemon, rpc, listeners, blocks, headers, peers, report)
     report["after_discovery"] = rpc("getpeerinfo")
     assert len(report["after_discovery"]) == (1 if args.response == "silent" else 2)
     for peer in report["after_discovery"]:
-        assert peer["preferred_download"] and not peer["inbound"]
+        inbound = args.inbound_fallback and peer["subver"] == "/OGdownloadtestB:1/"
+        assert peer["inbound"] == inbound
+        assert peer["preferred_download"] != inbound
         assert not peer["header_sync_started"]
         assert not peer["block_download_stopped"]
     if args.response == "short":
@@ -131,13 +137,18 @@ def run(args):
     command = [str(args.daemon.resolve()), "-datadir=" + str(datadir),
                "-daemon=0", "-server=1", "-disablewallet=1", "-gen=0",
                "-bootstrap=0", "-connect=127.0.0.1:1", "-dnsseed=0",
-               "-listen=0", "-listenonion=0", "-upnp=0", "-natpmp=0",
-               "-maxconnections=8", "-rpcport=" + str(args.rpcport),
+               "-listenonion=0", "-upnp=0", "-natpmp=0",
+               "-maxconnections=" + ("32" if args.inbound_fallback else "8"),
+               "-rpcport=" + str(args.rpcport),
                "-printtoconsole=1", "-debug=net"]
+    command.append("-listen=" + str(int(args.inbound_fallback)))
+    if args.inbound_fallback:
+        command.extend(["-bind=127.0.0.1", "-port=" + str(args.port)])
     report = {"pass": False, "response": args.response}
     listeners, peers = [], []
     try:
-        for host in ("127.0.0.1", "127.0.0.2"):
+        hosts = ("127.0.0.1",) if args.inbound_fallback else ("127.0.0.1", "127.0.0.2")
+        for host in hosts:
             listener = socket.socket()
             listeners.append(listener)
             listener.bind((host, 0))
@@ -180,9 +191,15 @@ def main():
     parser.add_argument("--cli", type=pathlib.Path, default=WIRE.ROOT / "src/zclassic-cli")
     parser.add_argument("--response", choices=("empty", "short", "silent"), default="empty")
     parser.add_argument("--rpcport", type=int, default=18683)
+    parser.add_argument("--inbound-fallback", action="store_true",
+                        help="Use an inbound healthy source after preferred A answers empty")
+    parser.add_argument("--port", type=int, default=18701)
     parser.add_argument("--timeout", type=int, default=960,
                         help="Maximum recovery wait for the silent-response case")
-    return run(parser.parse_args())
+    args = parser.parse_args()
+    if args.inbound_fallback and args.response != "empty":
+        parser.error("--inbound-fallback requires --response empty")
+    return run(args)
 
 
 if __name__ == "__main__":
