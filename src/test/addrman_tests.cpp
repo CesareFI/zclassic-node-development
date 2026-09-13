@@ -8,6 +8,7 @@
 
 #include "hash.h"
 #include "random.h"
+#include <limits>
 
 using namespace std;
 
@@ -51,6 +52,123 @@ public:
 };
 
 BOOST_FIXTURE_TEST_SUITE(addrman_tests, BasicTestingSetup)
+
+static CDataStream AddrManHeader(unsigned char version, int fresh, int tried, int buckets)
+{
+    CDataStream encoded(SER_DISK, CLIENT_VERSION);
+    encoded << version << static_cast<unsigned char>(32) << uint256S("1");
+    encoded << fresh << tried << (version == 0 ? buckets : buckets ^ (1 << 30));
+    return encoded;
+}
+
+BOOST_AUTO_TEST_CASE(negative_deserialization_counts_are_rejected)
+{
+    for (unsigned char version : {0, 1, 2}) {
+        for (int negative : {-1, std::numeric_limits<int>::min()}) {
+            for (int field = 0; field < 3; ++field) {
+                auto encoded = AddrManHeader(version, field == 0 ? negative : 0,
+                                            field == 1 ? negative : 0,
+                                            field == 2 ? negative : 0);
+                CAddrMan loaded;
+                BOOST_CHECK_THROW(encoded >> loaded, std::ios_base::failure);
+            }
+        }
+    }
+}
+
+BOOST_AUTO_TEST_CASE(negative_bucket_sizes_are_rejected)
+{
+    for (unsigned char version : {0, 1, 2}) {
+        for (int negative : {-1, std::numeric_limits<int>::min()}) {
+            auto encoded = AddrManHeader(version, 0, 0, 1);
+            encoded << negative;
+            CAddrMan loaded;
+            BOOST_CHECK_THROW(encoded >> loaded, std::ios_base::failure);
+        }
+    }
+}
+
+BOOST_AUTO_TEST_CASE(truncated_deserialization_clears_partial_state)
+{
+    const CNetAddr source("252.2.2.2");
+    const CAddress address(CService("250.1.1.1", 8333));
+    auto encoded = AddrManHeader(1, 2, 0, 0);
+    encoded << CAddrInfo(address, source); // The second declared entry is absent.
+    CAddrManTest loaded;
+    BOOST_REQUIRE_THROW(encoded >> loaded, std::ios_base::failure);
+    BOOST_REQUIRE_EQUAL(loaded.size(), 0);
+    BOOST_CHECK(loaded.Find(address) == nullptr);
+    BOOST_REQUIRE(loaded.Add(address, source));
+    BOOST_REQUIRE(loaded.Find(address) != nullptr);
+    BOOST_CHECK_EQUAL(loaded.Find(address)->ToString(), address.ToString());
+}
+
+BOOST_AUTO_TEST_CASE(rejected_header_leaves_manager_reusable)
+{
+    for (bool tried : {false, true}) {
+        const int limit = ADDRMAN_BUCKET_SIZE *
+            (tried ? ADDRMAN_TRIED_BUCKET_COUNT : ADDRMAN_NEW_BUCKET_COUNT);
+        auto encoded = AddrManHeader(1, tried ? 0 : limit + 1, tried ? limit + 1 : 0, 0);
+        CAddrMan loaded;
+        BOOST_REQUIRE_THROW(encoded >> loaded, std::ios_base::failure);
+        const CAddress address(CService("250.1.1.1", 8333));
+        BOOST_REQUIRE(loaded.Add(address, CNetAddr("252.2.2.2")));
+        // A normal save/load must work after rejecting a corrupted header.
+        CDataStream saved(SER_DISK, CLIENT_VERSION);
+        saved << loaded;
+        CAddrManTest reloaded;
+        BOOST_REQUIRE_NO_THROW(saved >> reloaded);
+        BOOST_CHECK_EQUAL(reloaded.size(), 1);
+        BOOST_REQUIRE(reloaded.Find(address) != nullptr);
+        BOOST_CHECK_EQUAL(reloaded.Find(address)->ToString(), address.ToString());
+    }
+}
+
+BOOST_AUTO_TEST_CASE(compatible_versions_and_bucket_reconstruction)
+{
+    const CAddress address(CService("250.1.1.1", 8333));
+    const CAddrInfo info(address, CNetAddr("252.2.2.2"));
+    const int occupiedBucket = info.GetNewBucket(uint256S("1"));
+    for (unsigned char version : {0, 1, 2}) {
+        for (int buckets : {0, 1, ADDRMAN_NEW_BUCKET_COUNT, ADDRMAN_NEW_BUCKET_COUNT + 1}) {
+            auto encoded = AddrManHeader(version, 1, 0, buckets);
+            encoded << info;
+            for (int bucket = 0; bucket < buckets; ++bucket) {
+                const bool occupied = bucket == occupiedBucket;
+                encoded << (occupied ? 1 : 0);
+                if (occupied) encoded << 0;
+            }
+            CAddrManTest loaded;
+            BOOST_REQUIRE_NO_THROW(encoded >> loaded);
+            BOOST_REQUIRE_EQUAL(loaded.size(), 1);
+            BOOST_REQUIRE(loaded.Find(address) != nullptr);
+            BOOST_CHECK_EQUAL(loaded.Find(address)->ToString(), address.ToString());
+        }
+    }
+}
+
+BOOST_AUTO_TEST_CASE(all_truncated_prefixes_leave_empty_manager)
+{
+    const CAddress address(CService("250.1.1.1", 8333));
+    CAddrMan original;
+    BOOST_REQUIRE(original.Add(address, CNetAddr("252.2.2.2")));
+    CDataStream encoded(SER_DISK, CLIENT_VERSION);
+    encoded << original;
+    CAddrManTest loaded;
+    for (size_t length = 0; length < encoded.size(); ++length) {
+        BOOST_TEST_CONTEXT("truncated length=" << length) {
+            CDataStream prefix(encoded.begin(), encoded.begin() + length,
+                               SER_DISK, CLIENT_VERSION);
+            BOOST_REQUIRE_THROW(prefix >> loaded, std::ios_base::failure);
+            BOOST_REQUIRE_EQUAL(loaded.size(), 0);
+            BOOST_CHECK(loaded.Find(address) == nullptr);
+        }
+    }
+    BOOST_REQUIRE_NO_THROW(encoded >> loaded);
+    BOOST_CHECK_EQUAL(loaded.size(), 1);
+    BOOST_REQUIRE(loaded.Find(address) != nullptr);
+    BOOST_CHECK_EQUAL(loaded.Find(address)->ToString(), address.ToString());
+}
 
 BOOST_AUTO_TEST_CASE(clear_forgets_addresses_and_allows_reinsertion)
 {

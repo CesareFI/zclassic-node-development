@@ -332,10 +332,23 @@ public:
     void Unserialize(Stream& s)
     {
         LOCK(cs);
-
         Clear();
+        try {
+            unsigned char nVersion;
+            const int nUBuckets = ReadHeader(s, nVersion);
+            ReadEntries(s, nVersion, nUBuckets);
+        } catch (...) {
+            // Callers may recover from a corrupt file and keep using this
+            // manager. Never expose partially decoded indexes or counters.
+            Clear();
+            throw;
+        }
+    }
 
-        unsigned char nVersion;
+private:
+    template<typename Stream>
+    int ReadHeader(Stream& s, unsigned char& nVersion)
+    {
         s >> nVersion;
         unsigned char nKeySize;
         s >> nKeySize;
@@ -349,14 +362,21 @@ public:
             nUBuckets ^= (1 << 30);
         }
 
-        if (nNew > ADDRMAN_NEW_BUCKET_COUNT * ADDRMAN_BUCKET_SIZE) {
-            throw std::ios_base::failure("Corrupt CAddrMan serialization, nNew exceeds limit.");
+        if (nNew < 0 || nNew > ADDRMAN_NEW_BUCKET_COUNT * ADDRMAN_BUCKET_SIZE) {
+            throw std::ios_base::failure("Corrupt CAddrMan serialization, nNew out of range.");
         }
 
-        if (nTried > ADDRMAN_TRIED_BUCKET_COUNT * ADDRMAN_BUCKET_SIZE) {
-            throw std::ios_base::failure("Corrupt CAddrMan serialization, nTried exceeds limit.");
+        if (nTried < 0 || nTried > ADDRMAN_TRIED_BUCKET_COUNT * ADDRMAN_BUCKET_SIZE) {
+            throw std::ios_base::failure("Corrupt CAddrMan serialization, nTried out of range.");
         }
+        if (nUBuckets < 0)
+            throw std::ios_base::failure("Corrupt CAddrMan serialization, negative bucket count.");
+        return nUBuckets;
+    }
 
+    template<typename Stream>
+    void ReadEntries(Stream& s, unsigned char nVersion, int nUBuckets)
+    {
         // Deserialize entries from the new table.
         for (int n = 0; n < nNew; n++) {
             CAddrInfo &info = mapInfo[n];
@@ -398,23 +418,7 @@ public:
         }
         nTried -= nLost;
 
-        // Deserialize positions in the new table (if possible).
-        for (int bucket = 0; bucket < nUBuckets; bucket++) {
-            int nSize = 0;
-            s >> nSize;
-            for (int n = 0; n < nSize; n++) {
-                int nIndex = 0;
-                s >> nIndex;
-                if (nIndex >= 0 && nIndex < nNew) {
-                    CAddrInfo &info = mapInfo[nIndex];
-                    int nUBucketPos = info.GetBucketPosition(nKey, true, bucket);
-                    if (nVersion == 1 && nUBuckets == ADDRMAN_NEW_BUCKET_COUNT && vvNew[bucket][nUBucketPos] == -1 && info.nRefCount < ADDRMAN_NEW_BUCKETS_PER_ADDRESS) {
-                        info.nRefCount++;
-                        vvNew[bucket][nUBucketPos] = nIndex;
-                    }
-                }
-            }
-        }
+        ReadNewBucketPositions(s, nVersion, nUBuckets);
 
         // Prune new entries with refcount 0 (as a result of collisions).
         int nLostUnk = 0;
@@ -434,6 +438,30 @@ public:
         Check();
     }
 
+    template<typename Stream>
+    void ReadNewBucketPositions(Stream& s, unsigned char nVersion, int nUBuckets)
+    {
+        for (int bucket = 0; bucket < nUBuckets; bucket++) {
+            int nSize = 0;
+            s >> nSize;
+            if (nSize < 0)
+                throw std::ios_base::failure("Corrupt CAddrMan serialization, negative bucket size.");
+            for (int n = 0; n < nSize; n++) {
+                int nIndex = 0;
+                s >> nIndex;
+                if (nIndex >= 0 && nIndex < nNew) {
+                    CAddrInfo &info = mapInfo[nIndex];
+                    int nUBucketPos = info.GetBucketPosition(nKey, true, bucket);
+                    if (nVersion == 1 && nUBuckets == ADDRMAN_NEW_BUCKET_COUNT && vvNew[bucket][nUBucketPos] == -1 && info.nRefCount < ADDRMAN_NEW_BUCKETS_PER_ADDRESS) {
+                        info.nRefCount++;
+                        vvNew[bucket][nUBucketPos] = nIndex;
+                    }
+                }
+            }
+        }
+    }
+
+public:
     void Clear()
     {
         LOCK(cs);

@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-13 17:37 UTC. Read before starting a new task.
+Updated: 2026-09-13 21:38 UTC. Read before starting a new task.
 
 ## Objective and constraints
 
@@ -8,12 +8,13 @@ Improve synchronization, peer handling, resource efficiency, memory/thread
 correctness, code quality, tests, and build reliability using local code and
 fixtures. Preserve consensus, monetary policy, PoW, transaction validity, and
 upgrades. No external host interaction, mining, marketplace, pushes, production
-changes, Goal mode, or sub-agents.
+changes, or sub-agents. The current user requests continuous autonomous work.
 
 ## Branch and latest validated work
 
 - Branch: `fix/og-node-sync-20260913`.
-- Latest committed unit: `9b3d73993`, bounded peer database loader.
+- Latest committed unit: `c214ec7de`, complete address-manager cleanup.
+- `9b3d73993`: bounded peer database loader.
 - `d2afd7586`: test-daemon failure reporting and graceful cleanup.
 - `2e3263f63`: saturated peer eviction coverage.
 - `f5f95715f`: HTTP buffered-event socket ownership.
@@ -90,12 +91,11 @@ Production advancement is not claimed. Continue local engineering tasks.
 
 ## Next five tasks
 
-1. Commit tested complete address-manager clear and replacement cleanup.
-2. Reproduce malformed count acceptance and partial deserialization state.
-3. Reproduce any identified accounting/state inconsistency before fixing it.
-4. Run targeted normal/sanitizer checks for the next logical change and commit it.
-5. Continue measured local resource/build/complexity improvements; perf is
-   unavailable and external downloads are out of scope.
+1. Reproduce preferred outbound header discovery while inbound holds sync role.
+2. Fix/test bounded preferred header sync and immediate role reassignment.
+3. Validate with normal, sanitizer, and actual isolated-daemon peer tests.
+4. Investigate address selection sleeps/empty results with nonempty tables.
+5. Continue safe local reliability improvements with small validated commits.
 
 Resume: `cd /opt/zclassic-money && cat DEVELOPMENT_STATUS.md`.
 
@@ -125,3 +125,41 @@ Follow-up review findings (not changed or yet claimed reproduced):
 - size() reads vRandom without cs; Add logs nNew/nTried after releasing cs.
 These are local engineering candidates. Preserve old supported addrman versions
 and table reconstruction when designing malformed-file rejection tests.
+
+Added four local regression cases before changing the parser: negative header
+counts (versions0/1/2, -1/INT_MIN), negative bucket sizes, truncation after one
+complete entry, and save/load after rejecting an oversized header. No peer
+network or production activity is required. Clear cleanup is committed c214ec7de.
+
+Malformed-parser baseline FAILED with exactly 26 assertions (exit201):
+24 negative-count acceptance cases, retained partial entry, and save/load
+failure after rejected header. Evidence mission/addrman-malformed-before*.
+Candidate separates header, entry and bucket-position parsing; rejects negative
+counts, clears all partial state on any decoding exception, and rethrows it.
+No supported version, positive bucket count or reconstruction policy changed.
+Added compatibility coverage plus deterministic truncation at every byte of
+a valid serialized one-address table. Rebuilding normal and ASan suites next.
+
+
+## Resumed verification, 21:38 UTC
+
+Live process 503646 still runs deleted executable inode SHA256
+6c4a80ec792c894aa1be9d27332f7d05e857e36408485e3b651fe114f3be14ad,
+matching the deployment evidence for e9fa74638. The on-disk src/zclassicd
+SHA remains bc161f53...; neither is the current candidate source. No production
+RPC, service action, or datadir change was performed. Disk has 19 GiB free.
+
+Address-manager malformed parser passes all 25 addrman/addrdb cases under normal
+and ASan/UBSan/leak builds (exit zero). Logs: mission/addrman-parser-{after,
+asan-after}-20260913T2136.log. Original 26-assertion parser failure evidence is
+preserved. Version 0/1/2 reconstruction and all truncated prefixes covered.
+Initial resumed runs were terminated after revealing unrelated random Select()
+empty returns and long sleeps; parser tests now assert decoded address lookups
+and exact records instead of relying on probabilistic selection. No production
+selection code has yet changed. Source candidate fixes negative counts and
+clears partial deserialization state, with no consensus or wire-format changes.
+
+New preferred-header test hypothesis: while inbound A has fSyncStarted and 128
+requests, outbound B is preferred but receives no getheaders because nSyncStarted
+is nonzero. Existing tests inject headers into both peers, masking this case.
+Two new regression cases are building; production scheduling source unchanged.
