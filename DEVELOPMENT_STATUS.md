@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-13 15:07 UTC. Read before starting a new task.
+Updated: 2026-09-13 15:20 UTC. Read before starting a new task.
 
 ## Objective and constraints
 
@@ -13,8 +13,8 @@ Continue as a normal Codex session: no Goal mode and no sub-agents.
 ## Branch and latest validated commit
 
 - Branch: `fix/og-node-sync-20260913`.
-- Latest tested commit: `3608da448` — synchronize peer sockets, handshake
-  metadata, I/O statistics, and ping state.
+- Latest tested commit: `f5f95715f` — HTTP buffered-event socket ownership.
+- `3608da448` synchronized peer sockets, metadata, I/O statistics, and ping state.
 - Earlier tested commits include `2bd9d05cc` (protocol-error teardown),
   `537ec5cb5` (getinfo lock), and `20937a8b3` (completed download benchmarks).
 - Normal candidate: `src/zclassicd-mission`; build with
@@ -55,8 +55,17 @@ socket after its final reference removes the event registrations. It uses the
 existing libevent API and backend, with no dependency patch or suppression.
 CreateHTTPServer centralizes this policy and is used by InitHTTPServer and tests.
 
-Uncommitted files: `src/httpserver.cpp`, `src/httpserver.h`,
-`src/test/httpserver_tests.cpp`, `src/Makefile.test.include`, and status/docs.
+HTTP work committed as `f5f95715f`. Current uncommitted work adds `--eviction`
+coverage to `qa/rpc-tests/og-peer-teardown.py`, saturating 16 inbound slots and
+checking one replacement per new peer while all 129 fixture blocks stay
+assigned exactly once. Initial normal run `92826` failed from a fixture capacity assumption: Zclassic
+reserves 16 outbound slots, so maxconnections=24 supplied only 8 inbound slots.
+It exited normally; evidence is `mission/wire-eviction-normal`. Corrected run
+`13110` with maxconnections=32 PASS: 24 replacements. TSAN `67009` and
+ASan/UBSan `89026` PASS 64 replacements each. All keep 129 unique assignments,
+recover to height 129, and stop normally without sanitizer findings. Observed
+evicted requests reassigned: normal 128, TSAN 385, ASan 2. All jobs complete. Original malformed-path smoke `17256` also PASS: 10
+cycles, 250 RPC calls, height 129 and normal exit, covering the extracted runner. No new C++ changes.
 
 ## Validation and active jobs
 
@@ -88,10 +97,9 @@ Production advancement is not claimed. Continue local engineering tasks.
 
 ## Next five tasks
 
-1. Commit the tested HTTP ownership fix and regressions; source parity verified.
-2. Update the latest-commit reference and preserve the validated test evidence.
-3. Exercise saturated local peer eviction to cover stable ping snapshots and
-   audit remaining peer lifetime/lock boundaries.
+1. Commit the validated eviction coverage; all new and refactored paths passed.
+2. Improve already-exited test-daemon reporting without extra RPC delays.
+3. Profile local eviction selection before considering allocation/hash caching.
 4. Improve test failure reporting so already-exited daemons retain their exit
    status without a pointless RPC shutdown attempt.
 5. Continue bounded local resource, build, and code-quality improvements with

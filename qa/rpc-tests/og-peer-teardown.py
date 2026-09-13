@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stress pending OG block requests across real FIN, reset, and RPC teardown.
+"""Stress pending OG block requests across real peer teardown and eviction.
 
 Uses a fresh isolated datadir and historical fixture, never mining. Alternates
 inbound/outbound connections while a second thread reads peer/network RPCs.
@@ -175,14 +175,86 @@ def finish_peers(peers, report):
         report["pass"] = False
 
 
+def eviction_peer(args, index, blocks, headers, peers):
+    name = "evict" + str(index)
+    peer = WIRE.Peer(args.port, name, blocks, headers, False)
+    peer.sock = TeardownSocket(peer.sock)
+    peer.sock.expect_reset = True  # Eviction may close with unread ping replies.
+    peers.append(peer)
+    peer.start()
+    return name
+
+
+def assigned_set(rpc, count, newest):
+    rows = rpc("getpeerinfo")
+    if len(rows) != count or not any(newest in row["subver"] for row in rows):
+        return False
+    if any(row["version"] == 0 or not row["inbound"] for row in rows):
+        return False
+    assigned = [height for row in rows for height in row["inflight"]]
+    if sorted(assigned) != list(range(1, 130)):
+        return False
+    state = rpc("getblockchaininfo")["blockdownload"]
+    if state["blocks_in_flight"] != 129 or state["validated_blocks_in_flight"] != 129:
+        return False
+    return rows
+
+
+def eviction_rounds(rpc, args, blocks, headers, peers, observer, report):
+    # maxconnections=32 leaves 16 inbound slots (net.cpp reserves 16 outbound).
+    # This exceeds the 4 netgroup and 8 minimum-ping protections, so local
+    # peers can exercise eviction.
+    capacity = 16
+    for index in range(capacity):
+        newest = eviction_peer(args, index, blocks, headers, peers)
+    current = wait_until(lambda: assigned_set(rpc, capacity, newest))
+    for index in range(args.rounds):
+        before = {row["id"]: row for row in current}
+        start = time.monotonic()
+        newest = eviction_peer(args, capacity + index, blocks, headers, peers)
+        current = wait_until(lambda: assigned_set(rpc, capacity, newest))
+        after = {row["id"] for row in current}
+        removed = set(before) - after
+        assert len(removed) == 1 and len(after - set(before)) == 1, (before, after)
+        victim = before[removed.pop()]
+        assert not observer.errors, observer.errors
+        report["rounds"].append({"index": index, "mode": "eviction",
+                                "evicted_id": victim["id"],
+                                "evicted_requests": len(victim["inflight"]),
+                                "replacement_seconds": time.monotonic() - start,
+                                "peers": len(current), "assigned_blocks": 129})
+    for peer in peers:
+        peer.finish()
+        assert not peer.errors and not peer.is_alive(), peer.errors
+    wait_until(lambda: check_empty(rpc))
+
+
+def run_rounds(rpc, args, blocks, headers, peers, observer, report, output):
+    if args.eviction:
+        eviction_rounds(rpc, args, blocks, headers, peers, observer, report)
+    else:
+        for index in range(args.rounds):
+            report["rounds"].append(teardown_round(rpc, args, index, blocks, headers, peers))
+            assert not observer.errors, observer.errors
+    if args.malformed:
+        daemon_log = (output / "daemon.log").read_text()
+        for mode, marker in (("badmagic", "PROCESSMESSAGE: INVALID MESSAGESTART"),
+                             ("oversize", "Oversized message from peer=")):
+            expected = sum(row["mode"] == mode for row in report["rounds"])
+            assert daemon_log.count(marker) == expected, (mode, expected)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=pathlib.Path, required=True)
     parser.add_argument("--daemon", type=pathlib.Path, default=WIRE.ROOT / "src/zclassicd")
     parser.add_argument("--cli", type=pathlib.Path, default=WIRE.ROOT / "src/zclassic-cli")
     parser.add_argument("--rounds", type=int, default=48)
-    parser.add_argument("--malformed", action="store_true",
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--malformed", action="store_true",
                         help="Also provoke message-thread and oversized-frame disconnects")
+    mode.add_argument("--eviction", action="store_true",
+                      help="Replace peers in a full 16-connection inbound set")
     parser.add_argument("--shutdown-pending", action="store_true",
                         help="Finish by stopping with 128 outstanding requests instead of recovering")
     parser.add_argument("--rpc-pings", action="store_true",
@@ -215,6 +287,8 @@ def main():
                "-dnsseed=0", "-listenonion=0", "-upnp=0", "-natpmp=0",
                "-rpcport=" + str(args.rpcport), "-port=" + str(args.port),
                "-bind=127.0.0.1", "-printtoconsole=1", "-debug=net"]
+    if args.eviction:
+        command.append("-maxconnections=32")
     # The CLI reads this only from the newly created test datadir.
     (datadir / "zclassic.conf").write_text("rpcport=" + str(args.rpcport) + "\n")
     report = {"pass": False, "command": command, "rounds": []}
@@ -233,15 +307,7 @@ def main():
             assert wait_until(ready, 90)["generate"] is False
             observer = Observer(rpc, args.rpc_pings)
             observer.start()
-            for index in range(args.rounds):
-                report["rounds"].append(teardown_round(rpc, args, index, blocks, headers, peers))
-                assert not observer.errors, observer.errors
-            if args.malformed:
-                daemon_log = (output / "daemon.log").read_text()
-                for mode, marker in (("badmagic", "PROCESSMESSAGE: INVALID MESSAGESTART"),
-                                     ("oversize", "Oversized message from peer=")):
-                    expected = sum(row["mode"] == mode for row in report["rounds"])
-                    assert daemon_log.count(marker) == expected, (mode, expected)
+            run_rounds(rpc, args, blocks, headers, peers, observer, report, output)
             report.update(final_peer(rpc, args, blocks, headers, peers))
             assert rpc("getmininginfo")["generate"] is False
             assert daemon.poll() is None, "daemon exited during recovery"

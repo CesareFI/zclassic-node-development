@@ -648,3 +648,23 @@ daemon passed 50 cycles and 1,000 RPC calls, then stopped with 128 requests stil
 pending in 0.818 seconds. Evidence: `mission/http-lifetime-before.log`,
 `mission/http-unit-after*`, `mission/http-unit-keepalive*`,
 `mission/http-asan-unit*`, and `mission/wire-http-ownership-{tsan,asan}`.
+
+### Eviction with pending requests
+
+The teardown harness now supports `--eviction`: it fills 16 inbound slots,
+queues concurrent RPC pings, and replaces one peer at a time. The test sets
+`maxconnections=32` because this Zclassic source reserves 16 outbound slots.
+After each replacement it requires exactly 16 ready inbound peers, exactly one
+departing and one arriving peer, unique assignments for fixture blocks 1–129,
+and matching global actual/validated request counts. It then clears the peers,
+checks zero accounting, and validates through height 129 with a healthy peer.
+
+The normal candidate passed 24 replacements; ASan/UBSan and TSAN each passed
+64, with normal shutdown and no sanitizer findings. The runs observed 128,
+2, and 385 abandoned requests being reassigned respectively; the exact victims
+depend on ping measurements and connection timing. Maximum sampled replacement
+times were 0.120, 0.144, and 0.153 seconds, including polling/RPC overhead.
+Evidence: `mission/wire-eviction-normal-cap32`, `mission/wire-eviction-asan`, and
+`mission/wire-eviction-tsan`. An initial fixture using a total limit of 24 failed
+because it supplied only eight inbound slots; its normal-exit result is retained
+in `mission/wire-eviction-normal`.
