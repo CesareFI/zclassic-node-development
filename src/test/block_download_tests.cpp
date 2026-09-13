@@ -88,9 +88,9 @@ struct DownloadSetup : TestingSetup {
         BOOST_REQUIRE(blocks.front().GetHash() == Params().GetConsensus().hashGenesisBlock);
     }
 
-    ~DownloadSetup() { SetMockTimeMicros(0); nMaxBlocksInTransitPerPeer = savedDownloadLimit; }
+    ~DownloadSetup() { SetMockTime(0); SetMockTimeMicros(0); nMaxBlocksInTransitPerPeer = savedDownloadLimit; }
 
-    void Headers(CNode& peer)
+    void PrepareTransport(CNode& peer)
     {
         peer.nVersion = PROTOCOL_VERSION;
         // Retain outgoing frames in memory for the simulated transport. An
@@ -99,6 +99,11 @@ struct DownloadSetup : TestingSetup {
             peer.vSendMsg.push_back(CSerializeData(1, 0));
             peer.nSendSize = 1;
         }
+    }
+
+    void Headers(CNode& peer)
+    {
+        PrepareTransport(peer);
         CDataStream payload(SER_NETWORK, PROTOCOL_VERSION);
         WriteCompactSize(payload, blocks.size() - 1);
         for (size_t i = 1; i < blocks.size(); ++i) {
@@ -398,6 +403,58 @@ BOOST_DATA_TEST_CASE(download_limits_bound_requests_and_recover,
     for (int height : takeover) Deliver(healthy, height);
     BOOST_CHECK_EQUAL(chainActive.Height(), std::min(2 * sample, 129));
     BOOST_CHECK_EQUAL(Stats(healthy).nGlobalBlocksInFlight, 0);
+}
+
+BOOST_DATA_TEST_CASE(inventory_requests_mix_with_validated_downloads,
+                     boost::unit_test::data::make(std::vector<int>{16, 32, 64, 128}))
+{
+    nMaxBlocksInTransitPerPeer = sample;
+    CNode announced(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "inv", true);
+    PrepareTransport(announced);
+    // Exercise the near-tip inventory fast path without inventing or mining
+    // blocks. The hashes are announced before their headers are available.
+    SetMockTime(blocks.front().GetBlockTime() + 1);
+    std::vector<CInv> inventory;
+    for (size_t height = 1; height < blocks.size(); ++height)
+        inventory.emplace_back(MSG_BLOCK, blocks[height].GetHash());
+    for (unsigned repeat = 0; repeat < 2; ++repeat) {
+        CDataStream payload(SER_NETWORK, PROTOCOL_VERSION);
+        payload << inventory;
+        BOOST_REQUIRE(ProcessMessage(&announced, "inv", payload, GetTime()));
+        BOOST_CHECK_EQUAL(Stats(announced).nBlocksInFlight, sample);
+        BOOST_CHECK_EQUAL(Stats(announced).nValidatedBlocksInFlight, 0);
+        BOOST_CHECK_EQUAL(Stats(announced).nGlobalBlocksInFlight, sample);
+        BOOST_CHECK_EQUAL(Stats(announced).nGlobalValidatedBlocksInFlight, 0);
+    }
+    SetMockTime(0);
+    Deliver(announced, 1);
+    Deliver(announced, 1); // Duplicate receipt of an unvalidated request.
+    BOOST_REQUIRE_EQUAL(chainActive.Height(), 1);
+    BOOST_CHECK_EQUAL(Stats(announced).nBlocksInFlight, sample - 1);
+
+    CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "headers", true);
+    Headers(healthy);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    const auto laterHeights = Stats(healthy).vHeightInFlight;
+    BOOST_REQUIRE_EQUAL(laterHeights.size(), std::min(sample, 129 - sample));
+    BOOST_CHECK_EQUAL(Stats(healthy).nGlobalBlocksInFlight, sample - 1 + laterHeights.size());
+    BOOST_CHECK_EQUAL(Stats(healthy).nGlobalValidatedBlocksInFlight, laterHeights.size());
+
+    GetNodeSignals().DisconnectNode(announced.GetId());
+    GetNodeSignals().DisconnectNode(announced.GetId());
+    GetNodeSignals().FinalizeNode(announced.GetId());
+    BOOST_CHECK_EQUAL(Stats(healthy).nGlobalBlocksInFlight, laterHeights.size());
+    BOOST_CHECK_EQUAL(Stats(healthy).nGlobalValidatedBlocksInFlight, laterHeights.size());
+    for (int height : laterHeights) Deliver(healthy, height);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    const auto takeover = Stats(healthy).vHeightInFlight;
+    BOOST_REQUIRE(!takeover.empty());
+    BOOST_CHECK_LE(takeover.size(), sample);
+    BOOST_CHECK_EQUAL(takeover.front(), 2);
+    for (int height : takeover) Deliver(healthy, height);
+    BOOST_CHECK_EQUAL(chainActive.Height(), std::min(2 * sample + 1, 129));
+    BOOST_CHECK_EQUAL(Stats(healthy).nGlobalBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(Stats(healthy).nGlobalValidatedBlocksInFlight, 0);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
