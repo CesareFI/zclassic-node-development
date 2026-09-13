@@ -982,6 +982,7 @@ void ThreadSocketHandler()
         // Disconnect nodes
         //
         std::vector<NodeId> disconnected;
+        unsigned int nodeCount;
         {
             LOCK(cs_vNodes);
             // Disconnect unused nodes
@@ -1007,6 +1008,7 @@ void ThreadSocketHandler()
                     disconnected.push_back(pnode->GetId());
                 }
             }
+            nodeCount = vNodes.size();
         }
         // Validation callbacks acquire cs_main. Never hold cs_vNodes here.
         // Release requests now, even while references postpone object deletion.
@@ -1042,8 +1044,8 @@ void ThreadSocketHandler()
                 }
             }
         }
-        if(vNodes.size() != nPrevNodeCount) {
-            nPrevNodeCount = vNodes.size();
+        if (nodeCount != nPrevNodeCount) {
+            nPrevNodeCount = nodeCount;
             uiInterface.NotifyNumConnectionsChanged(nPrevNodeCount);
         }
 
