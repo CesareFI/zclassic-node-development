@@ -6,6 +6,7 @@ TEST_BINARY=test/test_bitcoin$(EXEEXT)
 
 EXTRA_DIST += \
 	test/data/zclassic-download-130.dat \
+	test/data/zclassic-header-extension-320.dat \
 	test/bctest.py \
 	test/bitcoin-util-test.py \
 	test/data/bitcoin-util-test.json \

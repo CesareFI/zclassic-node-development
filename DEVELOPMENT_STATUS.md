@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-13 23:09 UTC.
+Updated: 2026-09-13 23:55 UTC.
 
 ## Current mission
 
@@ -16,7 +16,8 @@ reformulation. Current user instruction was read from
 ## Repository and production
 
 - Working directory /opt/zclassic-money, branch fix/og-node-sync-20260913.
-- Latest committed milestone a7f7bd07d: peer download role diagnostics.
+- Latest committed milestone 286036078: header-discovery completion.
+- Prior a7f7bd07d: peer download role diagnostics.
 - Prior 60548418a: immediate owned-notfound response recovery.
 - Prior milestones: 8edfb0afd address counts; 549a2f43a sparse selection;
   55cf564aa preferred outbound header discovery;dc4beef1d parser recovery.
@@ -96,3 +97,51 @@ Next: investigate unanswered initial header requests with no outstanding blocks.
 They currently have no response-specific timeout. Use ordinary state-machine
 fixtures and mock time; preserve validation and avoid peer-name discrimination.
 Do not resume the stashed sequence or repeat completed security campaigns.
+
+
+## Validated header-response timeout milestone
+
+The staged index contains this milestone, separate from the validated inbound
+fallback changes in the unstaged working tree. Commit timer first, then fallback.
+
+A 15-minute per-response deadline expires unanswered header exchanges even with
+no block requests. It renews only when validated chain work advances in a full
+160-header batch, supporting a shorter fork with more work. Empty/short completion
+and disconnect clear it. Import/reindex cancels an active exchange for a fresh
+retry after replies stop being ignored. No consensus/protocol changes.
+
+- Initial silent-header baseline fails four assertions; repeated valid full batch
+  baseline fails three. Advancing-batch control passes before/after.
+- Final chain-work-based version: 12 ordinary cases, 8,063 assertions all pass
+  normally (15.944 seconds) and ASan/UBSan/leak (32.477 seconds).
+- Six Python tests pass, including deadline display; that test failed before.
+- ASan timer source exactly matched the staged snapshot before building; its
+  source tree has since been advanced to the next fallback task. Timer executable
+  zclassicd-mission remained SHA256 e3c476353f08aac42d0c827ea6495cf0a1ec5c862bbecd4b298eb53315ac453a.
+- Final normal short-response wire case passes. Early normal timer silent case
+  passes after 900.107s; FINAL instrumented timer silent case passes after
+  900.099s. Both validate 129, counters zero, exit 0, no peer/sanitizer errors.
+- All timer build/unit/wire jobs completed. Do not duplicate completed runs.
+- Evidence: mission/header-timeout-*. Header extension fixture is staged with
+  checksum/provenance in src/test/data/README.md.
+
+## Validated next inbound fallback task
+
+Unstaged changes: HasPreferredDownloadSource consults completed discovery and
+validated available work instead of excluding inbounds merely because an outbound
+remains connected. Pending preferred discovery, assigned work, and validated work
+beyond the active tip retain priority. Known inventory is resolved before deciding.
+
+- Ordinary baseline: outbound answers empty; inbound gets no getheaders. Exit 201.
+- Three new cases plus 12 timer/recovery controls pass 9,955 assertions normally
+  (19.640s) and under ASan/UBSan/leak (39.049s).
+- Real baseline fails B discovery; fixed normal and instrumented daemons validate
+  129, counters zero, exit 0, no peer or sanitizer errors. Outbound A stays connected.
+- Initial wire attempts used maxconnections=8, below 16 reserved outbound slots;
+  B was dropped before handshake. Those failures remain preserved. The isolated
+  inbound fixture now uses 32. Corrected evidence: mission/inbound-fallback-wire-
+  {before,after,asan}-capacity. Unit/build logs: mission/inbound-fallback-*.
+- Normal and ASan next candidates are zclassicd-fallback, separately named from
+  the completed timer binaries. No production executable/service/data changed.
+- All test/build processes completed. Commit after timer, then measure scheduling
+  overhead using ordinary local state fixtures. Do not resume the paused stash.

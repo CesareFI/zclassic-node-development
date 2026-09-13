@@ -105,6 +105,8 @@ UniValue getpeerinfo(const UniValue& params, bool fHelp)
             "    \"synced_headers\": n,       (numeric) The last header we have in common with this peer\n"
             "    \"preferred_download\": true, (boolean) Whether this is a preferred block source\n"
             "    \"header_sync_started\": true, (boolean) Whether this peer holds a header-sync role\n"
+            "    \"header_sync_deadline\": n, (numeric) Unix time of the active header response deadline, if any\n"
+            "    \"header_sync_timeout_remaining\": n, (numeric) Seconds remaining for header progress, if any\n"
             "    \"block_download_stopped\": false, (boolean) Whether block requests have been stopped for this connection\n"
             "    \"blocks_in_flight\": n,      (numeric) Outstanding block requests to this peer\n"
             "    \"validated_blocks_in_flight\": n, (numeric) Requests with validated headers\n"
@@ -173,6 +175,10 @@ UniValue getpeerinfo(const UniValue& params, bool fHelp)
             const int64_t now = GetTimeMicros();
             obj.push_back(Pair("preferred_download", statestats.fPreferredDownload));
             obj.push_back(Pair("header_sync_started", statestats.fHeaderSyncStarted));
+            if (statestats.nHeaderSyncDeadline) {
+                obj.push_back(Pair("header_sync_deadline", statestats.nHeaderSyncDeadline / 1000000));
+                obj.push_back(Pair("header_sync_timeout_remaining", std::max<int64_t>(0, statestats.nHeaderSyncDeadline - now) / 1000000.0));
+            }
             obj.push_back(Pair("block_download_stopped", statestats.fBlockDownloadStopped));
             obj.push_back(Pair("blocks_in_flight", statestats.nBlocksInFlight));
             obj.push_back(Pair("validated_blocks_in_flight", statestats.nValidatedBlocksInFlight));

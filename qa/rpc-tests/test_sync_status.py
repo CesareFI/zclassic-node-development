@@ -55,6 +55,16 @@ class SyncStatusTests(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             STATUS.render(state)
 
+    def test_active_header_deadline_is_preserved_and_displayed(self):
+        state = self.snapshot([{"id": 7, "inbound": False, "blocks_in_flight": 0,
+                                "header_sync_deadline": 1800000900,
+                                "header_sync_timeout_remaining": 899.5}])
+        self.assertEqual(state["peers"][0].get("header_sync_deadline"), 1800000900)
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            STATUS.render(state)
+        self.assertIn("header_remaining=899.5s", output.getvalue())
+
     def test_global_counts_match_the_peer_snapshot_when_requests_change(self):
         state = self.snapshot([{"id": 7, "inbound": False, "blocks_in_flight": 128,
                                 "global_blocks_in_flight": 128,

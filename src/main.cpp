@@ -35,6 +35,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <limits>
 #include <sstream>
 
 #include <boost/algorithm/string/replace.hpp>
@@ -309,6 +310,10 @@ struct CNodeState {
     bool fSyncStarted;
     //! Initial header discovery finished; do not repeat it on this connection.
     bool fSyncCompleted;
+    //! Deadline for progress on the active header exchange, or zero.
+    int64_t nHeaderSyncDeadline;
+    //! Greatest validated chain work returned in a full batch during this exchange.
+    arith_uint256 nHeaderSyncWork;
     //! Since when we're stalling block download progress (in microseconds), or 0.
     int64_t nStallingSince;
     list<QueuedBlock> vBlocksInFlight;
@@ -330,6 +335,8 @@ struct CNodeState {
         pindexLastCommonBlock = NULL;
         fSyncStarted = false;
         fSyncCompleted = false;
+        nHeaderSyncDeadline = 0;
+        nHeaderSyncWork = arith_uint256();
         nStallingSince = 0;
         nBlocksInFlight = 0;
         nBlocksInFlightValidHeaders = 0;
@@ -388,15 +395,40 @@ bool CanStartHeaderSync(const CNodeState& state, bool fFetch)
         });
 }
 
+void StopHeaderSync(CNodeState& state)
+{
+    AssertLockHeld(cs_main);
+    if (state.fSyncStarted) {
+        assert(nSyncStarted > 0);
+        --nSyncStarted;
+    }
+    state.fSyncStarted = false;
+    state.nHeaderSyncDeadline = 0;
+}
+
 void CompleteHeaderSync(CNodeState& state)
 {
     AssertLockHeld(cs_main);
     if (!state.fSyncStarted)
         return;
-    assert(nSyncStarted > 0);
-    --nSyncStarted;
-    state.fSyncStarted = false;
+    StopHeaderSync(state);
     state.fSyncCompleted = true;
+}
+
+int64_t GetHeaderSyncDeadline()
+{
+    // Allow slow connections ample time for one bounded 160-header response.
+    const int64_t timeout = 15 * 60 * 1000000LL;
+    return std::min(GetTimeMicros(), std::numeric_limits<int64_t>::max() - timeout) + timeout;
+}
+
+void UpdateHeaderSyncProgress(CNodeState& state, const arith_uint256& work)
+{
+    AssertLockHeld(cs_main);
+    if (!state.fSyncStarted || work <= state.nHeaderSyncWork)
+        return;
+    state.nHeaderSyncWork = work;
+    state.nHeaderSyncDeadline = GetHeaderSyncDeadline();
 }
 
 // Returns time at which to timeout block request (nTime in microseconds)
@@ -476,8 +508,7 @@ void StopBlockDownload(CNodeState& state)
     assert(state.nBlocksInFlightValidHeaders == 0);
     nPreferredDownload -= state.fPreferredDownload;
     state.fPreferredDownload = false;
-    nSyncStarted -= state.fSyncStarted;
-    state.fSyncStarted = false;
+    StopHeaderSync(state);
     state.nStallingSince = 0;
 }
 
@@ -703,6 +734,7 @@ bool GetNodeStateStats(NodeId nodeid, CNodeStateStats &stats) {
     stats.nGlobalValidatedBlocksInFlight = nQueuedValidatedHeaders;
     stats.fPreferredDownload = state->fPreferredDownload;
     stats.fHeaderSyncStarted = state->fSyncStarted;
+    stats.nHeaderSyncDeadline = state->nHeaderSyncDeadline;
     stats.fBlockDownloadStopped = state->fDownloadStopped;
     stats.nOldestRequest = state->vBlocksInFlight.empty() ? 0 : state->vBlocksInFlight.front().nTime;
     stats.hashOldestRequest = state->vBlocksInFlight.empty() ? uint256() : state->vBlocksInFlight.front().hash;
@@ -6896,6 +6928,7 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
             UpdateBlockAvailability(pfrom->GetId(), pindexLast->GetBlockHash());
 
         if (nCount == MAX_HEADERS_RESULTS && pindexLast) {
+            UpdateHeaderSyncProgress(*State(pfrom->GetId()), pindexLast->nChainWork);
             // Headers message had its maximum size; the peer may have more headers.
             // TODO: optimize: if pindexLast is an ancestor of chainActive.Tip or pindexBestHeader, continue
             // from there instead.
@@ -7402,6 +7435,14 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         BOOST_FOREACH(const CBlockReject& reject, state.rejects)
             pto->PushMessage("reject", (string)"block", static_cast<unsigned char>(reject.chRejectCode), reject.strRejectReason, reject.hashBlock);
         state.rejects.clear();
+        if (fImporting || fReindex) {
+            // Header replies are ignored during local import. Retry the active
+            // exchange after import rather than timing out an ignored reply.
+            StopHeaderSync(state);
+        } else if (state.nHeaderSyncDeadline && GetTimeMicros() > state.nHeaderSyncDeadline) {
+            LogPrint("net", "Timeout waiting for header progress from peer=%d, disconnecting\n", pto->id);
+            pto->fDisconnect = true;
+        }
         if (pto->fDisconnect || state.fDownloadStopped) {
             StopBlockDownload(state);
             return true;
@@ -7416,6 +7457,8 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             // to join an inbound sync that started before it connected.
             if (CanStartHeaderSync(state, fFetch)) {
                 state.fSyncStarted = true;
+                state.nHeaderSyncWork = arith_uint256();
+                state.nHeaderSyncDeadline = GetHeaderSyncDeadline();
                 nSyncStarted++;
                 CBlockIndex *pindexStart = pindexBestHeader->pprev ? pindexBestHeader->pprev : pindexBestHeader;
                 LogPrint("net", "initial getheaders (%d) to peer=%d (startheight:%d)\n", pindexStart->nHeight, pto->id, pto->nStartingHeight);

@@ -132,6 +132,42 @@ struct DownloadSetup : TestingSetup {
         BOOST_REQUIRE(ProcessMessage(&peer, "verack", verack, GetTime()));
     }
 
+    std::vector<CBlockHeader> ExtendedHeaders()
+    {
+        std::vector<CBlockHeader> headers;
+        for (const CBlock& block : blocks) headers.push_back(block.GetBlockHeader());
+        const auto path = boost::filesystem::path(BOOST_PP_STRINGIZE(TEST_DATA_DIR)) /
+                          "zclassic-header-extension-320.dat";
+        std::ifstream file(path.string(), std::ios::binary);
+        BOOST_REQUIRE(file.good());
+        std::vector<char> bytes((std::istreambuf_iterator<char>(file)), {});
+        BOOST_REQUIRE_EQUAL(bytes.size(), 284017);
+        CDataStream stream(bytes, SER_DISK, PROTOCOL_VERSION);
+        while (!stream.empty()) {
+            CBlockHeader header;
+            stream >> header;
+            BOOST_REQUIRE(header.hashPrevBlock == headers.back().GetHash());
+            headers.push_back(header);
+        }
+        BOOST_REQUIRE_EQUAL(headers.size(), 321);
+        return headers;
+    }
+
+    void HeaderBatch(CNode& peer, const std::vector<CBlockHeader>& headers,
+                     size_t first, size_t count)
+    {
+        BOOST_REQUIRE_LE(count, MAX_HEADERS_RESULTS);
+        BOOST_REQUIRE_LE(first, headers.size());
+        BOOST_REQUIRE_LE(count, headers.size() - first);
+        CDataStream payload(SER_NETWORK, PROTOCOL_VERSION);
+        WriteCompactSize(payload, count);
+        for (size_t index = first; index < first + count; ++index) {
+            payload << headers[index];
+            WriteCompactSize(payload, 0);
+        }
+        BOOST_REQUIRE(ProcessMessage(&peer, "headers", payload, GetTime()));
+    }
+
     unsigned Sent(CNode& peer, const std::string& command)
     {
         unsigned count = 0;
@@ -223,6 +259,140 @@ struct DownloadSetup : TestingSetup {
 }
 
 BOOST_FIXTURE_TEST_SUITE(block_download_tests, DownloadSetup)
+
+BOOST_AUTO_TEST_CASE(unanswered_headers_release_role_without_waiting_for_block_requests)
+{
+    CNode silent(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "A", false);
+    CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "B", false);
+    Handshake(silent);
+    Handshake(healthy);
+    BOOST_REQUIRE(SendMessages(&silent, false));
+    BOOST_REQUIRE_EQUAL(Sent(silent, "getheaders"), 1);
+    BOOST_REQUIRE_EQUAL(Stats(silent).nBlocksInFlight, 0);
+    const int64_t deadline = Stats(silent).nHeaderSyncDeadline;
+    BOOST_REQUIRE_EQUAL(deadline - start, 15 * 60 * 1000000LL);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_REQUIRE_EQUAL(Sent(healthy, "getheaders"), 0);
+
+    SetMockTimeMicros(deadline);
+    BOOST_REQUIRE(SendMessages(&silent, false));
+    BOOST_CHECK(!silent.fDisconnect);
+    SetMockTimeMicros(deadline + 1);
+    BOOST_REQUIRE(SendMessages(&silent, false));
+    BOOST_CHECK(silent.fDisconnect);
+    BOOST_CHECK(Stats(silent).fBlockDownloadStopped);
+    BOOST_CHECK_EQUAL(Stats(silent).nHeaderSyncDeadline, 0);
+    BOOST_CHECK_EQUAL(Stats(silent).nMisbehavior, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
+
+    // Visit repeated inbound reconnects before B. Existing outbound eligibility
+    // must prevent these connections from reclaiming the free header role.
+    for (unsigned round = 0; round < 8; ++round) {
+        CNode inbound(INVALID_SOCKET, silent.addr, "reconnect", true);
+        Handshake(inbound);
+        BOOST_REQUIRE(SendMessages(&inbound, false));
+        BOOST_CHECK_EQUAL(Sent(inbound, "getheaders"), 0);
+    }
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_REQUIRE_EQUAL(Sent(healthy, "getheaders"), 1);
+    Headers(healthy);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    for (size_t height = 1; height <= 128; ++height) Deliver(healthy, height);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    Deliver(healthy, 129);
+    BOOST_CHECK_EQUAL(chainActive.Height(), 129);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
+    GetNodeSignals().DisconnectNode(silent.GetId());
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 0);
+}
+
+BOOST_AUTO_TEST_CASE(repeated_full_header_batch_does_not_extend_response_deadline)
+{
+    const auto headers = ExtendedHeaders();
+    CNode first(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "A", false);
+    CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "B", false);
+    Handshake(first);
+    Handshake(healthy);
+    BOOST_REQUIRE(SendMessages(&first, false));
+    SetMockTimeMicros(start + 500 * 1000000LL);
+    HeaderBatch(first, headers, 1, MAX_HEADERS_RESULTS);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 1);
+    const int64_t deadline = Stats(first).nHeaderSyncDeadline;
+    BOOST_CHECK_EQUAL(deadline, start + 1400 * 1000000LL);
+    SetMockTimeMicros(start + 1300 * 1000000LL);
+    HeaderBatch(first, headers, 1, MAX_HEADERS_RESULTS);
+    BOOST_CHECK_EQUAL(Stats(first).nHeaderSyncDeadline, deadline);
+    // Both replies are valid. Repeating the same range is not progress and
+    // must not postpone the deadline for the requested continuation.
+    BOOST_CHECK_EQUAL(Stats(first).nMisbehavior, 0);
+    BOOST_CHECK_EQUAL(Stats(first).nBlocksInFlight, 0);
+    SetMockTimeMicros(start + 1401 * 1000000LL);
+    BOOST_REQUIRE(SendMessages(&first, false));
+    BOOST_CHECK(first.fDisconnect);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 0);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_REQUIRE_EQUAL(Sent(healthy, "getheaders"), 1);
+}
+
+BOOST_AUTO_TEST_CASE(advancing_header_batches_keep_slow_discovery_alive)
+{
+    const auto headers = ExtendedHeaders();
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "A", false);
+    Handshake(peer);
+    BOOST_REQUIRE(SendMessages(&peer, false));
+    SetMockTimeMicros(start + 500 * 1000000LL);
+    HeaderBatch(peer, headers, 1, MAX_HEADERS_RESULTS);
+    SetMockTimeMicros(start + 1000 * 1000000LL);
+    BOOST_REQUIRE(SendMessages(&peer, false));
+    BOOST_REQUIRE(!peer.fDisconnect);
+    BOOST_REQUIRE_EQUAL(Stats(peer).nBlocksInFlight, 128);
+    for (size_t height = 1; height <= 128; ++height) Deliver(peer, height);
+    SetMockTimeMicros(start + 1300 * 1000000LL);
+    HeaderBatch(peer, headers, 161, MAX_HEADERS_RESULTS);
+    BOOST_CHECK_EQUAL(Stats(peer).nHeaderSyncDeadline, start + 2200 * 1000000LL);
+    SetMockTimeMicros(start + 1401 * 1000000LL);
+    BOOST_REQUIRE(SendMessages(&peer, false));
+    BOOST_CHECK(!peer.fDisconnect);
+    BOOST_CHECK_EQUAL(Stats(peer).nSyncHeight, 320);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 1);
+    BOOST_CHECK_EQUAL(Sent(peer, "getheaders"), 3);
+    Headers(peer, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 0);
+    BOOST_CHECK(!Stats(peer).fBlockDownloadStopped);
+    BOOST_CHECK_EQUAL(Stats(peer).nHeaderSyncDeadline, 0);
+}
+
+BOOST_AUTO_TEST_CASE(local_import_retries_headers_without_timing_out_ignored_replies)
+{
+    for (bool* importing : {&fImporting, &fReindex}) {
+        CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "A", false);
+        Handshake(peer);
+        BOOST_REQUIRE(SendMessages(&peer, false));
+        const int64_t deadline = Stats(peer).nHeaderSyncDeadline;
+        {
+            struct ImportGuard {
+                bool& flag;
+                const bool previous;
+                explicit ImportGuard(bool& value) : flag(value), previous(value) { flag = true; }
+                ~ImportGuard() { flag = previous; }
+            } guard(*importing);
+            SetMockTimeMicros(deadline + 1);
+            Headers(peer, 0); // Normal reply is ignored during local import.
+            BOOST_REQUIRE(SendMessages(&peer, false));
+            BOOST_CHECK(!peer.fDisconnect);
+            BOOST_CHECK_EQUAL(Stats(peer).nHeaderSyncDeadline, 0);
+            BOOST_CHECK_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 0);
+        }
+        BOOST_REQUIRE(SendMessages(&peer, false));
+        BOOST_CHECK(!peer.fDisconnect);
+        BOOST_CHECK_EQUAL(Sent(peer, "getheaders"), 2);
+        BOOST_CHECK_GT(Stats(peer).nHeaderSyncDeadline, GetTimeMicros());
+        BOOST_CHECK_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 1);
+        Headers(peer, 0);
+        BOOST_CHECK_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 0);
+    }
+}
 
 BOOST_AUTO_TEST_CASE(empty_header_response_allows_another_preferred_source)
 {
@@ -337,6 +507,7 @@ BOOST_AUTO_TEST_CASE(download_role_rpc_diagnostics_track_reassignment)
     auto initial = PeerInfo(inbound);
     BOOST_REQUIRE(find_value(initial, "header_sync_started").isBool());
     BOOST_CHECK(!find_value(initial, "header_sync_started").get_bool());
+    BOOST_CHECK(find_value(initial, "header_sync_deadline").isNull());
     BOOST_CHECK(!find_value(initial, "block_download_stopped").get_bool());
     Handshake(inbound);
     Headers(inbound);
@@ -350,6 +521,9 @@ BOOST_AUTO_TEST_CASE(download_role_rpc_diagnostics_track_reassignment)
     auto discovering = PeerInfo(preferred);
     BOOST_CHECK(find_value(discovering, "preferred_download").get_bool());
     BOOST_CHECK(find_value(discovering, "header_sync_started").get_bool());
+    BOOST_CHECK_EQUAL(find_value(discovering, "header_sync_deadline").get_int64(),
+                      Stats(preferred).nHeaderSyncDeadline / 1000000);
+    BOOST_CHECK_EQUAL(find_value(discovering, "header_sync_timeout_remaining").get_real(), 900.0);
     BOOST_CHECK_EQUAL(find_value(discovering, "synced_headers").get_int(), -1);
     Headers(preferred);
     BOOST_REQUIRE(SendMessages(&preferred, false));
@@ -366,6 +540,8 @@ BOOST_AUTO_TEST_CASE(download_role_rpc_diagnostics_track_reassignment)
     BOOST_REQUIRE(SendMessages(&preferred, false));
     auto takeover = PeerInfo(preferred);
     BOOST_CHECK(!find_value(takeover, "header_sync_started").get_bool());
+    BOOST_CHECK(find_value(takeover, "header_sync_deadline").isNull());
+    BOOST_CHECK(find_value(takeover, "header_sync_timeout_remaining").isNull());
     BOOST_CHECK(!find_value(takeover, "block_download_stopped").get_bool());
     BOOST_CHECK_EQUAL(find_value(takeover, "blocks_in_flight").get_int(), 128);
     for (size_t height = 1; height <= 128; ++height) Deliver(preferred, height);

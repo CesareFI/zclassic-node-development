@@ -292,6 +292,7 @@ struct CNodeStateStats {
     bool fPreferredDownload;
     bool fHeaderSyncStarted;
     bool fBlockDownloadStopped;
+    int64_t nHeaderSyncDeadline;
     int64_t nOldestRequest;
     uint256 hashOldestRequest;
     int64_t nDownloadDeadline;

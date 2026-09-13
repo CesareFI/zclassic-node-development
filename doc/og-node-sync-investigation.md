@@ -847,3 +847,35 @@ test continues to isolate notfound recovery. Evidence: mission/header-completion
 
 An unanswered initial header request is a separate remaining availability gap:
 there is no response-specific timeout when that peer holds no block requests.
+
+## Bounded header-response waits
+
+Ordinary regressions confirmed that an unanswered initial getheaders, or repeated
+valid full batches with no progress, could hold the preferred header role forever
+without a block request to trigger the existing block timeout. The baselines fail
+four and three assertions respectively; a slow advancing-batch control passes.
+
+Active exchanges now have a 15-minute response deadline. A full batch renews it
+only when validated chain work increases, so a shorter fork with more work counts
+as progress. Expiration uses the existing immediate, idempotent download cleanup
+and disconnects without assigning misbehavior or a ban. Completion clears the
+deadline. Import/reindex cancels an active exchange for a fresh query afterward,
+since replies are deliberately ignored during local import. Shared header-role
+cleanup keeps the counter and deadline together under cs_main.
+
+getpeerinfo exposes header_sync_deadline and header_sync_timeout_remaining while
+an exchange is active, and sync-status.py preserves/displays them. The extended
+historical fixture covers two full 160-header batches through height 320, with
+normal header validation. Its provenance and checksum are in the data README.
+No consensus rules, protocol batch limits, or block request limits changed.
+
+The final code passes 12 ordinary C++ cases / 8,063 assertions normally (15.944s)
+and under ASan/UBSan/leak checking (32.477s), plus six Python fixture tests.
+The final normal candidate passes the short-response wire regression. An early
+normal timer candidate disconnects A after 900.107s in the silent-response test;
+the final instrumented candidate does so after 900.099s. Both peers continue
+answering ordinary pings while A holds a header role and zero block requests.
+B then validates all 129 fixture blocks; request/header-role counters clear and
+both daemons stop with exit zero and no peer/sanitizer errors. Run
+qa/rpc-tests/og-header-discovery.py --response silent for the real-time check.
+Evidence: mission/header-timeout-*. Production remains unchanged.
