@@ -230,6 +230,26 @@ those values unknown instead of assuming zero on older builds. The new
 preferred-download and header-sync peer counts, and the configured request
 limit even with zero peers.
 
+`getpeerinfo.header_sync_started` identifies peers holding a header-sync role;
+it does not mean a header response is currently pending. The
+`block_download_stopped` flag identifies a connection whose download lifecycle
+has ended, including the interval before its last reference is released.
+The status report includes these fields and known header/block heights. Peers
+with unvalidated requests remain listed as downloaders even when `inflight`
+contains no known block heights. Global request counters prefer the same
+`getpeerinfo` snapshot as the displayed peer rows, with a `getblockchaininfo`
+fallback when no peer exposes those counters.
+
+The ordinary regression `download_role_rpc_diagnostics_track_reassignment`
+exercises the actual RPC while a stalled inbound holds 128 requests, a quiet
+preferred outbound discovers headers, disconnect cleanup runs twice, and the
+outbound takes over and validates through fixture height 129. Script coverage
+uses local RPC-shaped values: `python3 qa/rpc-tests/test_sync_status.py`.
+The C++ regression passes all 687 assertions normally (2.074s) and under
+ASan/UBSan/leak checking (3.943s); all five Python tests pass. The normal
+candidate daemon builds separately and both production executable hashes
+remain unchanged. Evidence: `mission/download-diagnostics-*.log`.
+
 ## Bounded scheduling and further verification
 
 `-maxblocksinflight` accepts integers from 1 through 128; its default remains

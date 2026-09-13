@@ -290,6 +290,8 @@ struct CNodeStateStats {
     uint64_t nGlobalBlocksInFlight;
     int nGlobalValidatedBlocksInFlight;
     bool fPreferredDownload;
+    bool fHeaderSyncStarted;
+    bool fBlockDownloadStopped;
     int64_t nOldestRequest;
     uint256 hashOldestRequest;
     int64_t nDownloadDeadline;

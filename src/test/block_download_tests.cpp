@@ -6,6 +6,7 @@
 #include "crypto/common.h"
 #include "main.h"
 #include "net.h"
+#include "rpc/server.h"
 #include "test/test_bitcoin.h"
 #include "utiltime.h"
 
@@ -19,6 +20,7 @@
 #include <limits>
 
 extern bool ProcessMessage(CNode*, std::string, CDataStream&, int64_t);
+extern UniValue CallRPC(std::string);
 
 namespace {
 std::vector<char> MalformedFrame(std::mt19937& random, unsigned step)
@@ -144,6 +146,17 @@ struct DownloadSetup : TestingSetup {
         return stats;
     }
 
+    UniValue PeerInfo(CNode& peer)
+    {
+        const auto info = CallRPC("getpeerinfo");
+        for (size_t index = 0; index < info.size(); ++index) {
+            if (find_value(info[index], "id").get_int() == peer.GetId())
+                return info[index];
+        }
+        BOOST_FAIL("peer missing from diagnostic RPC");
+        return UniValue();
+    }
+
     void Deliver(CNode& peer, size_t height)
     {
         CDataStream payload(SER_NETWORK, PROTOCOL_VERSION);
@@ -204,6 +217,65 @@ struct DownloadSetup : TestingSetup {
 }
 
 BOOST_FIXTURE_TEST_SUITE(block_download_tests, DownloadSetup)
+
+BOOST_AUTO_TEST_CASE(download_role_rpc_diagnostics_track_reassignment)
+{
+    CNode inbound(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "A", true);
+    CNode preferred(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "B", false);
+    struct ListedPeers {
+        ListedPeers(CNode& a, CNode& b) {
+            LOCK(cs_vNodes);
+            BOOST_REQUIRE(vNodes.empty());
+            vNodes = {&a, &b};
+        }
+        ~ListedPeers() {
+            LOCK(cs_vNodes);
+            vNodes.clear();
+        }
+    } listed(inbound, preferred);
+
+    auto initial = PeerInfo(inbound);
+    BOOST_REQUIRE(find_value(initial, "header_sync_started").isBool());
+    BOOST_CHECK(!find_value(initial, "header_sync_started").get_bool());
+    BOOST_CHECK(!find_value(initial, "block_download_stopped").get_bool());
+    Handshake(inbound);
+    Headers(inbound);
+    BOOST_REQUIRE(SendMessages(&inbound, false));
+    auto assigned = PeerInfo(inbound);
+    BOOST_CHECK(find_value(assigned, "header_sync_started").get_bool());
+    BOOST_CHECK_EQUAL(find_value(assigned, "blocks_in_flight").get_int(), 128);
+
+    Handshake(preferred);
+    BOOST_REQUIRE(SendMessages(&preferred, false));
+    auto discovering = PeerInfo(preferred);
+    BOOST_CHECK(find_value(discovering, "preferred_download").get_bool());
+    BOOST_CHECK(find_value(discovering, "header_sync_started").get_bool());
+    BOOST_CHECK_EQUAL(find_value(discovering, "synced_headers").get_int(), -1);
+    Headers(preferred);
+    BOOST_REQUIRE(SendMessages(&preferred, false));
+    Deliver(preferred, 129);
+
+    GetNodeSignals().DisconnectNode(inbound.GetId());
+    GetNodeSignals().DisconnectNode(inbound.GetId());
+    auto stopped = PeerInfo(inbound);
+    BOOST_CHECK(!find_value(stopped, "header_sync_started").get_bool());
+    BOOST_CHECK(find_value(stopped, "block_download_stopped").get_bool());
+    BOOST_CHECK_EQUAL(find_value(stopped, "blocks_in_flight").get_int(), 0);
+    BOOST_CHECK(find_value(stopped, "oldest_block_request").isNull());
+
+    BOOST_REQUIRE(SendMessages(&preferred, false));
+    auto takeover = PeerInfo(preferred);
+    BOOST_CHECK(find_value(takeover, "header_sync_started").get_bool());
+    BOOST_CHECK(!find_value(takeover, "block_download_stopped").get_bool());
+    BOOST_CHECK_EQUAL(find_value(takeover, "blocks_in_flight").get_int(), 128);
+    for (size_t height = 1; height <= 128; ++height) Deliver(preferred, height);
+    BOOST_CHECK_EQUAL(chainActive.Height(), 129);
+    GetNodeSignals().DisconnectNode(preferred.GetId());
+    auto finished = PeerInfo(preferred);
+    BOOST_CHECK(!find_value(finished, "header_sync_started").get_bool());
+    BOOST_CHECK(find_value(finished, "block_download_stopped").get_bool());
+    BOOST_CHECK_EQUAL(find_value(finished, "global_blocks_in_flight").get_int(), 0);
+}
 
 BOOST_AUTO_TEST_CASE(queued_ping_matches_wire_nonce_and_measures_elapsed_time)
 {

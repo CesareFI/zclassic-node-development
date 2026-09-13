@@ -686,6 +686,8 @@ bool GetNodeStateStats(NodeId nodeid, CNodeStateStats &stats) {
     stats.nGlobalBlocksInFlight = mapBlocksInFlight.size();
     stats.nGlobalValidatedBlocksInFlight = nQueuedValidatedHeaders;
     stats.fPreferredDownload = state->fPreferredDownload;
+    stats.fHeaderSyncStarted = state->fSyncStarted;
+    stats.fBlockDownloadStopped = state->fDownloadStopped;
     stats.nOldestRequest = state->vBlocksInFlight.empty() ? 0 : state->vBlocksInFlight.front().nTime;
     stats.hashOldestRequest = state->vBlocksInFlight.empty() ? uint256() : state->vBlocksInFlight.front().hash;
     stats.nDownloadDeadline = state->vBlocksInFlight.empty() ? 0 : state->vBlocksInFlight.front().nTimeDisconnect;
