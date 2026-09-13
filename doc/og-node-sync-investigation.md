@@ -38,6 +38,10 @@ to shorten an excessive deadline. Header traffic does not reset the block
 deadline; it merely makes a connection appear active while this inflated
 deadline has not expired.
 
+This source tree uses per-request `nTime` and `nTimeDisconnect`; it has no
+`nDownloadingSince` field. `nStallingSince` belongs to the separate download-window
+stall detector.
+
 The 128-request limit is not itself the root cause. With only one usable block
 source, the separate download-window stall detector need not activate.
 
@@ -134,6 +138,16 @@ off and RPC shutdown exited zero. Evidence is in
 `mission/historical-validation/result.json`; no state was copied back to
 production. This proves historical validity, without making the old validator
 a safe substitute for current-network validation.
+
+A separate read-only P2P probe fetched and checked every parent link from
+478544 through the pre-reduction source's checkpoint at height 2013514,
+`000019679aa2ea97a3f18bd9265bc91a09929ea0b1acc0fc5ef77cdf3cf906e7`.
+An independent verifier rehashed all 1,534,971 retained header preimages and
+confirmed that checkpoint. The 940,423,793-byte transcript SHA256 is
+`9c3ef5e2125683ed5557b0744b2e37358d32dbb4829ca1355a83907b380e57f2`;
+evidence is in `mission/checkpoint-ancestry-2013514`. This establishes the
+blocked header's membership in the checkpoint-anchored chain. Full block
+validity is established by the separate strict historical validation above.
 
 The [July 2023 release notes](https://github.com/ZclassicCommunity/zclassic/releases/tag/v2.1.1-58)
 announce the smaller block limit but give no activation height. Neither those
@@ -235,9 +249,57 @@ the frozen snapshot (SHA256
 `4a382be44d8add0f95c17e4bc6eb8a414cf3e37b38779a95c738f42fec9bbdd3`).
 An initial smoke run reached 4033 within 180 seconds while compilation competed
 for CPU, then stopped cleanly at the harness deadline. This is not a valid
-limit comparison. The short harness test passes at all four limits. Quiet-host
-measurements and stalled-peer comparisons remain outstanding; no performance
-claim or default change is justified yet.
+limit comparison. The short harness test passes at all four limits.
+
+Twelve controlled runs (three per limit) subsequently passed through height
+4095 and stopped normally. The first harness models a serial 100 ms service
+delay per `getdata` batch, with block payloads capped at 1024 KiB/s per peer.
+Its median timings and observed peaks were:
+
+| Limit | Median seconds | Peak RSS MiB | Largest served-height gap | Longest sampled pause, seconds |
+|---|---:|---:|---:|---:|
+| 16 | 204.25 | 93.88 | 20 | 0.58 |
+| 32 | 202.91 | 94.14 | 49 | 0.57 |
+| 64 | 199.33 | 94.06 | 112 | 0.61 |
+| 128 | 154.91 | 94.69 | 298 | 3.78 |
+
+All runs had zero duplicate requests and zero swap usage. Each received
+34,526,258 P2P bytes, including header traffic. Median daemon CPU time ranged
+from 130.34 to 132.74 seconds. The larger limit improved throughput under this
+service-delay model, with larger gaps between served blocks and the active tip.
+The raw samples, manifests, preserved harness, and CSV/JSON summaries are in
+`mission/bench-4096-healthy` and `mission/bench-service-harness.py`.
+
+Serial service delay differs from pipelined network latency. The revised
+harness adds a bounded response queue with deadlines measured when requests
+arrive, and locks complete frame writes across its receive and send threads.
+All four short-fixture smoke tests pass under this latency model.
+Twelve full pipelined-latency runs also pass, using the same fixture, 100 ms
+response delay, and 1024 KiB/s per-peer payload limit:
+
+| Limit | Median seconds | Peak RSS MiB | Largest served-height gap | Longest sampled pause, seconds |
+|---|---:|---:|---:|---:|
+| 16 | 96.78 | 93.60 | 50 | 0.51 |
+| 32 | 96.01 | 93.90 | 93 | 0.51 |
+| 64 | 98.29 | 94.22 | 188 | 0.54 |
+| 128 | 97.66 | 94.71 | 351 | 1.38 |
+
+Each run normally validated blocks through 4095, received 34,526,194 P2P bytes,
+and stopped through RPC with exit zero. No duplicate requests or swap usage
+were observed. Median daemon CPU time was 127.85–129.97 seconds; host CPU
+steal was zero. Median other-process CPU time was 5.33–6.89 seconds per run,
+including the harness, RPC clients, and production node. No builds or other
+heavy tests ran concurrently.
+
+These runs used daemon SHA256
+`6c4a80ec792c894aa1be9d27332f7d05e857e36408485e3b651fe114f3be14ad`
+and the preserved harness `mission/bench-latency-harness.py`, SHA256
+`0990fd622e7df78d5b5b7f1ed872d81c7a7c6d4e094e268388e0ae2eda9e021c`.
+Samples and summaries are in `mission/bench-4096-latency`. Pipelined throughput
+is similar across limits in this workload, while larger limits allow more
+received blocks to accumulate ahead of the active tip. Three repetitions and
+early-chain blocks do not establish an Internet-wide optimum. Stalled-peer
+comparisons remain pending; the production default remains 128.
 
 A package installation caused `needrestart` to restart production automatically
 at 07:08 UTC. The unit stopped through RPC, logged shutdown completion, and
@@ -245,5 +307,163 @@ systemd reported success; mining remained off. It loaded the already tested
 limit-option build, SHA256
 `84732b84c233277dd2a16aea5674dab0ce2c08aa6e331c1f99442035c82d67b9`.
 Subsequent package installations must set `NEEDRESTART_MODE=l` to prevent
-unplanned restarts. The latest socket lifecycle and outbound ownership changes
-have not yet been deliberately deployed to production.
+unplanned restarts.
+
+The validated networking build at `e9fa74638` was deliberately deployed at
+10:11 UTC after preserving another diagnostic snapshot and the service file.
+RPC shutdown completed in 6.74 seconds; systemd reported success. The running
+binary SHA256 is
+`6c4a80ec792c894aa1be9d27332f7d05e857e36408485e3b651fe114f3be14ad`.
+Post-deployment verification confirms the retained active tip, mining disabled,
+and the new global download counters. A verifier initially misparsed the CLI's
+plain-text block hash; a corrected read-only verification passed without another
+restart. Production still rejects the historical transaction size; deployment
+of the networking fixes does not establish full synchronization success.
+
+## Further protocol and iterator verification
+
+The `addnode` retry loop erased connected entries, then decremented the returned
+iterator even when it was `begin()`. An extracted traversal with checked STL
+iterators aborts on the original loop and passes after replacement with
+`list::remove_if`. A real outbound test runs across repeated two-minute retry
+cycles, recovers from A after 300.14 seconds, advances through block 129, and
+stops normally. No link to the original production stall is claimed for this
+separate undefined-behavior defect.
+
+A 512-case seeded test fragments malformed frames while their sender owns block
+requests. It exercises oversized lengths, bad magic/checksums/commands, and
+truncated header/block payloads through the actual receive path, repeats
+teardown, then verifies healthy recovery through block 129. It passes normally
+and under ASan/UBSan with leak detection.
+
+Block and transaction reject messages also serialized the validation code as
+four bytes, causing a normal decoder to read an empty reason and the wrong
+hash. Two decoder regressions fail six assertions before the correction and
+pass afterwards. The three network serialization sites now emit one byte;
+validation results, internal-code filtering, reasons, and ban scores are
+unchanged. All 33 selected tests pass normally and with ASan, UBSan, and leak
+detection (59.25 seconds for the instrumented run).
+
+Extending the benchmark fixture exposed historical blocks exceeding today's
+200000-byte block limit: heights 6587 (226001 bytes), 6590 (310839), 6591
+(377298), 7612 (200209), and 7653 (372290). These are framing/size findings from
+the frozen block file, not a new full-validation result. A separate 4609-block
+fixture exercises the 4096-block download window without mixing that historical
+size incompatibility into the networking test.
+
+
+The socket-thread connection notification now uses a peer-count snapshot taken
+under `cs_vNodes`, avoiding an unlocked vector-size read concurrent with
+outbound insertion. The normal and instrumented 33-case suites and all four
+short socket tests pass for this correction.
+
+Four further cases exercise the near-tip inventory request path before headers
+are known, at each configured limit. They check repeated announcements,
+duplicate receipt, mixed unvalidated/validated requests, repeated cleanup, and
+healthy takeover with normal block validation. All 37 selected tests pass
+normally (43.04 seconds) and with ASan, UBSan, and leak detection (71.80 seconds).
+
+The first long stalled-peer benchmark stopped early when a five-second RPC
+sample timed out during chain activation. A had disconnected, B had delivered
+all 4095 blocks, and global request counters were zero. The diagnostic RPC
+observed height 583; shutdown reached 720 and exited normally. This run is
+preserved as a failed benchmark in `mission/bench-4096-stalled`. The harness now
+records temporary RPC transport unavailability and retries within the same
+600-second overall deadline. Application errors, peer errors, daemon exit,
+and failure to reach the target remain failures.
+
+A related monitor regression verifies that watch mode emits a timestamped
+error sample and resumes after RPC unavailability. It never fills missing
+samples with invented heights or counters. One-shot failures still exit nonzero,
+and non-finite watch intervals are rejected before RPC. The executable fake-CLI
+check fails with the previous monitor and passes after the change; evidence is
+`mission/sync-watch-regression.json`.
+
+
+Production subsequently demonstrated the bounded timeout without intervention.
+Peer 39 owned requests 478544–478671 from 10:52:40 UTC, with an observed
+10:57:40 deadline. The service journal records its automatic block-download
+timeout at 10:57:40 under the same daemon PID, 503646. Subsequent RPC samples
+show both global request counters and download-role counts at zero. The six
+samples and journal records are retained in `mission/production-peer39-timeout-*`.
+This verifies live request cleanup, not full synchronization: the active height
+remains 478543 and no compatible healthy block source was available for takeover.
+
+
+The corrected long stalled-peer comparison passed at all four limits. Each run
+used a new datadir, reached height 4095 through normal validation, finished with
+both global request counters at zero, and stopped through RPC with exit zero.
+The fixture ends before the download-window boundary, so these cases exercise
+the ordinary request timeout:
+
+| Limit | A disconnected, seconds | Target reached, seconds | Peak RSS MiB | Abandoned/reassigned requests | Temporarily unavailable RPC samples |
+|---|---:|---:|---:|---:|---:|
+| 16 | 300.20 | 382.13 | 93.77 | 16 | 11 |
+| 32 | 300.15 | 381.65 | 93.64 | 32 | 9 |
+| 64 | 300.17 | 381.40 | 93.75 | 64 | 11 |
+| 128 | 300.27 | 382.53 | 94.06 | 128 | 6 |
+
+This is one long stalled run per limit. CPU time was 132.38–134.01 seconds,
+with no swap or host CPU steal. Each received 36,657,388 P2P bytes, including
+A's continuing headers. The duplicate request count equals the number of
+abandoned A requests that B then served; no additional duplicates occurred.
+All four reached a served-height gap of 4095 while the active tip waited for A.
+Smaller limits reduce the number of requests to reassign but did not shorten
+this timeout or materially change memory use in this workload. RPC sampling
+delays during activation are retained in each result. Results and summaries
+are in `mission/bench-4096-stalled-rpc-retry`, using daemon SHA256
+`7ae6a707f53d52f9cc9899af938ff2364d8426f28aefcb08a0fc3d94f72f16b1`.
+
+
+The controlled restart retained the active tip but reduced reported headers
+from 542834 to 478543. Source inspection explains this through the existing
+startup `RewindBlockIndex` routine: header-only entries outside the active chain
+lack cached full-validation branch state, so it removes them and resets
+`pindexBestHeader` to `chainActive.Tip()`. This is existing startup behavior,
+not evidence of a new download-counter defect or failed database flush. The
+mission has not changed that validation-related rewind logic. It is another
+reason to avoid unnecessary production restarts while resolving the historical
+block incompatibility.
+
+
+All four larger-fixture runs passed through height 4608 and explicitly required
+a logged download-window stall before the ordinary request deadline. The peer
+disconnect time includes the time B needs to fill the window, followed by the
+existing two-second stall interval:
+
+| Limit | A disconnected, seconds | Target reached, seconds | Peak RSS MiB | Abandoned/reassigned requests |
+|---|---:|---:|---:|---:|
+| 16 | 43.59 | 141.09 | 95.24 | 16 |
+| 32 | 27.69 | 123.94 | 95.40 | 32 |
+| 64 | 22.45 | 117.93 | 95.30 | 64 |
+| 128 | 21.09 | 116.78 | 95.77 | 128 |
+
+All final global counters were zero, and every daemon stopped normally. These
+fresh datadirs contain headers only through 4608, below the first non-genesis
+checkpoint at 30000. `GetLastCheckpoint` therefore cannot select a checkpoint
+above these downloaded blocks; their normal connection path retains expensive
+proof and script checks. No shortcut was introduced for the benchmarks.
+
+A transport-setting difference needs to be isolated before choosing a default
+from these timings: the daemon sets `TCP_NODELAY` for outgoing and accepted
+connections, while the Python fixture peers above did not set that option.
+Their timings describe that recorded laboratory setup, including its TCP
+behavior. The preserved harness is `mission/bench-window-nagle-harness.py`;
+raw results and summaries are in `mission/bench-4609-window-stalled`. A comparison
+with matching TCP settings follows before a final limit recommendation.
+
+To run the benchmark harness against the included short fixture without mining:
+
+```sh
+python3 qa/rpc-tests/og-download-bench.py \
+  --output /tmp/og-download-benchmark-new \
+  --fixture src/test/data/zclassic-download-130.dat \
+  --sha256 4ae8e7c4a2b2fb5b925ecc18752bf517dad39dd0a965a8c44d4fee29360ba2b6
+```
+
+Use a newly named output directory and this branch's built daemon. `--stall`
+enables a withholding peer; `--require-window-stall` additionally needs a fixture
+through at least height 4097 and rejects recovery only through the ordinary
+request timeout. Larger fixtures must be supplied with their SHA256. The
+harness retains each datadir, logs, samples, binary/fixture/harness checksums,
+RPC availability gaps, and final accounting assertions.
