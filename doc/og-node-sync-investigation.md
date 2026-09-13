@@ -506,3 +506,31 @@ active tip, but did not materially lower memory use or shorten the ordinary
 timeout here. This is a conservative choice from the measured workloads,
 not a claim that 128 is optimal on every connection or for later-chain blocks.
 The bounded startup option remains available for operator-specific measurement.
+
+
+The full ASan/UBSan daemon also passed the real outbound timeout regression,
+with leak checking enabled: A disconnected after 300.115 seconds despite 11
+header messages, B took over, and the same daemon validated through height 129.
+RPC shutdown exited normally. Evidence: `mission/wire-asan-outbound`.
+
+`qa/rpc-tests/og-peer-teardown.py` adds real socket teardown coverage while a
+second thread reads peer, network, and chain RPCs. It alternates inbound and
+outbound peers, each holding 128 requests, across FIN, TCP reset, and RPC
+`disconnectnode`. Each cycle requires an empty peer list and zero global
+request, validated-request, preferred-peer, and header-sync counters before
+starting the next peer. A final healthy peer must normally validate blocks
+through 129 without a daemon restart; mining stays disabled.
+
+The normal daemon passed 48 cycles with 1,911 concurrent RPC calls. The full
+ASan/UBSan daemon passed 96 cycles with 3,966 calls and leak checking enabled.
+Every measured release completed within 0.51 seconds, including the fixture's
+socket polling interval. Both runs recovered and exited normally with no peer,
+RPC, or sanitizer errors. These checks exercise real thread lifetimes but are
+not a data-race detector. Results: `mission/wire-teardown-normal-reset` and
+`mission/wire-teardown-asan-reset`.
+
+An initial sanitizer run exposed a fixture assumption: an intentional RPC
+disconnect can result in a TCP reset rather than EOF. The harness now accepts
+that reset only after requesting disconnect and records it; unexpected resets
+remain errors. Two such reset closures occurred in the passing sanitizer run.
+The original failed result is retained in `mission/wire-teardown-asan`.
