@@ -122,6 +122,29 @@ struct DownloadSetup : TestingSetup {
         BOOST_REQUIRE(ProcessMessage(&peer, "block", payload, GetTime()));
     }
 
+    void CheckReject(CNode& peer, const std::string& command, const std::string& reason, const uint256& hash)
+    {
+        unsigned found = 0;
+        for (const auto& frame : peer.vSendMsg) {
+            if (frame.size() == 1) continue; // In-memory transport sentinel.
+            CDataStream stream(frame, SER_NETWORK, PROTOCOL_VERSION);
+            CMessageHeader header(Params().MessageStart());
+            stream >> header;
+            if (header.GetCommand() != "reject") continue;
+            ++found;
+            std::string actualCommand, actualReason;
+            unsigned char code;
+            uint256 actualHash;
+            stream >> actualCommand >> code >> actualReason >> actualHash;
+            BOOST_CHECK_EQUAL(actualCommand, command);
+            BOOST_CHECK_EQUAL(code, REJECT_INVALID);
+            BOOST_CHECK_EQUAL(actualReason, reason);
+            BOOST_CHECK(actualHash == hash);
+            BOOST_CHECK(stream.empty());
+        }
+        BOOST_CHECK_EQUAL(found, 1);
+    }
+
     void Churn(unsigned rounds)
     {
         for (unsigned i = 0; i < rounds; ++i) {
@@ -135,6 +158,33 @@ struct DownloadSetup : TestingSetup {
 }
 
 BOOST_FIXTURE_TEST_SUITE(block_download_tests, DownloadSetup)
+
+BOOST_AUTO_TEST_CASE(block_reject_uses_single_byte_wire_code)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "reject-block", true);
+    Headers(peer);
+    CBlock invalid = blocks[1];
+    CMutableTransaction coinbase(invalid.vtx[0]);
+    ++coinbase.vout[0].nValue;
+    invalid.vtx[0] = CTransaction(coinbase);
+    // Keep the original valid PoW header, but supply a mismatching Merkle body.
+    CDataStream payload(SER_NETWORK, PROTOCOL_VERSION);
+    payload << invalid;
+    BOOST_REQUIRE(ProcessMessage(&peer, "block", payload, GetTime()));
+    CheckReject(peer, "block", "bad-txnmrklroot", invalid.GetHash());
+    BOOST_CHECK_EQUAL(chainActive.Height(), 0);
+}
+
+BOOST_AUTO_TEST_CASE(transaction_reject_uses_single_byte_wire_code)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "reject-tx", true);
+    Headers(peer);
+    CDataStream payload(SER_NETWORK, PROTOCOL_VERSION);
+    payload << blocks[0].vtx[0]; // Coinbase transactions are invalid in the mempool.
+    BOOST_REQUIRE(ProcessMessage(&peer, "tx", payload, GetTime()));
+    CheckReject(peer, "tx", "coinbase", blocks[0].vtx[0].GetHash());
+    BOOST_CHECK_EQUAL(mempool.size(), 0);
+}
 
 BOOST_AUTO_TEST_CASE(teardown_releases_all_accounting)
 {
