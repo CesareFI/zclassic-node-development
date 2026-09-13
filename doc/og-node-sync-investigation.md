@@ -73,7 +73,10 @@ An isolated build with address and undefined-behavior sanitizers passed the
 15 download, main, and denial-of-service cases, including leak detection.
 The sandbox's tracing prevented LeakSanitizer from running; the full test was
 therefore repeated on the host and exited successfully. Dependency coverage
-is limited to the code built with sanitizer instrumentation.
+is limited to the code built with sanitizer instrumentation. The latest socket
+lifecycle, outbound ownership, scheduling-limit, and RPC changes subsequently
+passed all 30 selected download, RPC, main, and denial-of-service cases with
+ASan, UBSan, and leak detection enabled (51.03 seconds, exit zero).
 
 ## Block 478544 and historical validation
 
@@ -91,8 +94,9 @@ Feeding this existing block to the live daemon's normal P2P block handler
 produced `REJECT_INVALID` with **`bad-txns-oversize`**. The active chain did not
 advance. `CheckTransactionWithoutProofVerification` applies
 `MAX_TX_SIZE_AFTER_SAPLING == 102000` regardless of historical height. This
-preliminary failure is before full contextual/UTXO validation, so the block's
-complete validity has not yet been established by this node.
+preliminary failure occurs before full contextual/UTXO validation. A separate
+strict historical validation, described below, establishes that the block is
+valid under the earlier rules.
 
 Repository commit `8d6d05e632c5ede0bc4cac320f6b70f966303b9d`, dated 2023-07-21,
 changed the post-Sapling transaction bound from 2000000 to 102000 bytes and
@@ -117,7 +121,24 @@ The native transaction deserializer reports that the block's second transaction,
 is 125811 bytes, version 4 with the Overwinter flag and 74 JoinSplits. It has
 no Sapling spends or outputs. The block's computed Merkle root matches its
 header. These checks locate the size failure but do not establish full
-contextual or proof validity.
+contextual or proof validity by themselves.
+
+The pre-reduction source `42d81ed963f5eab84db6bdb71d3bdf05038ad8f0`
+was built with only compiler/header and Boost filesystem compatibility edits;
+its main validation, consensus, transaction, and chain-parameter sources were
+unchanged. In a disposable copy of the consistent production snapshot, normal
+`submitblock` accepted this block in 1.189 seconds and advanced from 478543 to
+the expected 478544 hash. `-checkpoints=0` disabled the checkpoint-ancestor
+trust optimization, forcing expensive proof and script checks. Mining remained
+off and RPC shutdown exited zero. Evidence is in
+`mission/historical-validation/result.json`; no state was copied back to
+production. This proves historical validity, without making the old validator
+a safe substitute for current-network validation.
+
+The [July 2023 release notes](https://github.com/ZclassicCommunity/zclassic/releases/tag/v2.1.1-58)
+announce the smaller block limit but give no activation height. Neither those
+notes nor the source change establishes a height boundary for a compatibility
+correction. A release timestamp or preceding checkpoint is insufficient.
 
 ## Hypothesis status
 
@@ -129,8 +150,8 @@ contextual or proof validity.
 | Headers hide lack of block progress | Headers continue without progress; they do not directly reset the block deadline. |
 | Abandoned requests are not immediately reassigned | Previously retained until finalization; timeout cleanup and B takeover tested. |
 | No usable outbound peers during IBD | Zero outbound captured; reachable seed peers are banned; semaphore exhaustion ruled out. |
-| Block 478544 fails normal validation | Exact current rejection is `bad-txns-oversize`; full historical-rule validation remains outstanding. |
-| Sapling/Overwinter compatibility involved | Post-Sapling size bound is involved; no evidence yet of proof or branch-ID failure. |
+| Block 478544 fails normal validation | Exact current rejection is `bad-txns-oversize`; strict historical validation accepts it, including proofs and scripts. |
+| Sapling/Overwinter compatibility involved | Post-Sapling size bound is involved; strict historical proof and branch-ID checks pass. |
 
 ## Shutdown
 
@@ -151,8 +172,8 @@ height remains 478543 because the separate size rejection is unchanged.
 
 ## Remaining acceptance work
 
-The production node is not fixed yet. Historical compatibility and full block
-validation, continued production progress past the next 128-block boundary,
+The production node is not fixed yet. A justified historical compatibility correction,
+continued production progress past the next 128-block boundary,
 sustained useful outbound connections, sanitizers, and the 16/32/64/128 performance
 comparison are still required. No chainstate or block files have been deleted.
 
