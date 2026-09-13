@@ -25,6 +25,7 @@
 #include <event2/http.h>
 #include <event2/thread.h>
 #include <event2/buffer.h>
+#include <event2/bufferevent.h>
 #include <event2/util.h>
 #include <event2/keyvalq_struct.h>
 
@@ -373,6 +374,20 @@ static void libevent_log_cb(int severity, const char *msg)
         LogPrint("libevent", "libevent: %s\n", msg);
 }
 
+struct evhttp* CreateHTTPServer(struct event_base* base)
+{
+    struct evhttp* http = evhttp_new(base);
+    if (http) {
+        // A write callback can retain the buffer after evhttp frees the
+        // connection. Close its socket only after the final buffer reference
+        // releases the event registrations, preventing descriptor reuse races.
+        evhttp_set_bevcb(http, [](struct event_base* owner, void*) {
+            return bufferevent_socket_new(owner, -1, BEV_OPT_CLOSE_ON_FREE);
+        }, nullptr);
+    }
+    return http;
+}
+
 bool InitHTTPServer()
 {
     struct evhttp* http = 0;
@@ -411,7 +426,7 @@ bool InitHTTPServer()
     }
 
     /* Create a new evhttp object to handle requests. */
-    http = evhttp_new(base); // XXX RAII
+    http = CreateHTTPServer(base); // XXX RAII
     if (!http) {
         LogPrintf("couldn't create evhttp. Exiting.\n");
         event_base_free(base);
@@ -666,4 +681,3 @@ void UnregisterHTTPHandler(const std::string &prefix, bool exactMatch)
         pathHandlers.erase(i);
     }
 }
-

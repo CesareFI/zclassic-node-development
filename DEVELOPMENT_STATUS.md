@@ -1,138 +1,100 @@
 # Zclassic development status
 
-Updated: 2026-09-13 14:40 UTC. Read this file before starting another task.
+Updated: 2026-09-13 15:07 UTC. Read before starting a new task.
 
 ## Objective and constraints
 
-Improve synchronization, peer handling, memory correctness, resource use, code
-quality, tests, and build reliability using local repository code and fixtures.
+Improve synchronization, peer handling, resource efficiency, memory correctness,
+code quality, tests, and build reliability using local code and local fixtures.
 Preserve consensus, monetary policy, PoW, transaction validity, and upgrades.
-No external host interaction, marketplace functionality, mining, or pushes.
-Continue as a normal Codex session, without Goal mode or sub-agents.
+No external host interaction, mining, marketplace, pushes, or production changes.
+Continue as a normal Codex session: no Goal mode and no sub-agents.
 
-## Branch and worktrees
+## Branch and latest validated commit
 
 - Branch: `fix/og-node-sync-20260913`.
-- Latest tested commit: `2bd9d05cc` — protocol-error socket teardown regression.
-- Earlier commits: `537ec5cb5` (`getinfo` connection-count lock), `8c1892bc7`
-  (concurrent RPC/socket teardown), `20937a8b3` (completed download benchmarks).
-- ThreadSanitizer worktree: `mission/tsan-source`, based on `537ec5cb5` plus
-  current uncommitted networking changes.
-- ASan/UBSan worktree: `mission/asan-source`; current source copied there,
-  but its daemon has not yet been rebuilt for the new race fixes.
-- Normal test candidate: `src/zclassicd-mission`, built with
-  `make -C src -j2 EXEEXT=-mission zclassicd-mission`. This preserves the
-  service executable `src/zclassicd` while candidate changes are tested.
+- Latest tested commit: `3608da448` — synchronize peer sockets, handshake
+  metadata, I/O statistics, and ping state.
+- Earlier tested commits include `2bd9d05cc` (protocol-error teardown),
+  `537ec5cb5` (getinfo lock), and `20937a8b3` (completed download benchmarks).
+- Normal candidate: `src/zclassicd-mission`; build with
+  `make -C src -j2 EXEEXT=-mission zclassicd-mission`.
+- ASan/UBSan worktree: `mission/asan-source`; TSAN: `mission/tsan-source`.
+  These contain current source copies; inspect parity before further builds.
+- Service executable `src/zclassicd` remains unchanged, SHA256
+  `bc161f5339039ca1bacd1653dd45c2b42f409c4982b029609e8316869cca3c4f`.
 
-## Completed work and evidence
+## Completed work
 
-- Fixed leaked validated in-flight accounting and premature/late peer cleanup.
-  The deterministic regression failed before the fix and passed afterward.
-- Added bounded per-peer request configuration and download diagnostics.
-- Completed healthy, stalled-peer, and download-window benchmarks for
-  16/32/64/128 requests. Retained default 128 based on measured throughput,
-  recovery, request waste, and small memory differences.
-- Normal and ASan/UBSan relevant unit suites: 37 cases passed, most recently
-  42.273/71.897 seconds for the `getinfo` lock fix.
-- Real outbound recovery: stalled peer disconnected after 300.115 seconds
-  despite continued headers; healthy peer reached fixture height 129 without
-  restart; ASan/UBSan/leak checks and normal shutdown passed.
-- Real teardown tests cover FIN, reset, RPC disconnect, invalid network magic,
-  and oversized frame declarations in both connection directions. Latest
-  pre-race-fix malformed runs: 50 normal and 100 ASan/UBSan cycles passed,
-  with normal validation to height 129 and zero outstanding accounting.
-- Detailed evidence: `doc/og-node-sync-investigation.md`; private raw logs,
-  fixtures, and earlier continuation notes remain under `mission/`.
+- Original in-flight leak reproduced and fixed: shared immediate/idempotent
+  request cleanup, bounded configuration, operator download diagnostics.
+- Completed all 16/32/64/128 healthy, stalled, and window benchmarks. Retained
+  128 from measured throughput, recovery, request waste, and memory results.
+- Networking concurrency commit passed 38 normal and ASan/UBSan unit cases,
+  100 TSAN teardown cycles, 100 ASan/UBSan cycles, and pending-peer shutdown.
+- Latest real outbound ASan/UBSan recovery passed: A disconnected after
+  300.107 seconds despite 11 header messages; B validated through 129 without
+  restart; normal shutdown and leak checks passed.
+- Full evidence summary: `doc/og-node-sync-investigation.md`; private logs and
+  earlier continuation history: `mission/CONTINUATION.md` and test directories.
 
-## Validated networking changes ready for commit
+## Current task: HTTP descriptor lifetime
 
-Files: `src/net.h`, `src/net.cpp`, `src/main.cpp`, `src/rpc/net.cpp`,
-`src/test/block_download_tests.cpp`, and the teardown harness.
-Validation is complete for this logical unit. The harness now has a tested
-`--shutdown-pending` mode and extracted final-peer/cleanup helpers to test
-shutdown while 128 requests remain assigned.
+ThreadSanitizer intermittently reported epoll descriptor access racing a
+LevelDB directory close during startup. This is separate from the peer races.
+A minimal local libevent HTTP/directory-read program reproduces it without
+Zclassic or LevelDB code. Instrumenting the cached libevent source revealed:
 
-1. Atomic peer send/receive timestamps and byte counters. ThreadSanitizer proved
-   `nLastRecv` and `nRecvBytes` races between network writes and RPC snapshots.
-2. Private socket handle with a dedicated mutex. Snapshot reads serve select
-   bookkeeping; send/receive syscalls and close share the mutex. It is released
-   before acquiring receive-buffer locks. ThreadSanitizer proved a handle read
-   racing message-thread close. Shutdown relies on CNode destruction to close
-   peer descriptors after network threads stop.
-3. `cs_main` protects version-handshake metadata and preferred-download state.
-   Protocol version is atomic for socket timeout/eviction readers. Parsing order
-   and rejection conditions are preserved. ThreadSanitizer proved a subversion
-   string read/write race; source review found the same handler updated download
-   roles without their required lock.
+1. evhttp_connection_free closes the socket in its write callback.
+2. That callback still holds a buffered-event reference.
+3. Returning from the callback drops the reference and removes epoll events.
+4. Another thread may reuse/close that descriptor between steps 1 and 3.
 
-4. Ping state now has one mutex across sending, pong handling, RPC requests,
-   snapshots, and timeout checks. `MaybeSendPing` reduces SendMessages complexity
-   and releases that mutex before sending. Eviction sorts captured ping values.
-   The new wire-nonce unit case and `--rpc-pings` stress option both passed.
+The candidate uses BEV_OPT_CLOSE_ON_FREE so the buffered event closes its own
+socket after its final reference removes the event registrations. It uses the
+existing libevent API and backend, with no dependency patch or suppression.
+CreateHTTPServer centralizes this policy and is used by InitHTTPServer and tests.
 
-## Test failures and current jobs
+Uncommitted files: `src/httpserver.cpp`, `src/httpserver.h`,
+`src/test/httpserver_tests.cpp`, `src/Makefile.test.include`, and status/docs.
 
-- `mission/wire-malformed-teardown-tsan`: first timestamp race, test failed.
-- `mission/wire-malformed-tsan-baseline-all`: 50 cycles recovered, but two races
-  were reported and daemon exited 66. This is a failed sanitizer result.
-- `mission/wire-malformed-tsan-io-atomics`: socket-handle race after 23 cycles.
-- `mission/wire-malformed-tsan-socket-lock`: subversion string race after about
-  70 cycles. These reports were preserved; no suppressions were added.
-- Latest TSAN build session `91136` completed successfully, including the
-  handshake fix. Runtime regression `46686` failed during startup: a descriptor-lifetime
-  report between libevent epoll handling and LevelDB closedir prevented peer
-  coverage. Report retained in `mission/wire-malformed-tsan-handshake-lock`.
-  Collect-all run `93492` completed 100 cycles and recovery, but exited 66
-  for a ping nonce/timestamp race (SendMessages versus RPC statistics).
-  The earlier receive-stat, handle, and handshake races were not reported.
-  A minimal unrelated-descriptor reuse check passed; the startup libevent
-  report remains unresolved and is not suppressed.
-- Ping-state build `49515` failed because two LOCK macros shared a scope.
-  Changed the constructor to LOCK2; replacement TSAN build `18022` completed successfully.
-  100-cycle TSAN run `13392` PASS: `mission/wire-malformed-tsan-ping-lock`,
-  1,715 concurrent RPC calls including ping; height 129, zero accounting,
-  normal exit 0 in 0.373 seconds, no TSAN warnings. Maximum release 0.176s.
-  Normal unit build `5335`, units `64506` (38 cases PASS), and candidate build
-  `92302` completed successfully. Normal 50-cycle stress `33637` PASS: height 129, 575 RPC calls, stop 0. ASan daemon build `27997` completed. ASan malformed stress `25711` PASS: 100 cycles, 1,295 RPC calls, height
-  129 and normal shutdown; unit build `16569` completed; outbound recovery
-  `39541` PASS: 300.107-second timeout despite 11 header messages, height 129,
-  no restart and normal shutdown. ASan units `12839` PASS all 38 cases in
-  73.254 seconds; ASan pending shutdown `86050` PASS with 128 requests in
-  0.823 seconds. No heavy build or test jobs remain running. TSAN pending-peer
-  shutdown test `12320` failed during startup on the separate libevent/LevelDB
-  descriptor report, before any peer round. Collect-all run `89056` PASS: 10 cycles, 135 RPC calls, normal exit 0
-  with 128 pending requests in 0.323 seconds; no TSAN warnings.
-- The separate startup descriptor report now reproduces in a minimal local
-  libevent HTTP + directory-read program without any node or LevelDB code:
-  `mission/tsan-http-fd-reuse.cpp`, failing log of the same name. Full dependency instrumentation identified HTTP connection free closing the
-  socket before the write callback drops its buffered-event reference and
-  deletes epoll registrations. A local API-level experiment using
-  BEV_OPT_CLOSE_ON_FREE passed 2,000 requests with no TSAN warning; the default
-  failed. No node HTTP code, suppressions or backend changes applied yet.
-- All earlier benchmark, normal-test, ASan-test, and candidate-build jobs have
-  completed. Do not duplicate jobs; inspect live sessions before resuming.
-- Existing read-only production monitor session `51744` predates the latest
-  local-fixture-only scope. No further production changes or external probes.
+## Validation and active jobs
 
-## Important limits
+- Deterministic lifetime test FAILED before the fix: socket already closed
+  while a buffered-event reference remained. Exactly one intended assertion,
+  exit 201: `mission/http-lifetime-before.log`.
+- The same test PASSED after the fix, including final descriptor release.
+  Added keep-alive reuse/explicit-close test also PASSED.
+- Normal relevant suites passed 39 cases in 55.141s before the added keep-alive
+  case; both HTTP cases then passed (`mission/http-unit-keepalive*`).
+- Actual-daemon TSAN integration `18677` PASS: 100 teardown cycles, 2,465 RPC
+  calls, height 129, no warnings, normal shutdown in 0.618s.
+- Actual-daemon ASan/UBSan integration `56673` PASS: 50 teardown cycles, 1,000
+  RPC calls, normal shutdown with 128 pending requests in 0.818s; leak checks on.
+- ASan/UBSan unit run `38361` PASS: all 40 relevant cases in 73.083s, logs
+  `mission/http-asan-unit.log` and `mission/http-asan-unit-report.log`.
+- All build jobs and other test jobs completed. Do not duplicate running work.
+- Original failing TSAN evidence remains under `wire-pending-stop-tsan`,
+  `wire-malformed-tsan-handshake-lock`, and `tsan-http-fd-reuse*.log` in mission.
+- Existing read-only production monitor `51744` predates the latest local-only
+  scope. No new production actions or third-party probes are authorized.
 
-The historical active-node sync blocker is separate: captured block 478544 is
-on the established chain and passed strict historical validation, but current
-code rejects its 125,811-byte transaction as `bad-txns-oversize` after an
-ungated historical size-limit change. No consensus bypass or rule change was
-made. Production advancement is not claimed. Continue local engineering tasks.
+## Important limit
+
+Captured historical block 478544 passed strict historical validation, but current
+code rejects its 125,811-byte transaction as bad-txns-oversize after an ungated
+historical size-limit change. No consensus bypass or rule change was made.
+Production advancement is not claimed. Continue local engineering tasks.
 
 ## Next five tasks
 
-1. Commit the fully validated networking race fixes, ping unit test, teardown
-   harness extensions, evidence summary, and this continuation file.
-2. Apply and validate buffered-event socket ownership in the local HTTP server;
-   keep this separate from the peer-state commit and preserve failing evidence.
-3. Add a deterministic local dependency regression for HTTP callback teardown,
-   then run normal, ASan/UBSan, and TSAN startup/request/shutdown coverage.
-4. Exercise saturated local peer eviction to cover stable ping snapshots and
+1. Commit the tested HTTP ownership fix and regressions; source parity verified.
+2. Update the latest-commit reference and preserve the validated test evidence.
+3. Exercise saturated local peer eviction to cover stable ping snapshots and
    audit remaining peer lifetime/lock boundaries.
-5. Continue the local reliability/resource/code-quality backlog with bounded
-   tests and tested logical commits; update this file before switching tasks.
+4. Improve test failure reporting so already-exited daemons retain their exit
+   status without a pointless RPC shutdown attempt.
+5. Continue bounded local resource, build, and code-quality improvements with
+   tested logical commits and regular status updates.
 
 Resume: `cd /opt/zclassic-money && cat DEVELOPMENT_STATUS.md`.

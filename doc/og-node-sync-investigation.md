@@ -614,7 +614,37 @@ Evidence: `mission/wire-pending-stop-asan` and
 A separate TSAN report intermittently interrupts startup before any fixture
 peer connects: libevent epoll descriptor handling overlaps a LevelDB directory
 close. That report also reproduces in a small local libevent HTTP/directory-read
-program without any Zclassic or LevelDB code. It remains an open dependency
-investigation, with no suppressions or event-backend changes. The failed runs
+program without any Zclassic or LevelDB code. The ownership fix below addresses
+this report without suppressions or event-backend changes. The failed runs
 are retained in `mission/wire-malformed-tsan-handshake-lock` and
-`mission/wire-pending-stop-tsan`; passing peer tests do not resolve that issue.
+`mission/wire-pending-stop-tsan`; passing peer tests alone did not resolve it.
+
+### HTTP socket ownership fix
+
+Instrumenting the cached libevent source identified the exact startup sequence:
+`evhttp_connection_free` closes the socket inside a write callback, which still
+holds a buffered-event reference. Returning from that callback releases the
+reference and removes its epoll registrations. Another thread can reuse the
+descriptor before that removal; the directory-close report was one such overlap.
+
+`CreateHTTPServer` now configures buffered events with `BEV_OPT_CLOSE_ON_FREE`.
+The buffered event owns closure until its final reference releases the event
+registrations. `InitHTTPServer` uses this factory. This applies the existing
+library ownership API without patching dependencies, changing event backends,
+or suppressing sanitizer findings.
+
+The deterministic `httpserver_tests` case retains a buffered-event reference
+across HTTP connection closure. It failed before the fix because the descriptor
+was already closed, and passes afterward: the descriptor survives the retained
+reference and closes when that reference is released. A second case verifies
+keep-alive reuse followed by explicit connection closure. The tests use only
+local ephemeral loopback sockets and the production server factory.
+
+Relevant normal unit suites and both HTTP cases passed. All 40 relevant
+ASan/UBSan unit cases passed with leak checking in 73.083 seconds. The actual
+TSAN daemon passed startup, 100 teardown cycles, 2,465 concurrent RPC calls,
+recovery through height 129, and normal shutdown with no warnings. The ASan/UBSan
+daemon passed 50 cycles and 1,000 RPC calls, then stopped with 128 requests still
+pending in 0.818 seconds. Evidence: `mission/http-lifetime-before.log`,
+`mission/http-unit-after*`, `mission/http-unit-keepalive*`,
+`mission/http-asan-unit*`, and `mission/wire-http-ownership-{tsan,asan}`.

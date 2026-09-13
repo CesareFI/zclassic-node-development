@@ -16,9 +16,15 @@ static const int DEFAULT_HTTP_WORKQUEUE=16;
 static const int DEFAULT_HTTP_SERVER_TIMEOUT=30;
 
 struct evhttp_request;
+struct evhttp;
 struct event_base;
 class CService;
 class HTTPRequest;
+
+/** Allocate an HTTP server with its connection lifetime policy.
+ * The caller owns the returned server and must free it with evhttp_free.
+ */
+struct evhttp* CreateHTTPServer(struct event_base* base);
 
 /** Initialize HTTP server.
  * Call this before RegisterHTTPHandler or EventBase().
