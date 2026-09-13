@@ -771,3 +771,31 @@ scalar/vector additions with diagnostics enabled. An instrumented daemon passes
 concurrent RPC/ping readers, validates height 129, and stops normally. No consensus
 or connection-selection policy changed. Evidence: mission/addrman-counts-* and
 mission/addrman-{add-,}race-*.
+
+
+## Explicit missing-block response recovery
+
+The node ignored notfound messages, leaving a peer's assignments and preferred
+header-sync role active even after it explicitly reported a requested block
+unavailable. The new baseline tests failed three assertions. A real isolated
+daemon confirmed A retained128 requests while connected preferred B had zero
+requests and no known headers; it failed the20-second takeover check and stopped
+normally. This is an additional recovery issue, not proof of the original live
+stall's cause.
+
+A fully decoded, bounded notfound list now retires a peer that cannot serve one
+of its own outstanding block requests, immediately releasing all its requests
+and sync roles. The node disconnects that source without assigning misbehavior
+or a ban. Requests owned by another peer, unrelated hashes, and transaction
+notfound entries do not cause cancellation. Parsing streams at mostMAX_INV_SZ
+entries with no inventory-vector allocation; truncated lists cannot partially
+release assignments. Tests also cover late replies and finalization after B has
+taken ownership.
+
+All43 selected normal and ASan/UBSan/leak cases pass. With eight prior reconnect
+cycles each, real normal and instrumented daemons moved from A128/B0 to healthy
+B takeover: A disconnected after0.704/0.657seconds, B validated through129, all
+request counters cleared, and both daemons stopped normally without restart or
+peer/sanitizer errors. Run qa/rpc-tests/og-download-stall.py --notfound-recovery
+for this case. Evidence is under mission/notfound-*. Consensus validation and
+production remain unchanged.

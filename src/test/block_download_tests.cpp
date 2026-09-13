@@ -425,6 +425,91 @@ BOOST_AUTO_TEST_CASE(preferred_header_sync_is_bounded_and_reassigned_on_disconne
     BOOST_CHECK_EQUAL(Sent(oneShot, "getheaders"), 0);
 }
 
+BOOST_AUTO_TEST_CASE(unavailable_block_releases_downloads_for_immediate_takeover)
+{
+    CNode unavailable(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "A", false);
+    CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "B", false);
+    Handshake(unavailable);
+    Headers(unavailable);
+    BOOST_REQUIRE(SendMessages(&unavailable, false));
+    BOOST_REQUIRE_EQUAL(Stats(unavailable).nBlocksInFlight, 128);
+    Handshake(healthy);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_CHECK_EQUAL(Sent(healthy, "getheaders"), 0);
+
+    CDataStream missing(SER_NETWORK, PROTOCOL_VERSION);
+    missing << std::vector<CInv>{CInv(MSG_BLOCK, blocks[1].GetHash())};
+    BOOST_REQUIRE(ProcessMessage(&unavailable, "notfound", missing, GetTime()));
+    BOOST_REQUIRE(unavailable.fDisconnect);
+    BOOST_CHECK_EQUAL(Stats(unavailable).nMisbehavior, 0);
+    BOOST_CHECK_EQUAL(Stats(unavailable).nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 0);
+
+    // A negative response is sufficient to try another source immediately;
+    // neither the block timeout nor A's final reference needs to expire.
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_REQUIRE_EQUAL(Sent(healthy, "getheaders"), 1);
+    Headers(healthy);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_REQUIRE_EQUAL(Stats(healthy).nBlocksInFlight, 128);
+    CDataStream late(SER_NETWORK, PROTOCOL_VERSION);
+    late << std::vector<CInv>{CInv(MSG_BLOCK, blocks[1].GetHash())};
+    BOOST_REQUIRE(ProcessMessage(&unavailable, "notfound", late, GetTime()));
+    GetNodeSignals().FinalizeNode(unavailable.GetId());
+    BOOST_CHECK_EQUAL(Stats(healthy).nBlocksInFlight, 128);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 128);
+    for (size_t height = 1; height <= 128; ++height) Deliver(healthy, height);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    Deliver(healthy, 129);
+    BOOST_CHECK_EQUAL(chainActive.Height(), 129);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
+}
+
+BOOST_AUTO_TEST_CASE(notfound_cannot_cancel_another_peers_requests)
+{
+    CNode owner(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "owner", true);
+    CNode other(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "other", true);
+    Headers(owner);
+    PrepareTransport(other);
+    BOOST_REQUIRE(SendMessages(&owner, false));
+    BOOST_REQUIRE_EQUAL(Stats(owner).nBlocksInFlight, 128);
+    for (CNode* sender : {&owner, &other}) {
+        CDataStream unrelated(SER_NETWORK, PROTOCOL_VERSION);
+        unrelated << std::vector<CInv>{CInv(MSG_TX, blocks[1].GetHash()),
+                                      CInv(MSG_BLOCK, uint256S("ff"))};
+        BOOST_REQUIRE(ProcessMessage(sender, "notfound", unrelated, GetTime()));
+        BOOST_CHECK(!sender->fDisconnect);
+        BOOST_CHECK_EQUAL(Stats(owner).nBlocksInFlight, 128);
+    }
+    CDataStream forged(SER_NETWORK, PROTOCOL_VERSION);
+    forged << std::vector<CInv>{CInv(MSG_BLOCK, blocks[1].GetHash())};
+    BOOST_REQUIRE(ProcessMessage(&other, "notfound", forged, GetTime()));
+    BOOST_CHECK(!other.fDisconnect);
+    BOOST_CHECK(!owner.fDisconnect);
+    BOOST_CHECK_EQUAL(Stats(owner).nBlocksInFlight, 128);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 128);
+}
+
+BOOST_AUTO_TEST_CASE(notfound_inventory_is_bounded_and_fully_decoded)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "missing", true);
+    Headers(peer);
+    BOOST_REQUIRE(SendMessages(&peer, false));
+    BOOST_REQUIRE_EQUAL(Stats(peer).nBlocksInFlight, 128);
+    CDataStream oversized(SER_NETWORK, PROTOCOL_VERSION);
+    WriteCompactSize(oversized, MAX_INV_SZ + 1);
+    BOOST_CHECK(!ProcessMessage(&peer, "notfound", oversized, GetTime()));
+    BOOST_CHECK_EQUAL(Stats(peer).nBlocksInFlight, 128);
+    CDataStream truncated(SER_NETWORK, PROTOCOL_VERSION);
+    WriteCompactSize(truncated, 2);
+    truncated << CInv(MSG_BLOCK, blocks[1].GetHash()); // Second entry absent.
+    BOOST_CHECK_THROW(ProcessMessage(&peer, "notfound", truncated, GetTime()),
+                      std::ios_base::failure);
+    BOOST_CHECK_EQUAL(Stats(peer).nBlocksInFlight, 128);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 128);
+}
+
 BOOST_AUTO_TEST_CASE(randomized_receipt_reassignment_and_repeated_cleanup)
 {
     std::array<std::unique_ptr<CNode>, 4> peers;

@@ -67,10 +67,13 @@ class Peer(threading.Thread):
         self.announce_headers = announce_headers
         self.header_heights = {hash256(header): height for height, header in enumerate(headers)}
         self.requested = threading.Event()
+        self.handshaken = threading.Event()
+        self.notfound_queued = threading.Event()
         self.disconnected = threading.Event()
         self.stop_event = threading.Event()
         self.requests, self.delivered, self.errors = [], [], []
         self.header_messages = 0
+        self.notfound_messages = 0
         self.start_time = time.monotonic()
         self.disconnect_age = None
 
@@ -88,6 +91,7 @@ class Peer(threading.Thread):
         if command == b"version":
             self.send("verack")
         elif command == b"verack":
+            self.handshaken.set()
             if self.announce_headers:
                 self.send_headers()
         elif command == b"getheaders":
@@ -132,6 +136,14 @@ class Peer(threading.Thread):
             buffer = bytearray()
             next_headers = time.monotonic() + 30
             while not self.stop_event.is_set():
+                if self.notfound_queued.is_set():
+                    # Send from this thread so complete P2P frames cannot
+                    # interleave with ping or header replies on the socket.
+                    height = self.requests[0]
+                    self.send("notfound", b"\x01" + struct.pack("<I", 2) +
+                              hash256(self.headers[height]))
+                    self.notfound_messages += 1
+                    self.notfound_queued.clear()
                 if not self.deliver and self.requested.is_set() and time.monotonic() >= next_headers:
                     self.send_headers(max(1, len(self.headers) - 159))
                     next_headers = time.monotonic() + 30
@@ -177,10 +189,13 @@ def main():
     direction.add_argument("--outbound", action="store_true", help="Have the daemon dial A and B through addnode")
     direction.add_argument("--preferred-recovery", action="store_true",
                            help="Inbound A stalls; outbound B sends headers only when requested")
+    direction.add_argument("--notfound-recovery", action="store_true",
+                           help="Outbound A reports a missing block after quiet outbound B connects")
     parser.add_argument("--churn", type=int, default=2, help="Peers torn down with 128 pending requests before A")
     parser.add_argument("--rpcport", type=int, default=18623)
     parser.add_argument("--port", type=int, default=18633)
     args = parser.parse_args()
+    both_outbound = args.outbound or args.notfound_recovery
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     datadir = output / "datadir"
@@ -200,8 +215,8 @@ def main():
                "-rpcport=" + str(args.rpcport), "-port=" + str(args.port), "-bind=127.0.0.1",
                "-printtoconsole=1", "-debug=net"]
     listeners = []
-    if args.outbound or args.preferred_recovery:
-        for index in ((1, 2) if args.outbound else (2,)):
+    if both_outbound or args.preferred_recovery:
+        for index in ((1, 2) if both_outbound else (2,)):
             port = args.port + index
             host = "127.0.0." + str(index)
             listener = socket.socket()
@@ -211,8 +226,9 @@ def main():
             listener.settimeout(20)
             listeners.append(listener)
             command.append("-addnode=" + host + ":" + str(port))
-    report = {"command": command, "pass": False, "outbound_test": args.outbound,
-              "preferred_recovery": args.preferred_recovery}
+    report = {"command": command, "pass": False, "outbound_test": both_outbound,
+              "preferred_recovery": args.preferred_recovery,
+              "notfound_recovery": args.notfound_recovery}
     peers = []
     with (output / "daemon.log").open("w") as log:
         daemon = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
@@ -245,22 +261,31 @@ def main():
                 assert not churned.errors, churned.errors
                 report["churn"].append({"name": name, "requests": len(churned.requests)})
             stalled = Peer(args.port, "A", blocks, headers, False,
-                           listeners[0].accept()[0] if args.outbound else None)
+                           listeners[0].accept()[0] if both_outbound else None)
             peers.append(stalled)
             stalled.start()
             assert stalled.requested.wait(20), "A never received requests"
             assert stalled.requests == list(range(1, 129)), stalled.requests
             healthy = Peer(args.port, "B", blocks, headers, True,
                            listeners[-1].accept()[0] if listeners else None,
-                           announce_headers=not args.preferred_recovery)
+                           announce_headers=not (args.preferred_recovery or args.notfound_recovery))
             peers.append(healthy)
             healthy.start()
+            if args.notfound_recovery:
+                assert healthy.handshaken.wait(20), "B handshake did not complete"
+                report["before_notfound"] = rpc("getpeerinfo")
+                assert len(report["before_notfound"]) == 2
+                assert all(peer["preferred_download"] for peer in report["before_notfound"])
+                assert sorted(peer["blocks_in_flight"] for peer in report["before_notfound"]) == [0, 128]
+                stalled.notfound_queued.set()
             assert healthy.requested.wait(20), "B never received requests"
+            if args.notfound_recovery:
+                assert stalled.disconnected.wait(20), "A retained its failed download connection"
             download_peers = [peer for peer in rpc("getpeerinfo")
                               if peer["subver"] in ("/OGdownloadtestA:1/", "/OGdownloadtestB:1/")]
-            assert len(download_peers) == 2
+            assert len(download_peers) == (1 if args.notfound_recovery else 2)
             for peer in download_peers:
-                outbound = args.outbound or (args.preferred_recovery and
+                outbound = both_outbound or (args.preferred_recovery and
                                             peer["subver"] == "/OGdownloadtestB:1/")
                 assert peer["inbound"] != outbound
                 assert peer["preferred_download"] == outbound
@@ -276,7 +301,11 @@ def main():
                     assert stalled.disconnected.wait(5), "A was not disconnected"
                     assert len(stalled.requests) == 128
                     assert sorted(healthy.delivered) == list(range(1, 130))
-                    assert stalled.header_messages >= 3
+                    if args.notfound_recovery:
+                        assert stalled.notfound_messages == 1
+                        assert stalled.disconnect_age < 20, "recovery waited for block timeout"
+                    else:
+                        assert stalled.header_messages >= 3
                     assert chain["bestblockhash"] == hash256(headers[129])[::-1].hex()
                     assert all(peer["global_blocks_in_flight"] == 0 for peer in peerinfo)
                     assert all(peer["global_validated_blocks_in_flight"] == 0 for peer in peerinfo)
@@ -284,6 +313,7 @@ def main():
                     report.update(pass_=True, height=129, no_restart=True,
                                   a_disconnect_seconds=stalled.disconnect_age,
                                   a_header_messages=stalled.header_messages,
+                                  a_notfound_messages=stalled.notfound_messages,
                                   b_delivered=healthy.delivered)
                     report["pass"] = report.pop("pass_")
                     break

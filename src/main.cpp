@@ -465,6 +465,40 @@ void StopBlockDownload(CNodeState& state)
     state.nStallingSince = 0;
 }
 
+bool ProcessNotFound(CNode& peer, CDataStream& payload)
+{
+    const uint64_t count = ReadCompactSize(payload);
+    LOCK(cs_main);
+    if (count > MAX_INV_SZ) {
+        Misbehaving(peer.GetId(), 20);
+        return error("notfound message size exceeds limit");
+    }
+
+    bool unavailable = false;
+    // Decode the complete bounded list before changing request ownership.
+    // Streaming avoids allocating a peer-controlled inventory vector.
+    for (uint64_t index = 0; index < count; ++index) {
+        CInv inv;
+        payload >> inv;
+        if (inv.type != MSG_BLOCK || unavailable)
+            continue;
+        const auto request = mapBlocksInFlight.find(inv.hash);
+        unavailable = request != mapBlocksInFlight.end() &&
+                      request->second.first == peer.GetId();
+    }
+    if (unavailable) {
+        // This source explicitly cannot serve our assigned work. Release its
+        // requests and sync roles now so another peer can take over. This is
+        // an availability failure, not misbehavior and never a ban reason.
+        LogPrint("net", "Peer=%d cannot serve a requested block, disconnecting\n", peer.GetId());
+        peer.fDisconnect = true;
+        CNodeState* state = State(peer.GetId());
+        assert(state != NULL); // An outstanding request owns a live node state.
+        StopBlockDownload(*state);
+    }
+    return true;
+}
+
 // Requires cs_main.
 void MarkBlockAsInFlight(NodeId nodeid, const uint256& hash, const Consensus::Params& consensusParams, const CBlockIndex *pindex = NULL) {
     AssertLockHeld(cs_main);
@@ -7107,8 +7141,7 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
     }
 
     else if (strCommand == "notfound") {
-        // We do not care about the NOTFOUND message, but logging an Unknown Command
-        // message would be undesirable as we transmit it ourselves.
+        return ProcessNotFound(*pfrom, vRecv);
     }
 
     else {

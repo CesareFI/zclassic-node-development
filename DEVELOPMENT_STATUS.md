@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-13 22:00 UTC. Read before starting a new task.
+Updated: 2026-09-13 22:13 UTC. Read before starting a new task.
 
 ## Objective and constraints
 
@@ -13,7 +13,8 @@ changes, or sub-agents. The current user requests continuous autonomous work.
 ## Branch and latest validated work
 
 - Branch: `fix/og-node-sync-20260913`.
-- Latest committed unit: `549a2f43a`, bounded sparse address selection.
+- Latest committed unit: `8edfb0afd`, address count locking.
+- `549a2f43a`: bounded sparse address selection.
 - `55cf564aa`: preferred outbound header discovery.
 - `dc4beef1d`: malformed address-manager parser recovery.
 - `c214ec7de`: complete address-manager cleanup.
@@ -242,3 +243,50 @@ so a peer explicitly unable to serve an assigned block retains all requests unti
 the deadline. New unit cases exercise immediate release/takeover, cross-peer
 ownership protection, and malformed/oversized/truncated notfound messages.
 Baseline build/test is in progress; src/main.cpp is still unchanged for this.
+
+
+## Negative block response recovery in progress, 22:08 UTC
+
+notfound baseline reproduced: three assertions fail in two of21 block-download
+cases (exit201), mission/notfound-before-suite.log. First combined case filter
+matched no tests (exit200), preserved asnotfound-before.log; whole-suite rerun
+is the real baseline. Actual daemon reproduction failed B never received
+requests, with A128/B0, both outbound preferred; A had129 known headers, B-1.
+Normal stop0, nopeererrors: mission/notfound-wire-before/result.json.
+
+Candidate ProcessNotFound streams at mostMAX_INV_SZ inventory entries, fully
+decodes before changing state, checks block hash AND owning peer, then disconnects
+an explicitly unavailable source and immediately releases requests/sync roles.
+No misbehavior/ban for a valid negative response. Truncated lists leave ownership
+intact; oversize counts fail before allocation. cs_main protects ownership and
+Misbehaving calls. Tests cover immediate quiet-preferred B discovery/takeover,
+late responses/finalization, unrelated tx/block hashes, forged peer responses,
+and oversized/truncated lists. No consensus edits.
+
+Normal final unit build41959 complete; 43-case suites running (inspect tool outputs).
+Normal daemon build and ASan final unit build37907 running. Files/logs use
+mission/notfound-{final-build,final-asan-build,unit-after,daemon-build}.log.
+Need unit/sanitizer results, build ASan daemon, real normal+ASan notfound-recovery
+runs with fresh outputs/ports, then review/commit. Tests add --notfound-recovery
+to og-download-stall.py; A sends one missing-block response only after quiet B
+handshakes. Healthy height129 and immediate disconnection required. Production
+has remained untouched throughout this resumed work.
+
+
+## notfound recovery validated, 22:13 UTC
+
+All43 selected normal tests PASS49.375s and ASan/UBSan/leak PASS (see precise
+duration in mission/notfound-asan-after.log). Actual normal and ASan daemons
+PASS after eight inbound reconnect/cleanup cycles each, then outbound A128/B0.
+A explicitly reports one missing block; disconnection0.704/0.657s, B discovers
+headers and validates129, finalglobals0, no restart, normal stop0/nopeererrors.
+Evidence mission/notfound-wire-{after,asan}/result.json. Valid notfound does
+not add misbehavior or ban; malformed lists have bounded transactional parsing.
+Candidate validated and ready for separate commit. Source service executable
+still bc161f53... and live PID503646 uses its original deleted inode; no restart.
+
+Next security review: Misbehaving() requires cs_main but malformed headers/inv
+and other handlers call it without the lock. ThreadMessageHandler only holds
+cs_vRecvMsg. Investigate stats/finalization races with a focused TSAN regression,
+and guard score arithmetic against signed wrap. No fix made yet. Older todo
+lists above are historical; this is the current continuation point.
