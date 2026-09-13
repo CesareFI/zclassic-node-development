@@ -59,12 +59,13 @@ def fixture(path=None, checksum="4ae8e7c4a2b2fb5b925ecc18752bf517dad39dd0a965a8c
 
 class Peer(threading.Thread):
     def __init__(self, port, name, blocks, headers, deliver, connection=None,
-                 announce_headers=True):
+                 announce_headers=True, answer_headers=True):
         super().__init__(name=name, daemon=True)
         self.sock = connection or socket.create_connection(("127.0.0.1", port), timeout=5)
         self.sock.settimeout(0.5)
         self.blocks, self.headers, self.deliver = blocks, headers, deliver
         self.announce_headers = announce_headers
+        self.answer_headers = answer_headers
         self.header_heights = {hash256(header): height for height, header in enumerate(headers)}
         self.requested = threading.Event()
         self.handshaken = threading.Event()
@@ -95,6 +96,8 @@ class Peer(threading.Thread):
             if self.announce_headers:
                 self.send_headers()
         elif command == b"getheaders":
+            if not self.answer_headers:
+                return
             count, offset = compact(payload, 4)  # Serialized locator starts with version.
             if count > 101 or len(payload) != offset + 32 * (count + 1):
                 raise ValueError("invalid getheaders locator")
@@ -261,7 +264,10 @@ def main():
                 assert not churned.errors, churned.errors
                 report["churn"].append({"name": name, "requests": len(churned.requests)})
             stalled = Peer(args.port, "A", blocks, headers, False,
-                           listeners[0].accept()[0] if both_outbound else None)
+                           listeners[0].accept()[0] if both_outbound else None,
+                           # Retain A's active header role until notfound, so
+                           # this case isolates negative-response recovery.
+                           answer_headers=not args.notfound_recovery)
             peers.append(stalled)
             stalled.start()
             assert stalled.requested.wait(20), "A never received requests"

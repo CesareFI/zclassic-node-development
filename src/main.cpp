@@ -305,8 +305,10 @@ struct CNodeState {
     uint256 hashLastUnknownBlock;
     //! The last full block we both have.
     const CBlockIndex *pindexLastCommonBlock;
-    //! Whether we've started headers synchronization with this peer.
+    //! Whether this peer currently holds a header-sync role.
     bool fSyncStarted;
+    //! Initial header discovery finished; do not repeat it on this connection.
+    bool fSyncCompleted;
     //! Since when we're stalling block download progress (in microseconds), or 0.
     int64_t nStallingSince;
     list<QueuedBlock> vBlocksInFlight;
@@ -327,6 +329,7 @@ struct CNodeState {
         hashLastUnknownBlock.SetNull();
         pindexLastCommonBlock = NULL;
         fSyncStarted = false;
+        fSyncCompleted = false;
         nStallingSince = 0;
         nBlocksInFlight = 0;
         nBlocksInFlightValidHeaders = 0;
@@ -365,6 +368,8 @@ void UpdatePreferredDownload(CNode* node, CNodeState* state)
 bool CanStartHeaderSync(const CNodeState& state, bool fFetch)
 {
     AssertLockHeld(cs_main);
+    if (state.fSyncStarted || state.fSyncCompleted)
+        return false;
     if (pindexBestHeader->GetBlockTime() > GetAdjustedTime() - 24 * 60 * 60)
         return true;
     if (!fFetch)
@@ -381,6 +386,17 @@ bool CanStartHeaderSync(const CNodeState& state, bool fFetch)
         [](const std::pair<const NodeId, CNodeState>& entry) {
             return entry.second.fSyncStarted && entry.second.fPreferredDownload;
         });
+}
+
+void CompleteHeaderSync(CNodeState& state)
+{
+    AssertLockHeld(cs_main);
+    if (!state.fSyncStarted)
+        return;
+    assert(nSyncStarted > 0);
+    --nSyncStarted;
+    state.fSyncStarted = false;
+    state.fSyncCompleted = true;
 }
 
 // Returns time at which to timeout block request (nTime in microseconds)
@@ -6853,7 +6869,9 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
         LOCK(cs_main);
 
         if (nCount == 0) {
-            // Nothing interesting. Stop asking this peers for more headers.
+            // This peer has no more headers. Let another peer discover its
+            // chain without disconnecting this one or cancelling its blocks.
+            CompleteHeaderSync(*State(pfrom->GetId()));
             return true;
         }
 
@@ -6883,6 +6901,8 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
             // from there instead.
             LogPrint("net", "more getheaders (%d) to end to peer=%d (startheight:%d)\n", pindexLast->nHeight, pfrom->id, pfrom->nStartingHeight);
             pfrom->PushMessage("getheaders", chainActive.GetLocator(pindexLast), uint256());
+        } else {
+            CompleteHeaderSync(*State(pfrom->GetId()));
         }
 
         CheckBlockIndex();
@@ -7391,7 +7411,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         if (pindexBestHeader == NULL)
             pindexBestHeader = chainActive.Tip();
         bool fFetch = state.fPreferredDownload || (nPreferredDownload == 0 && !pto->fClient && !pto->fOneShot); // Download if this is a nice peer, or we have no nice peers and this one might do.
-        if (!state.fSyncStarted && !pto->fClient && !fImporting && !fReindex) {
+        if (!pto->fClient && !fImporting && !fReindex) {
             // Keep historical header sync bounded, but allow a preferred peer
             // to join an inbound sync that started before it connected.
             if (CanStartHeaderSync(state, fFetch)) {

@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-13 23:02 UTC.
+Updated: 2026-09-13 23:09 UTC.
 
 ## Current mission
 
@@ -16,7 +16,8 @@ reformulation. Current user instruction was read from
 ## Repository and production
 
 - Working directory /opt/zclassic-money, branch fix/og-node-sync-20260913.
-- Latest validated commit 60548418a: immediate owned-notfound response recovery.
+- Latest committed milestone a7f7bd07d: peer download role diagnostics.
+- Prior 60548418a: immediate owned-notfound response recovery.
 - Prior milestones: 8edfb0afd address counts; 549a2f43a sparse selection;
   55cf564aa preferred outbound header discovery;dc4beef1d parser recovery.
 - Running production PID 503646 uses deleted inode SHA256
@@ -75,6 +76,23 @@ snapshot rather than a preceding blockchain RPC call.
   Its source files exactly matched the staged diagnostic snapshot.
 - Evidence: mission/download-diagnostics-*.log.
 
-Next: cover the ordinary header-sync completion gap. A valid empty or short response currently retains
-the preferred header role and can suppress discovery from another peer.
+## Validated header-completion milestone
+
+Three ordinary regressions reproduced a retained header role after valid empty
+or short responses. Completion now frees that role and remembers the initial
+exchange ended, retaining preferred eligibility and outstanding block ownership.
+
+- Eight selected ordinary cases pass: 5,162 assertions, normal 12.132 seconds,
+  ASan/UBSan/leak 25.275 seconds. No excluded security sequence was run.
+- New og-header-discovery.py: normal empty/short responses and instrumented short
+  response all pass. A holds 128 / B receives block 129 in the short case;
+  ordinary A disconnect releases work and B validates all 129. Exit 0, no errors.
+- Existing valid-notfound wire recovery passes after two reconnects. Its fixture
+  leaves A's getheaders unanswered to isolate negative-response role cleanup.
+- Normal and ASan candidates both built as zclassicd-mission in their own trees.
+- Evidence: mission/header-completion-*.
+
+Next: investigate unanswered initial header requests with no outstanding blocks.
+They currently have no response-specific timeout. Use ordinary state-machine
+fixtures and mock time; preserve validation and avoid peer-name discrimination.
 Do not resume the stashed sequence or repeat completed security campaigns.

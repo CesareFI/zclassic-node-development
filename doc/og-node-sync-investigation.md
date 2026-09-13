@@ -819,3 +819,31 @@ request counters cleared, and both daemons stopped normally without restart or
 peer/sanitizer errors. Run qa/rpc-tests/og-download-stall.py --notfound-recovery
 for this case. Evidence is under mission/notfound-*. Consensus validation and
 production remain unchanged.
+
+## Header-discovery completion
+
+A successful short or empty headers response previously retained the active
+header-sync role. Another preferred outbound therefore received no initial
+getheaders request, even though the first peer had finished that exchange.
+Three ordinary baseline regressions reproduce this for empty responses, short
+responses with 128 outstanding blocks, and inbound-only fallback.
+
+Completion now releases the header role under cs_main and remembers that initial
+discovery has finished on that connection. Block assignments and preferred
+download eligibility remain intact. Repeated responses and scheduler visits do
+not restart the initial query or decrement another peer's role. Full header
+batches still request continuation, and every header/block uses normal validation.
+
+Eight selected ordinary C++ cases pass all 5,162 assertions normally (12.132s)
+and under ASan/UBSan/leak checking (25.275s). The new
+qa/rpc-tests/og-header-discovery.py passes both --response empty and --response
+short against a normal daemon; the short case also passes an instrumented daemon.
+Each validates fixture height 129, clears all request/header-role counters, and
+stops with exit zero and no peer or sanitizer findings. The short case observes
+A holding 128 blocks while B receives block 129, then closes A and verifies B's
+immediate takeover. The explicit-notfound wire regression also passes after two
+reconnects; its A fixture now deliberately leaves getheaders unanswered so that
+test continues to isolate notfound recovery. Evidence: mission/header-completion-*.
+
+An unanswered initial header request is a separate remaining availability gap:
+there is no response-specific timeout when that peer holds no block requests.
