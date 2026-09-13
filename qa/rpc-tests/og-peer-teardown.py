@@ -21,14 +21,19 @@ SPEC.loader.exec_module(WIRE)
 
 
 class TeardownSocket:
-    """Accept reset as closure only after the test requested RPC disconnect."""
+    """Accept reset only after a deliberately provoked disconnect."""
     def __init__(self, sock):
         self.sock = sock
         self.expect_reset = False
         self.reset_received = False
+        self.send_lock = threading.Lock()
 
     def __getattr__(self, name):
         return getattr(self.sock, name)
+
+    def sendall(self, data):
+        with self.send_lock:
+            self.sock.sendall(data)
 
     def recv(self, size):
         try:
@@ -104,12 +109,22 @@ def teardown_round(rpc, args, index, blocks, headers, peers):
     state = rpc("getblockchaininfo")["blockdownload"]
     assert state["blocks_in_flight"] == 128, state
     assert state["validated_blocks_in_flight"] == 128, state
-    mode = ("fin", "reset", "rpc")[index % 3]
+    modes = ("fin", "reset", "rpc", "badmagic", "oversize") if args.malformed else ("fin", "reset", "rpc")
+    mode = modes[index % len(modes)]
     start = time.monotonic()
     if mode == "rpc":
         peer.sock.expect_reset = True
         rpc("disconnectnode", current[0]["addr"])
         assert peer.disconnected.wait(20), "RPC disconnect left socket connected"
+    elif mode in ("badmagic", "oversize"):
+        peer.sock.expect_reset = True
+        magic = bytes([WIRE.MAGIC[0] ^ 1]) + WIRE.MAGIC[1:] if mode == "badmagic" else WIRE.MAGIC
+        # Only the 24-byte header is sent. The oversized declaration must not
+        # allocate its claimed payload; bad magic reaches the message thread.
+        size = 0 if mode == "badmagic" else 2 * 1024 * 1024 + 1
+        peer.sock.sendall(magic + b"ping".ljust(12, b"\0") +
+                          struct.pack("<I", size) + WIRE.hash256(b"")[:4])
+        assert peer.disconnected.wait(20), "malformed frame left socket connected"
     elif mode == "reset":
         peer.sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
     peer.finish()
@@ -118,7 +133,7 @@ def teardown_round(rpc, args, index, blocks, headers, peers):
     empty = wait_until(lambda: check_empty(rpc))
     return {"index": index, "mode": mode, "inbound": current[0]["inbound"],
             "requests": len(peer.requests), "release_seconds": time.monotonic() - start,
-            "rpc_close_was_reset": peer.sock.reset_received,
+            "remote_close_was_reset": peer.sock.reset_received,
             "after": empty}
 
 
@@ -128,11 +143,15 @@ def main():
     parser.add_argument("--daemon", type=pathlib.Path, default=WIRE.ROOT / "src/zclassicd")
     parser.add_argument("--cli", type=pathlib.Path, default=WIRE.ROOT / "src/zclassic-cli")
     parser.add_argument("--rounds", type=int, default=48)
+    parser.add_argument("--malformed", action="store_true",
+                        help="Also provoke message-thread and oversized-frame disconnects")
     parser.add_argument("--rpcport", type=int, default=18723)
     parser.add_argument("--port", type=int, default=18733)
     args = parser.parse_args()
     if not 6 <= args.rounds <= 600:
         parser.error("--rounds must be between 6 and 600")
+    if args.malformed and args.rounds < 10:
+        parser.error("--malformed needs at least 10 rounds to cover both directions")
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     datadir = output / "datadir"
@@ -175,6 +194,12 @@ def main():
             for index in range(args.rounds):
                 report["rounds"].append(teardown_round(rpc, args, index, blocks, headers, peers))
                 assert not observer.errors, observer.errors
+            if args.malformed:
+                daemon_log = (output / "daemon.log").read_text()
+                for mode, marker in (("badmagic", "PROCESSMESSAGE: INVALID MESSAGESTART"),
+                                     ("oversize", "Oversized message from peer=")):
+                    expected = sum(row["mode"] == mode for row in report["rounds"])
+                    assert daemon_log.count(marker) == expected, (mode, expected)
             healthy = connected_peer(rpc, args.port, args.rounds, blocks, headers, True)
             peers.append(healthy)
             healthy.start()

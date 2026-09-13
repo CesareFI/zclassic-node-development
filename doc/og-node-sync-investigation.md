@@ -545,3 +545,27 @@ cycles with 4,512 calls; both recovered to 129 and exited normally. The 37
 relevant unit cases also passed normally and under ASan/UBSan with leak checking.
 Evidence: `mission/wire-teardown-getinfo-{normal,asan}`,
 `mission/getinfo-unit-tests.log`, and `mission/asan-framed-fuzz.log`.
+
+
+The socket teardown harness now has `--malformed` coverage: a complete frame
+with incorrect network magic triggers the message-handler disconnect, and a
+24-byte header declaring 2 MiB + 1 byte triggers the receive-path protocol bound.
+It sends no oversized payload and checks the corresponding log counts. With
+both modes included in each connection direction, 50 normal cycles and 100
+ASan/UBSan cycles passed, with 1,308 and 3,544 concurrent RPC calls respectively.
+Both recovered to height 129 and stopped normally. Evidence:
+`mission/wire-malformed-teardown-normal-size` and
+`mission/wire-malformed-teardown-asan`.
+
+The initial size declaration of 0xffffffff was safely rejected by the earlier
+`MAX_SIZE` check, so the test's intended log assertion failed despite correct
+cleanup. The corrected fixture targets the protocol bound specifically; the
+initial result remains in `mission/wire-malformed-teardown-normal`.
+
+ThreadSanitizer adds different coverage: the first instrumented run reported an
+actual race between `ThreadSocketHandler` updating `nLastRecv` and `copyStats`
+reading it for `getpeerinfo`. Its first-failure report is preserved in
+`mission/wire-malformed-teardown-tsan`. This is separate from the original
+in-flight accounting root cause, and the passing ASan runs do not disprove it.
+The follow-up race fix is under validation; these results do not establish that
+the networking code is free of races.
