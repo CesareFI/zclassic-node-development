@@ -76,6 +76,7 @@
 #endif
 
 #include <fstream>
+#include <limits>
 #include <thread>
 #include <chrono>
 #include "librustzcash.h"
@@ -1498,6 +1499,27 @@ bool AppInitServers(boost::thread_group& threadGroup)
     return true;
 }
 
+static bool InitPruneMode()
+{
+    const int64_t mebibyte = 1024 * 1024;
+    const int64_t requestedMiB = GetArg("-prune", 0);
+    if (requestedMiB < 0)
+        return InitError(_("Prune cannot be configured with a negative value."));
+    // Validate before multiplying: wrapping a large budget can enable pruning
+    // at a much smaller target than the operator requested.
+    const int64_t maximumMiB = std::numeric_limits<int64_t>::max() / mebibyte;
+    if (requestedMiB > maximumMiB)
+        return InitError(strprintf(_("Prune configured above the maximum of %d MB. Please use a lower number."), maximumMiB));
+    const uint64_t target = static_cast<uint64_t>(requestedMiB * mebibyte);
+    if (target && target < MIN_DISK_SPACE_FOR_BLOCK_FILES)
+        return InitError(strprintf(_("Prune configured below the minimum of %d MB.  Please use a higher number."), MIN_DISK_SPACE_FOR_BLOCK_FILES / mebibyte));
+    nPruneTarget = target;
+    fPruneMode = target != 0;
+    if (fPruneMode)
+        LogPrintf("Prune configured to target %uMiB on disk for block and undo files.\n", nPruneTarget / mebibyte);
+    return true;
+}
+
 /** Initialize bitcoin.
  *  @pre Parameters should be parsed and config file should be read.
  */
@@ -1740,19 +1762,8 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
 
     fServer = GetBoolArg("-server", false);
 
-    // block pruning; get the amount of disk space (in MB) to allot for block & undo files
-    int64_t nSignedPruneTarget = GetArg("-prune", 0) * 1024 * 1024;
-    if (nSignedPruneTarget < 0) {
-        return InitError(_("Prune cannot be configured with a negative value."));
-    }
-    nPruneTarget = (uint64_t) nSignedPruneTarget;
-    if (nPruneTarget) {
-        if (nPruneTarget < MIN_DISK_SPACE_FOR_BLOCK_FILES) {
-            return InitError(strprintf(_("Prune configured below the minimum of %d MB.  Please use a higher number."), MIN_DISK_SPACE_FOR_BLOCK_FILES / 1024 / 1024));
-        }
-        LogPrintf("Prune configured to target %uMiB on disk for block and undo files.\n", nPruneTarget / 1024 / 1024);
-        fPruneMode = true;
-    }
+    if (!InitPruneMode())
+        return false;
 
     RegisterAllCoreRPCCommands(tableRPC);
 #ifdef ENABLE_WALLET

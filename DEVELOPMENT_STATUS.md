@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-14 02:22 UTC.
+Updated: 2026-09-14 02:30 UTC.
 
 ## Current mission
 
@@ -16,7 +16,8 @@ reformulation. Current user instruction was read from
 ## Repository and production
 
 - Working directory /opt/zclassic-money, branch fix/og-node-sync-20260913.
-- Latest committed milestone a3e91ee5d: scheduler deadline ownership.
+- Latest committed milestone f5ef27a3c: seed queue permit ownership.
+- Prior a3e91ee5d: scheduler deadline ownership.
 - Prior 8a11ae4eb: VerifyDB reconnect cancellation.
 - Prior c32d3ba5d: join workers after startup failure.
 - Prior 2e921face: PID-file ownership.
@@ -394,3 +395,30 @@ Next: review remaining local resource-budget conversions. Some startup options
 still narrow or multiply their signed input before validating it; use ordinary
 configuration/unit tests in new datadirs for any concrete bug. Preserve consensus,
 all successful synchronization evidence and the separate historical diagnosis.
+
+
+## Validated pruning-budget validation
+
+Pruning multiplied signed MiB input before checking it. The isolated startup
+matrix reproduces five bad boundary outcomes: a huge positive and a negative
+value wrap to an accepted 550 MiB target; other limits are disabled or report the
+wrong error after wrapping. Five ordinary controls pass. All cases deliberately
+stop on -onlynet=invalid before opening any block database; no pruning is done.
+
+- New qa/rpc-tests/prune-budget.py, ten cases. Its first attempt was stopped early
+  by auto-generated txindex=1 in the fresh configuration. The isolated matrix now
+  passes -txindex=0 explicitly. Preserve both baseline logs/directories.
+- init.cpp now isolates InitPruneMode and validates negative, maximum signed-byte
+  capacity, and minimum target before committing its state. Multiplication is
+  then bounded. Valid budgets and zero remain unchanged; overflow is rejected.
+- Normal and ASan/UBSan zclassicd-prune candidates build successfully.
+  Both final ten-case matrices pass with leak checking and no sanitizer findings;
+  every case confirms its temporary block database was never opened.
+  Evidence: mission/prune-budget-{after,asan-after}/ and corresponding logs.
+  No root service executable is overwritten.
+- Baseline: mission/prune-budget-before-isolated/ (5/10 pass, all block DBs unopened).
+  Builds: mission/prune-daemon-{build,asan-build}.log. All work for this milestone
+  completed before commit; normal and instrumented init.cpp compare equal.
+- Separate static review finding: first config read catches any std::exception
+  and opens the existing config for replacement. Investigate ordinary local
+  config-error handling without touching production settings or authentication.
