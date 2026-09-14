@@ -493,12 +493,10 @@ bool MarkBlockAsReceived(const uint256& hash) {
     return false;
 }
 
-// Release requests and download roles together, before the last CNode reference
-// disappears. FinalizeNode may call this again after a timeout: it is idempotent.
-void StopBlockDownload(CNodeState& state)
+// Cancel owned requests without changing this peer's download eligibility.
+void ReleaseBlockRequests(CNodeState& state)
 {
     AssertLockHeld(cs_main);
-    state.fDownloadStopped = true;
     while (!state.vBlocksInFlight.empty()) {
         const uint256 hash = state.vBlocksInFlight.front().hash;
         const bool removed = MarkBlockAsReceived(hash);
@@ -506,10 +504,19 @@ void StopBlockDownload(CNodeState& state)
     }
     assert(state.nBlocksInFlight == 0);
     assert(state.nBlocksInFlightValidHeaders == 0);
+    state.nStallingSince = 0;
+}
+
+// Release requests and download roles together, before the last CNode reference
+// disappears. FinalizeNode may call this again after a timeout: it is idempotent.
+void StopBlockDownload(CNodeState& state)
+{
+    AssertLockHeld(cs_main);
+    state.fDownloadStopped = true;
+    ReleaseBlockRequests(state);
     nPreferredDownload -= state.fPreferredDownload;
     state.fPreferredDownload = false;
     StopHeaderSync(state);
-    state.nStallingSince = 0;
 }
 
 bool ProcessNotFound(CNode& peer, CDataStream& payload)
@@ -7464,10 +7471,13 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         BOOST_FOREACH(const CBlockReject& reject, state.rejects)
             pto->PushMessage("reject", (string)"block", static_cast<unsigned char>(reject.chRejectCode), reject.strRejectReason, reject.hashBlock);
         state.rejects.clear();
-        if (fImporting || fReindex) {
-            // Header replies are ignored during local import. Retry the active
-            // exchange after import rather than timing out an ignored reply.
+        const bool fBlockDownloadPaused = fImporting || fReindex;
+        if (fBlockDownloadPaused) {
+            // Header and block replies are ignored during local import. Release
+            // requests and retry after import, retaining this peer's eligibility
+            // instead of timing out replies we chose not to process.
             StopHeaderSync(state);
+            ReleaseBlockRequests(state);
         } else if (state.nHeaderSyncDeadline && GetTimeMicros() > state.nHeaderSyncDeadline) {
             LogPrint("net", "Timeout waiting for header progress from peer=%d, disconnecting\n", pto->id);
             pto->fDisconnect = true;
@@ -7482,7 +7492,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             pindexBestHeader = chainActive.Tip();
         const bool fFetch = state.fPreferredDownload ||
             (!pto->fClient && !pto->fOneShot && !HasPreferredDownloadSource());
-        if (!pto->fClient && !fImporting && !fReindex) {
+        if (!pto->fClient && !fBlockDownloadPaused) {
             // Keep historical header sync bounded, but allow a preferred peer
             // to join an inbound sync that started before it connected.
             if (CanStartHeaderSync(state, fFetch)) {
@@ -7591,7 +7601,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         // Message: getdata (blocks)
         //
         vector<CInv> vGetData;
-        if (!pto->fDisconnect && !pto->fClient && (fFetch || !IsInitialBlockDownload()) && state.nBlocksInFlight < nMaxBlocksInTransitPerPeer) {
+        if (!fBlockDownloadPaused && !pto->fDisconnect && !pto->fClient && (fFetch || !IsInitialBlockDownload()) && state.nBlocksInFlight < nMaxBlocksInTransitPerPeer) {
             vector<const CBlockIndex*> vToDownload;
             NodeId staller = -1;
             FindNextBlocksToDownload(pto->GetId(), nMaxBlocksInTransitPerPeer - state.nBlocksInFlight, vToDownload, staller);

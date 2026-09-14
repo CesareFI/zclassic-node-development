@@ -921,3 +921,28 @@ during discovery and while it has known work; disconnect then permits takeover.
 All 18 selected ordinary cases pass 20,067 assertions normally (21.007s) and under
 ASan/UBSan/leak checking (46.137s). Both separate candidate daemons build. Evidence:
 mission/scheduling-{idle,scale}-*. Peer selection semantics and consensus are unchanged.
+
+
+## Local import pauses and request ownership
+
+SendMessages previously continued timing out and requesting blocks during local
+import/reindex even though incoming block replies were ignored. Deterministic
+ordinary-block tests reproduced 129 retained requests, both peers timing out,
+and loss of the preferred peer's ability to resume. Normal and ASAN baselines
+failed the same 16 assertions across import and reindex cases.
+
+Request cancellation now has a separate helper from permanent download shutdown.
+The scheduler releases outstanding work during local import, clears its stall
+clock, retains preferred eligibility, and suppresses new block requests until
+import finishes. Three repeated pauses preserve A and B; visiting inbound A first
+after each pause still lets preferred B acquire the released 128 requests and
+ultimately validate the complete 129-block fixture. Header and consensus
+validation are unchanged.
+
+Seven selected ordinary unit cases pass 4,829 assertions normally and under
+ASAN/UBSAN/leak checking. Normal and instrumented loopback short-header handoff
+controls also pass: A disconnects with 128 requests, B validates through 129,
+accounting clears, and shutdown exits zero without peer or sanitizer findings.
+Evidence: mission/import-pause-*. This milestone covers scheduler-observed pauses;
+short intervals between visits and publication of cross-thread import flags
+remain the next lifecycle review. Production was not restarted or modified.

@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-14 06:08 UTC.
+Updated: 2026-09-14 06:11 UTC.
 
 ## Current mission
 
@@ -16,7 +16,8 @@ reformulation. Current user instruction was read from
 ## Repository and production
 
 - Working directory /opt/zclassic-money, branch fix/og-node-sync-20260913.
-- Latest committed milestone 61231d83b: HTTP worker handle ownership.
+- Latest committed milestone 6271d5701: HTTP resource budget validation.
+- Prior 61231d83b: HTTP worker handle ownership.
 - Prior 7c9c6bdc1: HTTP work-queue interruption.
 - Prior e891a2958: script-thread budget conversion.
 - Prior c943c90f1: first-run pruning defaults.
@@ -630,10 +631,36 @@ Normal and sanitizer ordinary RPC startup/request/stop controls also pass with
 exit zero and no sanitizer findings; evidence is under
 mission/http-budgets-rpc-{after,asan-after}/. Production remains untouched.
 
-## Next download lifecycle task
+## Import/download scheduler pause handling
 
-Review found block replies ignored during local import/reindex while SendMessages
-still applies block timeouts and schedules new requests. Reproduce with ordinary
-valid-block in-memory transport fixtures before changing scheduling. Preserve
-preferred eligibility across a local pause; do not disconnect healthy peers for
-replies this node chose to ignore. No new download source changes yet.
+The normal and ASAN baselines reproduced both import and reindex failure paths:
+129 owned requests remain while ordinary replies are ignored, then both peers
+time out, preferred eligibility is lost, and the preferred peer cannot resume.
+Each baseline fails 16 assertions across two deterministic cases. Evidence:
+mission/import-pause-{before,asan-before}.log. No production or socket fixture
+was involved; these are ordinary valid-block in-memory transport tests.
+
+main.cpp now separates ReleaseBlockRequests from terminal StopBlockDownload.
+SendMessages releases requests and active header sync while local import/reindex
+is paused, preserves preferred eligibility, and suppresses new block downloads.
+The new test repeats three pauses, visits the inbound peer first on resume, and
+requires the preferred peer to acquire 128 requests immediately and then validate
+the complete 129-block fixture. Both normal and ASAN/UBSAN/leak builds pass seven
+selected ordinary download cases and 4,829 assertions, including RPC accounting,
+timeout/reconnect takeover, header completion and teardown controls. Evidence:
+mission/import-pause-{after,asan-after}.log.
+
+Both normal and sanitizer loopback short-header fixtures also pass: A owns 128 requests, its
+ordinary disconnect releases them, B delivers/validates all 129 blocks, all
+accounting clears, both peers report no errors, and RPC shutdown exits zero.
+Evidence: mission/import-pause-wire-{after,asan-after}/. No sanitizer findings.
+
+Scope: pause handling is observed in the peer scheduler. Follow up on short import
+intervals that may start/end between scheduler visits, and on publication of the
+existing cross-thread import flags. Do not conflate that review with completed
+coverage. No consensus or validation rules changed.
+
+Production PID 503646 and its executable inode were verified unchanged again at
+06:06 UTC: running SHA 6c4a80ec792c894aa1be9d27332f7d05e857e36408485e3b651fe114f3be14ad;
+on-disk src/zclassicd SHA bc161f5339039ca1bacd1653dd45c2b42f409c4982b029609e8316869cca3c4f.
+No restart, deployment or production datadir changes were performed.

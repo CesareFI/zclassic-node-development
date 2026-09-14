@@ -505,6 +505,77 @@ BOOST_AUTO_TEST_CASE(advancing_header_batches_keep_slow_discovery_alive)
     BOOST_CHECK_EQUAL(Stats(peer).nHeaderSyncDeadline, 0);
 }
 
+namespace {
+struct ImportGuard {
+    bool& flag;
+    const bool previous;
+    explicit ImportGuard(bool& value) : flag(value), previous(value) { flag = true; }
+    ~ImportGuard() { flag = previous; }
+};
+}
+
+BOOST_DATA_TEST_CASE(local_import_releases_block_requests_and_resumes,
+                    boost::unit_test::data::make({false, true}), reindex)
+{
+    CNode inbound(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "A", true);
+    Handshake(inbound);
+    Headers(inbound);
+    BOOST_REQUIRE(SendMessages(&inbound, false));
+    BOOST_REQUIRE_EQUAL(Stats(inbound).nBlocksInFlight, 128);
+
+    CNode preferred(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "B", false);
+    Handshake(preferred);
+    Headers(preferred);
+    BOOST_REQUIRE(SendMessages(&preferred, false));
+    BOOST_REQUIRE_EQUAL(Stats(preferred).nBlocksInFlight, 1);
+
+    for (unsigned round = 0; round < 3; ++round) {
+        const auto inboundRequests = Sent(inbound, "getdata");
+        const auto preferredRequests = Sent(preferred, "getdata");
+        const int64_t deadline = std::max(Stats(inbound).nDownloadDeadline,
+                                         Stats(preferred).nDownloadDeadline);
+        {
+            ImportGuard guard(reindex ? fReindex : fImporting);
+            // Ordinary requested blocks are ignored while the local importer
+            // owns validation. That must not count as these peers stalling.
+            Deliver(round == 0 ? inbound : preferred, 1);
+            BOOST_REQUIRE_EQUAL(chainActive.Height(), 0);
+            BOOST_REQUIRE(SendMessages(&inbound, false));
+            BOOST_REQUIRE(SendMessages(&preferred, false));
+            BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
+            BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 0);
+            SetMockTimeMicros(deadline + 1);
+            BOOST_REQUIRE(SendMessages(&inbound, false));
+            BOOST_REQUIRE(SendMessages(&preferred, false));
+            BOOST_CHECK_EQUAL(Sent(inbound, "getdata"), inboundRequests);
+            BOOST_CHECK_EQUAL(Sent(preferred, "getdata"), preferredRequests);
+            for (CNode* peer : {&inbound, &preferred}) {
+                const auto stats = Stats(*peer);
+                BOOST_CHECK(!peer->fDisconnect);
+                BOOST_CHECK(!stats.fBlockDownloadStopped);
+                BOOST_CHECK_EQUAL(stats.nDownloadDeadline, 0);
+                BOOST_CHECK_EQUAL(stats.nStallingSince, 0);
+                BOOST_CHECK_EQUAL(stats.nMisbehavior, 0);
+            }
+            BOOST_CHECK(Stats(preferred).fPreferredDownload);
+        }
+        // Visit the inbound first: the preferred peer must retain priority
+        // and acquire the released work immediately when local import ends.
+        BOOST_REQUIRE(SendMessages(&inbound, false));
+        BOOST_CHECK_EQUAL(Stats(inbound).nBlocksInFlight, 0);
+        BOOST_REQUIRE(SendMessages(&preferred, false));
+        BOOST_REQUIRE_EQUAL(Stats(preferred).nBlocksInFlight, 128);
+        BOOST_CHECK_GT(Stats(preferred).nDownloadDeadline, GetTimeMicros());
+    }
+    for (size_t height = 1; height <= 128; ++height) Deliver(preferred, height);
+    BOOST_REQUIRE(SendMessages(&preferred, false));
+    Deliver(preferred, 129);
+    BOOST_CHECK_EQUAL(chainActive.Height(), 129);
+    BOOST_CHECK(chainActive.Tip()->GetBlockHash() == blocks.back().GetHash());
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 0);
+}
+
 BOOST_AUTO_TEST_CASE(local_import_retries_headers_without_timing_out_ignored_replies)
 {
     for (bool* importing : {&fImporting, &fReindex}) {
@@ -513,12 +584,7 @@ BOOST_AUTO_TEST_CASE(local_import_retries_headers_without_timing_out_ignored_rep
         BOOST_REQUIRE(SendMessages(&peer, false));
         const int64_t deadline = Stats(peer).nHeaderSyncDeadline;
         {
-            struct ImportGuard {
-                bool& flag;
-                const bool previous;
-                explicit ImportGuard(bool& value) : flag(value), previous(value) { flag = true; }
-                ~ImportGuard() { flag = previous; }
-            } guard(*importing);
+            ImportGuard guard(*importing);
             SetMockTimeMicros(deadline + 1);
             Headers(peer, 0); // Normal reply is ignored during local import.
             BOOST_REQUIRE(SendMessages(&peer, false));
