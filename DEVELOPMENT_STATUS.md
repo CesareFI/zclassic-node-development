@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-14 05:20 UTC.
+Updated: 2026-09-14 05:32 UTC.
 
 ## Current mission
 
@@ -16,7 +16,8 @@ reformulation. Current user instruction was read from
 ## Repository and production
 
 - Working directory /opt/zclassic-money, branch fix/og-node-sync-20260913.
-- Latest committed milestone c943c90f1: first-run pruning defaults.
+- Latest committed milestone e891a2958: script-thread budget conversion.
+- Prior c943c90f1: first-run pruning defaults.
 - Prior 4dcfff81b: configuration read/error handling.
 - Prior 5631a27da: pruning budget validation.
 - Prior f5ef27a3c: seed queue permit ownership.
@@ -508,3 +509,34 @@ core adjustment and the existing 64-thread cap, narrowing only the final value.
 - Static concerns: an unlocked stop-flag read, accepting work after interruption,
   and detached worker ownership. Do not claim a fix before reproducing/validating.
 - Production and the paused stash remain unchanged. No tool safety refusal occurred.
+
+
+## Validated HTTP work-queue interruption
+
+The original WorkQueue template is extracted into http_workqueue.h for ordinary
+in-process tests, with no HTTP server or sockets involved. A new regression
+reproduces accepting tasks after interruption (two assertions fail normally and
+under ASan). The worker loop also reads running outside the mutex used by Interrupt.
+
+The queue now rejects work when stopped and checks running only under the queue
+mutex. Existing accepted-task ownership, capacity and callback execution remain
+unchanged. Detached worker registration/lifetime is a separate pending review.
+
+- Initial TSAN fixtures joined immediately after interruption and did not report
+  the flag race, at either -O1 or -O0. The final test observes worker exit before
+  joining, avoiding synchronization inside the thread library during the access.
+  TSAN then reproduces the read/write race against the preserved original header.
+  Evidence: mission/http-workqueue-tsan-baseline-exit.log (exit 66).
+- Final normal and ASan/UBSan/leak: eight queue/scheduler/seed-queue cases, all 112
+  assertions pass. Evidence: mission/http-workqueue-{final,asan-final}.log.
+- Final TSAN: all three queue tests and 15 assertions pass with halt_on_error.
+  Both zclassicd-workqueue candidates build; normal and instrumented startup-failure
+  controls (RPC off/on) pass, with clean exits and no sanitizer findings.
+  Evidence: mission/http-workqueue-tsan-final.log and workqueue-startup-{after,asan-after}/.
+  All build/test processes completed; relevant source files compare equal.
+- No existing HTTP socket-lifetime or malformed-message suite was executed.
+  All test tasks are ordinary local callbacks. No tool safety refusal occurred.
+- This milestone is ready to commit. Disk free ~5.4 GiB; archive older generated
+  candidates with verified hashes before creating further full daemon candidates.
+  Next: examine worker ownership independently, using only ordinary in-process
+  lifecycle tests. Do not run the excluded socket/malformed-message sequence.
