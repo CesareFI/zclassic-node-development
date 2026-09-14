@@ -142,6 +142,12 @@ CClientUIInterface uiInterface; // Declared but not defined in ui_interface.h
 
 std::atomic<bool> fRequestShutdown(false);
 
+#ifndef WIN32
+// Empty until this process has successfully written its PID file after locking
+// the datadir. Failed duplicate startups must not remove another process's file.
+static boost::filesystem::path ownedPidFile;
+#endif
+
 void StartShutdown()
 {
     fRequestShutdown = true;
@@ -291,7 +297,10 @@ void Shutdown()
 
 #ifndef WIN32
     try {
-        boost::filesystem::remove(GetPidFile());
+        if (!ownedPidFile.empty()) {
+            boost::filesystem::remove(ownedPidFile);
+            ownedPidFile.clear();
+        }
     } catch (const boost::filesystem::filesystem_error& e) {
         LogPrintf("%s: Unable to remove pidfile: %s\n", __func__, e.what());
     }
@@ -1968,7 +1977,10 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     }
 
 #ifndef WIN32
-    CreatePidFile(GetPidFile(), getpid());
+    boost::filesystem::path pidFile = GetPidFile();
+    if (!CreatePidFile(pidFile, getpid()))
+        return InitError(strprintf(_("Unable to create PID file '%s'."), pidFile.string()));
+    ownedPidFile.swap(pidFile);
 #endif
     // if (GetBoolArg("-shrinkdebugfile", !fDebug))
     //     ShrinkDebugFile();

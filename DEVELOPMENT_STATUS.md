@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-14 01:00 UTC.
+Updated: 2026-09-14 01:34 UTC.
 
 ## Current mission
 
@@ -16,7 +16,8 @@ reformulation. Current user instruction was read from
 ## Repository and production
 
 - Working directory /opt/zclassic-money, branch fix/og-node-sync-20260913.
-- Latest validated milestone: completed-startup shutdown path (this snapshot).
+- Latest validated milestone: PID-file ownership (this snapshot).
+- Prior 01a79bb9e: completed-startup shutdown path.
 - Prior a0f62634d: connection-budget conversion.
 - Prior 073d1e5be: cache-budget conversion.
 - Prior e614b767b: bounded preferred-source scan.
@@ -240,3 +241,53 @@ fixture in fresh temporary datadirs. Verify persisted tip/chainstate and gracefu
 worker cleanup through interrupted startup. No lifecycle test currently running;
 all checks above completed before this milestone.
 Do not duplicate completed security/scheduling campaigns or resume the stash.
+
+## Validated PID-file ownership
+
+A failed duplicate startup removed the active node's PID file despite failing the
+datadir lock. The normal regression reproduces missing ownership after lock and
+invalid-option failures; the isolated instrumented prototype also reproduces it.
+The primary remains alive and RPC-responsive, and its chain is unchanged.
+
+init.cpp now captures a PID path only after successful creation following the
+datadir lock, and removes only that captured path. CreatePidFile checks write and
+close results, always closes an opened FILE, and returns success/failure. PID-file
+creation failure now produces an initialization error instead of being ignored.
+
+- Normal and ASan/UBSan/leak: 9 init/getarg cases, all 73 assertions pass. Includes
+  successful write, directory and missing-parent errors, and Linux /dev/full for
+  buffered close failure. Unit binaries are test/test_bitcoin-mission.
+- qa/rpc-tests/pidfile.py passes normally and instrumented: two failed duplicates
+  preserve the active PID, the owner removes it on stop, and a PID path naming a
+  temporary directory is rejected without deleting that directory. Primary RPC
+  stays responsive and normal shutdown exits zero; no sanitizer findings.
+- Evidence: mission/pidfile-before/, pidfile-after/, pidfile-asan/, unit/build logs
+  and mission/pidfile-candidates.sha256. Relevant source files compared equal.
+- src/zclassicd-mission and its ASan equivalent contain the PID milestone only.
+  No production changes or excluded security tests were performed.
+
+## Separate pending startup-failure worker join
+
+A copy of the validated 129-block fixture was cancelled during VerifyDB. It exits
+one cleanly but logs late scheduler interruption; restarting the same temporary
+datadir succeeds at the exact height-129 tip with its chainstate preserved.
+Evidence: mission/verify-cancel-baseline/ and duplicate-start-baseline/.
+
+Ordinary -onlynet=invalid with -par=2 starts a script-check worker and scheduler,
+then rejects the local option. Three normal baseline runs abort (SIGABRT) after
+Shutdown: done, with scheduler/mutex destructor assertions. Evidence:
+mission/startup-failure-before/. All processes/datadirs belong to local fixtures.
+
+Uncommitted src/bitcoind.cpp now joins the interrupted main thread group on the
+startup-failure path. New qa/rpc-tests/startup-failure.py checks RPC off/on, two
+repeats each. The formal PID-only baseline has one abort and two late-scheduler
+failures among four cases (mission/startup-failure-matrix-before/). The fixed
+normal matrix passes all four (mission/startup-failure-after/), using separate
+src/zclassicd-failure. All sessions for those normal checks have completed.
+
+PID validation is complete; the PID commit excludes bitcoind.cpp and
+startup-failure.py. ASan bitcoind.cpp is still baseline. Next update stale init
+comments describing skipped joins, copy only changed driver/init source to ASan,
+build the worker-join candidate as zclassicd-failure, and run its four ordinary
+failure cases. Also verify cancellation/restart and a successful RPC-stop control.
+No build/test job is active at this checkpoint. Do not resume the paused sequence.
