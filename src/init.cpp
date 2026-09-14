@@ -133,11 +133,10 @@ CClientUIInterface uiInterface; // Declared but not defined in ui_interface.h
 //
 // AppInit() owns the thread group containing the network, import, and scheduler
 // workers. After successful initialization, WaitForShutdown() waits for
-// StartShutdown() or SIGTERM, then interrupts and joins the group. Shutdown()
-// subsequently releases database connections and stops the remaining services.
-// Initialization that has completed must take this path even when a shutdown
-// request arrives before AppInit2() returns. Partial initialization failures use
-// AppInit()'s separate failure cleanup path.
+// StartShutdown() or SIGTERM. AppInit() interrupts and joins the group before
+// Shutdown() releases database connections and the remaining services, including
+// when initialization fails partway through. A pending stop does not turn
+// completed initialization into a failure.
 //
 
 std::atomic<bool> fRequestShutdown(false);
@@ -238,9 +237,9 @@ void Shutdown()
     UnregisterNodeSignals(GetNodeSignals());
 
     // Stop the trustless-bootstrap background validator BEFORE the chain DBs are
-    // freed below. It is not in the init thread_group, so the init-failure path
-    // (which skips thread_group join) would otherwise let it race into freed
-    // pblocktree/pcoinsTip. No-op when no trustless snapshot is being validated.
+    // freed below. It is outside the init thread_group, so Shutdown must join it
+    // explicitly before releasing pblocktree/pcoinsTip. No-op when no trustless
+    // snapshot is being validated.
     InterruptBootstrapValidation();
 
     // Likewise stop the -bootstrapserve=auto self-snapshot freeze worker before
@@ -3316,10 +3315,10 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     // failure->reindex poll only when a snapshot is pending validation. Started
     // last, after every other fallible init step, so an AppInit2 failure cannot
     // tear down the chain databases out from under a running validation thread
-    // (the startup-failure path interrupts but does not join the thread group).
+    // (this validator is outside the init thread group).
     MaybeStartBootstrapValidation(scheduler);
 
     // Initialization completed. A pending stop (including -stopafterblockimport)
-    // must still join the worker group through AppInit()'s normal shutdown path.
+    // does not turn that successful initialization into an error exit.
     return true;
 }

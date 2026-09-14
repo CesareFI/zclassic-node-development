@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-14 01:34 UTC.
+Updated: 2026-09-14 01:41 UTC.
 
 ## Current mission
 
@@ -16,7 +16,8 @@ reformulation. Current user instruction was read from
 ## Repository and production
 
 - Working directory /opt/zclassic-money, branch fix/og-node-sync-20260913.
-- Latest validated milestone: PID-file ownership (this snapshot).
+- Latest validated milestone: join workers after startup failure (this snapshot).
+- Prior 2e921face: PID-file ownership.
 - Prior 01a79bb9e: completed-startup shutdown path.
 - Prior a0f62634d: connection-budget conversion.
 - Prior 073d1e5be: cache-budget conversion.
@@ -266,28 +267,37 @@ creation failure now produces an initialization error instead of being ignored.
 - src/zclassicd-mission and its ASan equivalent contain the PID milestone only.
   No production changes or excluded security tests were performed.
 
-## Separate pending startup-failure worker join
-
-A copy of the validated 129-block fixture was cancelled during VerifyDB. It exits
-one cleanly but logs late scheduler interruption; restarting the same temporary
-datadir succeeds at the exact height-129 tip with its chainstate preserved.
-Evidence: mission/verify-cancel-baseline/ and duplicate-start-baseline/.
+## Validated startup-failure worker join
 
 Ordinary -onlynet=invalid with -par=2 starts a script-check worker and scheduler,
 then rejects the local option. Three normal baseline runs abort (SIGABRT) after
-Shutdown: done, with scheduler/mutex destructor assertions. Evidence:
-mission/startup-failure-before/. All processes/datadirs belong to local fixtures.
+Shutdown: done, with scheduler/mutex destructor assertions. A formal four-case
+baseline (RPC off/on) has one abort and two late-scheduler failures. AppInit
+interrupted its main thread group but did not join it on initialization failure.
 
-Uncommitted src/bitcoind.cpp now joins the interrupted main thread group on the
-startup-failure path. New qa/rpc-tests/startup-failure.py checks RPC off/on, two
-repeats each. The formal PID-only baseline has one abort and two late-scheduler
-failures among four cases (mission/startup-failure-matrix-before/). The fixed
-normal matrix passes all four (mission/startup-failure-after/), using separate
-src/zclassicd-failure. All sessions for those normal checks have completed.
+AppInit now joins that interrupted group before calling Shutdown. Startup errors
+still exit one; fully initialized stop-after-import exits zero. Comments about
+thread ownership and separately managed bootstrap workers match the final code.
 
-PID validation is complete; the PID commit excludes bitcoind.cpp and
-startup-failure.py. ASan bitcoind.cpp is still baseline. Next update stale init
-comments describing skipped joins, copy only changed driver/init source to ASan,
-build the worker-join candidate as zclassicd-failure, and run its four ordinary
-failure cases. Also verify cancellation/restart and a successful RPC-stop control.
-No build/test job is active at this checkpoint. Do not resume the paused sequence.
+- qa/rpc-tests/startup-failure.py: all four fixed cases pass normally and under
+  ASan/UBSan/leak checking. No abort, hang, late scheduler activity or sanitizer
+  finding, with RPC both enabled and disabled.
+- qa/rpc-tests/startup-cancel.py copies a completed, stopped 129-block test datadir,
+  cancels during VerifyDB, and checks restart. Instrumented baseline fails for
+  late scheduler activity; normal and instrumented fixes pass. Cancellation
+  retains its exit-one status, all workers finish before Shutdown, then restart
+  preserves exact tip 0000d77872aabab70015f08e2d138a35293ad0e5b671a5b6e8cad38c1b63aff4,
+  clears download counters, and RPC stop exits zero. The source datadir is untouched.
+- A normal stop-after-import plus early invalid-option control also passes.
+- Evidence: mission/startup-failure-before/, startup-failure-matrix-before/,
+  startup-failure-{after,asan-after}/, startup-cancel-{after,asan-after,asan-before}/,
+  and startup-failure-stop-control/ with associated logs.
+- Latest normal/instrumented candidates are zclassicd-failure in each build tree.
+  Their driver/init source compared byte-for-byte. Older -mission binaries contain
+  the prior PID milestone. Neither replaces src/zclassicd or the production inode.
+- All build/test processes for this milestone completed. No production service,
+  consensus change, or excluded security sequence was used.
+
+Next: continue ordinary startup/restart and resource-lifecycle review from this
+state. The primary synchronization fixes, historical block-478544 diagnosis, and
+all completed peer/sanitizer evidence remain preserved. Do not resume the stash.
