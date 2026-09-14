@@ -131,22 +131,13 @@ CClientUIInterface uiInterface; // Declared but not defined in ui_interface.h
 //
 // Thread management and startup/shutdown:
 //
-// The network-processing threads are all part of a thread group
-// created by AppInit().
-//
-// A clean exit happens when StartShutdown() or the SIGTERM
-// signal handler sets fRequestShutdown, which triggers
-// the DetectShutdownThread(), which interrupts the main thread group.
-// DetectShutdownThread() then exits, which causes AppInit() to
-// continue (it .joins the shutdown thread).
-// Shutdown() is then
-// called to clean up database connections, and stop other
-// threads that should only be stopped after the main network-processing
-// threads have exited.
-//
-// Note that if running -daemon the parent process returns from AppInit2
-// before adding any threads to the threadGroup, so .join_all() returns
-// immediately and the parent exits from main().
+// AppInit() owns the thread group containing the network, import, and scheduler
+// workers. After successful initialization, WaitForShutdown() waits for
+// StartShutdown() or SIGTERM, then interrupts and joins the group. Shutdown()
+// subsequently releases database connections and stops the remaining services.
+// Initialization that has completed must take this path even when a shutdown
+// request arrives before AppInit2() returns. Partial initialization failures use
+// AppInit()'s separate failure cleanup path.
 //
 
 std::atomic<bool> fRequestShutdown(false);
@@ -3316,5 +3307,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     // (the startup-failure path interrupts but does not join the thread group).
     MaybeStartBootstrapValidation(scheduler);
 
-    return !fRequestShutdown;
+    // Initialization completed. A pending stop (including -stopafterblockimport)
+    // must still join the worker group through AppInit()'s normal shutdown path.
+    return true;
 }

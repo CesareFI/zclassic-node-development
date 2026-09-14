@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-14 00:50 UTC.
+Updated: 2026-09-14 01:00 UTC.
 
 ## Current mission
 
@@ -16,7 +16,9 @@ reformulation. Current user instruction was read from
 ## Repository and production
 
 - Working directory /opt/zclassic-money, branch fix/og-node-sync-20260913.
-- Latest committed milestone 073d1e5be: cache-budget conversion.
+- Latest validated milestone: completed-startup shutdown path (this snapshot).
+- Prior a0f62634d: connection-budget conversion.
+- Prior 073d1e5be: cache-budget conversion.
 - Prior e614b767b: bounded preferred-source scan.
 - Prior 0514633fa: inbound fallback after completed preferred discovery.
 - Prior 865993abf: header-response deadlines; 286036078: header completion.
@@ -190,9 +192,9 @@ existing database module avoids that linkage issue without changing the stubs.
   dbcache-after.log, dbcache-asan-after.log and associated build logs.
 - Production executable/inode hashes rechecked unchanged; no service action.
 
-## Active connection-budget validation
+## Validated connection-budget conversion
 
-Uncommitted init.cpp now clamps the 64-bit connection request to the platform
+init.cpp now clamps the 64-bit connection request to the platform
 limit before narrowing it to int. New qa/rpc-tests/maxconnections.py covers nine
 real startups, fresh regtest datadirs, loopback-only connections, disabled mining
 and wallets, RPC readiness, and normal RPC stop.
@@ -202,21 +204,39 @@ and wallets, RPC readiness, and normal RPC stop.
   Evidence: mission/maxconnections-rpc-before/ and matching .log.
 - Normal fixed matrix: all nine PASS. This host's cap is 873; large positives
   reach that cap, negatives clamp to zero, ordinary settings remain unchanged.
-- ASan candidate built; ASan/UBSan/leak matrix session 93390 still running,
-  mission/maxconnections-asan.log and directory. Poll before rebuilding it.
+- ASan/UBSan/leak matrix: all nine PASS, all exit zero with clean shutdown and
+  no sanitizer findings. Evidence: mission/maxconnections-{after,asan}/ and logs.
 - Both candidates contain only the connection change after 073d1e5be. Source
   init.cpp compared byte-for-byte between normal and instrumented trees.
 
-## Next ordinary lifecycle check
+## Validated completed-startup shutdown path
 
-Initial stopafterblockimport-only experiments also exposed an existing early-stop
-exit-code race: successful initialization can return failure if import requests
-shutdown before AppInit2 returns. That routes around the normal main-thread-group
-join. Logs show worker starts/interrupts after Shutdown begins. Evidence preserved
-in mission/maxconnections-before/; no paused/security sequence is being resumed.
+An empty stopafterblockimport can finish before AppInit2 returns. The old final
+return treated a pending stop as initialization failure, routing around the normal
+main-thread-group join even though all initialization steps had completed. The
+instrumented baseline reproduces this in seven of eight runs: exit one and worker
+starts/interrupts after Shutdown begins. Eight normal baseline runs all passed;
+the race depends on scheduling. No sanitizer finding occurred in these baselines.
 
-Untracked qa/rpc-tests/stopafterblockimport.py now repeats this ordinary empty-import
-scenario with strict exit-zero and worker-before-shutdown assertions. Normal
-baseline session 82284 is active: mission/import-stop-before.log and directory.
-No lifecycle code changes yet. Complete/commit the connection milestone first.
-Do not duplicate completed scheduling/wire checks or resume the paused sequence.
+AppInit2 now returns true after its final initialization step even with a pending
+stop, selecting WaitForShutdown's normal interrupt/join path. Earlier failure
+returns remain unchanged. The thread-ownership comment now describes the actual
+code instead of a removed shutdown thread.
+
+- qa/rpc-tests/stopafterblockimport.py: eight fixed normal and eight instrumented
+  repetitions all pass with exit zero, import/init complete, and no late workers.
+- Added invalid-maxblocksinflight control still rejects initialization and exits
+  one before import, normally and instrumented. Its instrumented baseline passes.
+- Both normal and ASan/UBSan/leak candidates pass the ordinary short-header wire
+  fixture: all 129 blocks validate, counters clear, RPC stop exits zero, no peer
+  or sanitizer errors. Relevant source files match between build trees.
+- Evidence: mission/import-stop-{before,asan-before,after,asan-after}/,
+  mission/import-stop-asan-invalid-before.json, and
+  mission/import-stop-headers-{after,asan}/ with build/test logs alongside them.
+- Production service, data and executable remain untouched.
+
+Next: ordinary restart/cancellation resilience using only the existing 0..129
+fixture in fresh temporary datadirs. Verify persisted tip/chainstate and graceful
+worker cleanup through interrupted startup. No lifecycle test currently running;
+all checks above completed before this milestone.
+Do not duplicate completed security/scheduling campaigns or resume the stash.
