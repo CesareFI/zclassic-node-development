@@ -7,6 +7,8 @@
 
 #include "test/test_bitcoin.h"
 
+#include <array>
+#include <atomic>
 #include <boost/bind/bind.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int_distribution.hpp>
@@ -107,6 +109,60 @@ BOOST_AUTO_TEST_CASE(manythreads)
         counterSum += counter[i];
     }
     BOOST_CHECK_EQUAL(counterSum, 200);
+}
+
+BOOST_AUTO_TEST_CASE(shared_deadline_is_safe_with_multiple_workers)
+{
+    CScheduler scheduler;
+    std::array<std::atomic<unsigned>, 64> executions;
+    for (auto& count : executions)
+        count = 0;
+    std::atomic<bool> ranEarly(false);
+    const auto deadline = boost::chrono::system_clock::now() + boost::chrono::milliseconds(100);
+    for (size_t i = 0; i < executions.size(); ++i) {
+        scheduler.schedule([&, i] {
+            if (boost::chrono::system_clock::now() < deadline)
+                ranEarly = true;
+            ++executions[i];
+        }, deadline);
+    }
+
+    // All workers can wait on the same first entry. Erasing it must not
+    // invalidate the deadline still used by another worker's timed wait.
+    boost::thread_group workers;
+    for (unsigned i = 0; i < 8; ++i)
+        workers.create_thread([&] { scheduler.serviceQueue(); });
+    scheduler.stop(true);
+    workers.join_all();
+
+    for (const auto& count : executions)
+        BOOST_CHECK_EQUAL(count.load(), 1);
+    BOOST_CHECK(!ranEarly.load());
+    boost::chrono::system_clock::time_point first, last;
+    BOOST_CHECK_EQUAL(scheduler.getQueueInfo(first, last), 0);
+}
+
+BOOST_AUTO_TEST_CASE(earlier_task_can_stop_workers_waiting_on_later_deadline)
+{
+    CScheduler scheduler;
+    std::atomic<unsigned> laterExecutions(0);
+    std::atomic<unsigned> earlierExecutions(0);
+    scheduler.schedule([&] { ++laterExecutions; },
+                       boost::chrono::system_clock::now() + boost::chrono::hours(1));
+    boost::thread_group workers;
+    for (unsigned i = 0; i < 4; ++i)
+        workers.create_thread([&] { scheduler.serviceQueue(); });
+
+    scheduler.schedule([&] {
+        ++earlierExecutions;
+        scheduler.stop();
+    }, boost::chrono::system_clock::now());
+    workers.join_all();
+
+    BOOST_CHECK_EQUAL(earlierExecutions.load(), 1);
+    BOOST_CHECK_EQUAL(laterExecutions.load(), 0);
+    boost::chrono::system_clock::time_point first, last;
+    BOOST_CHECK_EQUAL(scheduler.getQueueInfo(first, last), 1);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

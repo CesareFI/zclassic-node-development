@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-14 02:10 UTC.
+Updated: 2026-09-14 02:14 UTC.
 
 ## Current mission
 
@@ -16,7 +16,8 @@ reformulation. Current user instruction was read from
 ## Repository and production
 
 - Working directory /opt/zclassic-money, branch fix/og-node-sync-20260913.
-- Latest committed milestone c32d3ba5d: join workers after startup failure.
+- Latest committed milestone 8a11ae4eb: VerifyDB reconnect cancellation.
+- Prior c32d3ba5d: join workers after startup failure.
 - Prior 2e921face: PID-file ownership.
 - Prior 01a79bb9e: completed-startup shutdown path.
 - Prior a0f62634d: connection-budget conversion.
@@ -329,7 +330,43 @@ change. The full verification control emits 99 distinct progress messages.
   sanitizer findings. Evidence: mission/verifydb-startup-cancel-{after,asan-after}/.
   Integration controls cancel in the backward pass; the new unit fixture
   specifically exercises reconnect cancellation.
-- All VerifyDB build/test processes completed successfully. Separate scheduler
-  tests have now been added and their instrumented baseline is building; they
-  are excluded from the VerifyDB milestone commit.
+- All VerifyDB build/test processes completed successfully before 8a11ae4eb.
+  Scheduler changes are tracked separately below.
 - Production, the paused stash, and all previous evidence remain untouched.
+
+
+## Validated scheduler deadline ownership
+
+The existing concurrent scheduler test exposed a heap-use-after-free in Boost's
+wait_until: its deadline argument referred to the first queue entry, which another
+worker erased while the mutex was released. A new shared-deadline regression
+reproduces the same ASan finding before the fix. This API supports multiple workers;
+the default daemon starts one scheduler worker, so this is not a claim of an
+observed production crash.
+
+The timed wait now uses a local value copied under the queue mutex. Wakeup,
+drain, stop and task ordering semantics remain the same. Added ordinary tests
+check 64 same-deadline tasks across eight workers execute once and never early,
+and that a newly inserted earlier task can stop workers waiting on a later task.
+
+- Normal and ASan/UBSan/leak: 13 scheduler/VerifyDB/init/getarg cases, all 1,084
+  assertions pass. Evidence: mission/scheduler-deadline-{after,asan-after}.log.
+- Separate TSAN build of scheduler.cpp and the two exact new test bodies passes
+  69 assertions with halt_on_error enabled. Existing Boost libraries are linked
+  without TSAN instrumentation; application scheduler/test code is instrumented.
+  Evidence: mission/scheduler-deadline-tsan* and scheduler-standalone.cpp.
+- Both zclassicd-scheduler candidates build. Normal and ASan/UBSan/leak four-case
+  startup-failure worker cleanup controls pass, with no aborts or late worker
+  activity. Evidence: mission/scheduler-startup-failure-{after,asan-after}/.
+  All scheduler build/test processes completed before committing this milestone.
+- Baseline evidence: mission/scheduler-deadline-before.log and the earlier
+  combined mission/verifydb-cancel-asan-after.log. No excluded sequence was run.
+
+Next active task: ProcessOneShot removes a queued seed destination before
+trying to acquire an outbound permit. A full outbound pool can therefore discard
+pending discovery work. Investigate with ordinary isolated queue/permit tests;
+no real connections or external peers are needed for the regression.
+
+The one-shot queue regression now builds normally against a behavior-preserving
+extraction of the existing dequeue-before-permit order. Those source/test changes
+are separate and uncommitted; do not include them in the scheduler milestone.
