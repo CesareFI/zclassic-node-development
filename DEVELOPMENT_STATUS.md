@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-14 02:14 UTC.
+Updated: 2026-09-14 02:22 UTC.
 
 ## Current mission
 
@@ -16,7 +16,8 @@ reformulation. Current user instruction was read from
 ## Repository and production
 
 - Working directory /opt/zclassic-money, branch fix/og-node-sync-20260913.
-- Latest committed milestone 8a11ae4eb: VerifyDB reconnect cancellation.
+- Latest committed milestone a3e91ee5d: scheduler deadline ownership.
+- Prior 8a11ae4eb: VerifyDB reconnect cancellation.
 - Prior c32d3ba5d: join workers after startup failure.
 - Prior 2e921face: PID-file ownership.
 - Prior 01a79bb9e: completed-startup shutdown path.
@@ -362,11 +363,34 @@ and that a newly inserted earlier task can stop workers waiting on a later task.
 - Baseline evidence: mission/scheduler-deadline-before.log and the earlier
   combined mission/verifydb-cancel-asan-after.log. No excluded sequence was run.
 
-Next active task: ProcessOneShot removes a queued seed destination before
-trying to acquire an outbound permit. A full outbound pool can therefore discard
-pending discovery work. Investigate with ordinary isolated queue/permit tests;
-no real connections or external peers are needed for the regression.
+## Validated seed-queue permit ownership
 
-The one-shot queue regression now builds normally against a behavior-preserving
-extraction of the existing dequeue-before-permit order. Those source/test changes
-are separate and uncommitted; do not include them in the scheduler milestone.
+ProcessOneShot removed a queued seed destination before acquiring an outbound
+permit. A full pool silently discarded pending discovery work. COneShotQueue
+encapsulates the queue and lock, with the connector called outside that lock;
+it now acquires a permit before taking a destination. Failed attempts still go
+to the back of the queue, and successful connections retain permit ownership.
+The production connector and network-selection rules are unchanged.
+
+- Two deterministic queue/permit tests fail four assertions against the extracted
+  original order in both normal and ASan builds. They cover a full pool and a
+  failed connection waiting behind a connected peer.
+- Fixed normal and ASan/UBSan/leak: 14 queue/scheduler/init/getarg cases, all 170
+  assertions pass. Initial baseline test compilation needed explicit boolean
+  casts for the legacy semaphore handle; failed build logs were retained.
+- qa/rpc-tests/oneshot-queue.py uses two loopback seed listeners, one outbound
+  permit, and ordinary version/getaddr/empty-addr exchanges. Baseline
+  zclassicd-scheduler loses B after A completes, times out, then exits cleanly.
+  Both fixed zclassicd-oneshot candidates connect B when A finishes, complete both
+  seed exchanges, retain genesis height and zero block requests, and stop with
+  exit zero. No peer errors or sanitizer findings. No blocks or external peers.
+- Evidence: mission/oneshot-{before,asan-before,after,asan-after}.log,
+  mission/oneshot-wire-{before,after,asan-after}/ and matching build logs.
+- Candidate source files compare byte-for-byte across normal/instrumented trees.
+  All queue milestone builds and tests completed. No production modification,
+  paused security work, or tool safety refusal occurred.
+
+Next: review remaining local resource-budget conversions. Some startup options
+still narrow or multiply their signed input before validating it; use ordinary
+configuration/unit tests in new datadirs for any concrete bug. Preserve consensus,
+all successful synchronization evidence and the separate historical diagnosis.

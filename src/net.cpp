@@ -13,6 +13,7 @@
 #include "addrman.h"
 #include "chainparams.h"
 #include "clientversion.h"
+#include "net_oneshot.h"
 #include "primitives/transaction.h"
 #include "scheduler.h"
 #include "ui_interface.h"
@@ -84,8 +85,7 @@ deque<pair<int64_t, CInv> > vRelayExpiration;
 CCriticalSection cs_mapRelay;
 limitedmap<CInv, int64_t> mapAlreadyAskedFor(MAX_INV_SZ);
 
-static deque<string> vOneShots;
-static CCriticalSection cs_vOneShots;
+static COneShotQueue oneShots;
 
 static set<CNetAddr> setservAddNodeAddresses;
 static CCriticalSection cs_setservAddNodeAddresses;
@@ -105,8 +105,7 @@ CNodeSignals& GetNodeSignals() { return g_signals; }
 
 void AddOneShot(const std::string& strDest)
 {
-    LOCK(cs_vOneShots);
-    vOneShots.push_back(strDest);
+    oneShots.Add(strDest);
 }
 
 unsigned short GetListenPort()
@@ -1359,20 +1358,9 @@ void DumpAddresses()
 
 void static ProcessOneShot()
 {
-    string strDest;
-    {
-        LOCK(cs_vOneShots);
-        if (vOneShots.empty())
-            return;
-        strDest = vOneShots.front();
-        vOneShots.pop_front();
-    }
-    CAddress addr;
-    CSemaphoreGrant grant(*semOutbound, true);
-    if (grant) {
-        if (!OpenNetworkConnection(addr, &grant, strDest.c_str(), true))
-            AddOneShot(strDest);
-    }
+    oneShots.Process(*semOutbound, [](const std::string& destination, CSemaphoreGrant& grant) {
+        return OpenNetworkConnection(CAddress(), &grant, destination.c_str(), true);
+    });
 }
 
 void ThreadOpenConnections()

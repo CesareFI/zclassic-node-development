@@ -169,6 +169,7 @@ BITCOIN_CORE_H = \
   miner.h \
   mruset.h \
   net.h \
+  net_oneshot.h \
   netbase.h \
   noui.h \
   policy/fees.h \
