@@ -12,11 +12,18 @@
 #include "ui_interface.h"
 #include "uint256.h"
 
+#include <algorithm>
 #include <stdint.h>
 
 #include <boost/thread.hpp>
 
 using namespace std;
+
+int64_t GetDbCacheSizeBytes(int64_t megabytes)
+{
+    megabytes = std::max(nMinDbCache, std::min(megabytes, nMaxDbCache));
+    return megabytes * 1024 * 1024;
+}
 
 // NOTE: Per issue #3277, do not use the prefix 'X' or 'x' as they were
 // previously used by DB_SAPLING_ANCHOR and DB_BEST_SAPLING_ANCHOR.

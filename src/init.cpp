@@ -2634,9 +2634,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
         int64_t nDefault64 = (fReindex || fReindexChainState) ? 2048 : 1024;
         nDbCacheArg = std::max(nDbCacheArg, std::min<int64_t>(nMaxDbCache, nDefault64));
     }
-    int64_t nTotalCache = (nDbCacheArg << 20);
-    nTotalCache = std::max(nTotalCache, nMinDbCache << 20); // total cache cannot be less than nMinDbCache
-    nTotalCache = std::min(nTotalCache, nMaxDbCache << 20); // total cache cannot be greated than nMaxDbcache
+    int64_t nTotalCache = GetDbCacheSizeBytes(nDbCacheArg);
     int64_t nBlockTreeDBCache = nTotalCache / 8;
     if (nBlockTreeDBCache > (1 << 21) && !GetBoolArg("-txindex", true))
         nBlockTreeDBCache = (1 << 21); // block tree db cache shouldn't be larger than 2 MiB

@@ -27,6 +27,9 @@ static const int64_t nMaxDbCache = sizeof(void*) > 4 ? 16384 : 1024;
 //! min. -dbcache in (MiB)
 static const int64_t nMinDbCache = 4;
 
+/** Convert a configured MiB cache budget into bytes within platform bounds. */
+int64_t GetDbCacheSizeBytes(int64_t megabytes);
+
 /** CCoinsView backed by the coin database (chainstate/) */
 class CCoinsViewDB : public CCoinsView
 {

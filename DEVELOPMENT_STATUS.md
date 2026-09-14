@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-14 00:21 UTC.
+Updated: 2026-09-14 00:44 UTC.
 
 ## Current mission
 
@@ -16,7 +16,8 @@ reformulation. Current user instruction was read from
 ## Repository and production
 
 - Working directory /opt/zclassic-money, branch fix/og-node-sync-20260913.
-- Latest validated milestone: bounded preferred-source scan (this snapshot).
+- Latest validated milestone: cache-budget conversion (this snapshot).
+- Prior e614b767b: bounded preferred-source scan.
 - Prior 0514633fa: inbound fallback after completed preferred discovery.
 - Prior 865993abf: header-response deadlines; 286036078: header completion.
 - Prior a7f7bd07d: peer download role diagnostics.
@@ -166,3 +167,41 @@ scheduling-loop measurements, not whole-node CPU estimates.
 - Next: isolate and test cache-size conversion. init.cpp currently shifts the
   signed -dbcache argument before clamping. Test pure arithmetic without startup
   or live datadir access, then fix conversion order if reproduced.
+
+
+## Validated cache-budget conversion
+
+Startup converted the signed -dbcache MiB value to bytes before applying its
+bounds. Two baseline assertions fail: 2^43 and INT64_MAX produce 4 MiB instead
+of the 16 GiB platform maximum. Valid and small inputs pass. The old negative
+shift produced no sanitizer finding under this build's compiler flags; the
+large-budget assertion failures are the reproduced evidence.
+
+GetDbCacheSizeBytes in txdb.cpp now clamps MiB before multiplying to bytes.
+AppInit2 calls the helper. Defaults, platform limits, and allocation splits stay
+the same. Pure arithmetic tests avoid allocating the requested cache or touching
+live data. Earlier helper-in-init.cpp builds failed due to startup stubs; the
+existing database module avoids that linkage issue without changing the stubs.
+
+- Normal and ASan/UBSan/leak runs: 8 init/database cases, 3,056 assertions pass.
+- Normal and ASan separate zclassicd-mission candidates both build successfully.
+- Compared relevant source files byte-for-byte between root and sanitizer tree.
+- Evidence: mission/dbcache-module-before.log, dbcache-module-asan-before.log,
+  dbcache-after.log, dbcache-asan-after.log and associated build logs.
+- Production executable/inode hashes rechecked unchanged; no service action.
+
+## Next startup resource check
+
+Untracked qa/rpc-tests/maxconnections.py is a separate pending regression. Real
+startup shows 2^32 configured connections narrows to zero and -2^32+1 narrows to
+one before clamping. Root init.cpp still has that original connection calculation.
+The new test uses fresh regtest directories, loopback-only connections, disabled
+mining/wallets, RPC readiness and normal stop. Baseline running in session 93385:
+mission/maxconnections-rpc-before.log and matching directory. Inspect completion
+before rebuilding that candidate. Initial stopafterblockimport-only experiments
+also exposed an existing early-stop exit-code race; their evidence is preserved,
+and the connection regression now waits for RPC readiness to isolate its subject.
+
+Next: clamp connection budgets before narrowing, rerun the ordinary startup
+matrix normally and with ASan/UBSan/leak checks, then commit independently.
+Do not duplicate completed scheduling/wire checks or resume the paused sequence.
