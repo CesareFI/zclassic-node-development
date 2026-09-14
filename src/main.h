@@ -16,6 +16,7 @@
 #include "coins.h"
 #include "consensus/consensus.h"
 #include "consensus/upgrades.h"
+#include "importing.h"
 #include "net.h"
 #include "primitives/block.h"
 #include "primitives/transaction.h"
@@ -141,8 +142,6 @@ extern const std::string strMessageMagic;
 extern CWaitableCriticalSection csBestBlock;
 extern CConditionVariable cvBlockChange;
 extern bool fExperimentalMode;
-extern bool fImporting;
-extern bool fReindex;
 /** Rebuild only the UTXO/chainstate from the existing (intact) block index and
  *  blk files, without re-reading/rebuilding the block index. Faster than -reindex
  *  and the right recovery for a desynced chainstate (block index intact). */

@@ -4,6 +4,7 @@
 #include "chainparams.h"
 #include "consensus/validation.h"
 #include "crypto/common.h"
+#include "importing.h"
 #include "main.h"
 #include "net.h"
 #include "rpc/server.h"
@@ -507,9 +508,9 @@ BOOST_AUTO_TEST_CASE(advancing_header_batches_keep_slow_discovery_alive)
 
 namespace {
 struct ImportGuard {
-    bool& flag;
+    std::atomic<bool>& flag;
     const bool previous;
-    explicit ImportGuard(bool& value) : flag(value), previous(value) { flag = true; }
+    explicit ImportGuard(std::atomic<bool>& value) : flag(value), previous(value) { flag = true; }
     ~ImportGuard() { flag = previous; }
 };
 }
@@ -576,9 +577,47 @@ BOOST_DATA_TEST_CASE(local_import_releases_block_requests_and_resumes,
     BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 0);
 }
 
+BOOST_AUTO_TEST_CASE(short_import_cancels_requests_before_the_next_scheduler_visit)
+{
+    CNode preferred(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "A", false);
+    Handshake(preferred);
+    Headers(preferred);
+    BOOST_REQUIRE(SendMessages(&preferred, false));
+    BOOST_REQUIRE_EQUAL(Stats(preferred).nBlocksInFlight, 128);
+    BOOST_REQUIRE(Stats(preferred).fHeaderSyncStarted);
+
+    for (unsigned round = 0; round < 3; ++round) {
+        const auto before = Stats(preferred);
+        {
+            CImportingNow importing;
+            // The whole import completes before SendMessages runs again.
+            BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
+            BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 0);
+            BOOST_CHECK_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 0);
+            BOOST_CHECK(Stats(preferred).fPreferredDownload);
+            Deliver(preferred, 1);
+            BOOST_REQUIRE_EQUAL(chainActive.Height(), 0);
+        }
+        SetMockTimeMicros(std::max(before.nDownloadDeadline, before.nHeaderSyncDeadline) + 1);
+        BOOST_REQUIRE(SendMessages(&preferred, false));
+        BOOST_CHECK(!preferred.fDisconnect);
+        BOOST_CHECK(!Stats(preferred).fBlockDownloadStopped);
+        BOOST_REQUIRE_EQUAL(Stats(preferred).nBlocksInFlight, 128);
+        BOOST_CHECK_GT(Stats(preferred).nDownloadDeadline, GetTimeMicros());
+        BOOST_CHECK_GT(Stats(preferred).nHeaderSyncDeadline, GetTimeMicros());
+    }
+    for (size_t height = 1; height <= 128; ++height) Deliver(preferred, height);
+    BOOST_REQUIRE(SendMessages(&preferred, false));
+    Deliver(preferred, 129);
+    BOOST_CHECK_EQUAL(chainActive.Height(), 129);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(Stats(preferred).nMisbehavior, 0);
+}
+
 BOOST_AUTO_TEST_CASE(local_import_retries_headers_without_timing_out_ignored_replies)
 {
-    for (bool* importing : {&fImporting, &fReindex}) {
+    for (std::atomic<bool>* importing : {&fImporting, &fReindex}) {
         CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "A", false);
         Handshake(peer);
         BOOST_REQUIRE(SendMessages(&peer, false));

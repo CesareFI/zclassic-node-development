@@ -67,8 +67,8 @@ CWaitableCriticalSection csBestBlock;
 CConditionVariable cvBlockChange;
 int nScriptCheckThreads = 0;
 bool fExperimentalMode = false;
-bool fImporting = false;
-bool fReindex = false;
+std::atomic<bool> fImporting(false);
+std::atomic<bool> fReindex(false);
 bool fReindexChainState = false;
 bool fTxIndex = false;
 bool fHavePruned = false;
@@ -748,6 +748,15 @@ void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<con
 }
 
 } // anon namespace
+
+void ResetBlockDownloadForImport()
+{
+    LOCK(cs_main);
+    for (auto& entry : mapNodeState) {
+        StopHeaderSync(entry.second);
+        ReleaseBlockRequests(entry.second);
+    }
+}
 
 CBlockDownloadStats GetBlockDownloadStats()
 {
@@ -4672,7 +4681,8 @@ bool AcceptBlockHeader(const CBlockHeader& block, CValidationState& state, CBloc
         return false;
 
 
-    if (!pindexPrev->IsValid(BLOCK_VALID_SCRIPTS)) {
+    // Genesis has no parent or failed ancestors to inspect during reindex.
+    if (pindexPrev && !pindexPrev->IsValid(BLOCK_VALID_SCRIPTS)) {
         for (const CBlockIndex *failedit : g_failed_blocks) {
             if (pindexPrev->GetAncestor(failedit->nHeight) == failedit) {
                 assert(failedit->nStatus & BLOCK_FAILED_MASK);
@@ -5151,7 +5161,7 @@ bool static LoadBlockIndexDB()
     // Check whether we need to continue reindexing
     bool fReindexing = false;
     pblocktree->ReadReindexing(fReindexing);
-    fReindex |= fReindexing;
+    fReindex = fReindex || fReindexing;
 
     // Check whether we have a transaction index
     pblocktree->ReadFlag("txindex", fTxIndex);

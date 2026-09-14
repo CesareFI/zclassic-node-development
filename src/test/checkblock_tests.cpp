@@ -18,6 +18,31 @@
 
 BOOST_FIXTURE_TEST_SUITE(CheckBlock_tests, BasicTestingSetup)
 
+BOOST_AUTO_TEST_CASE(genesis_header_initializes_an_empty_index)
+{
+    LOCK(cs_main);
+    BOOST_REQUIRE(mapBlockIndex.empty());
+    struct IndexCleanup {
+        ~IndexCleanup() { UnloadBlockIndex(); }
+    } cleanup;
+
+    CValidationState state;
+    CBlockIndex* index = nullptr;
+    BOOST_REQUIRE(AcceptBlockHeader(Params().GenesisBlock().GetBlockHeader(), state, &index));
+    BOOST_REQUIRE(index != nullptr);
+    BOOST_CHECK(state.IsValid());
+    BOOST_CHECK(index->pprev == nullptr);
+    BOOST_CHECK_EQUAL(index->nHeight, 0);
+    BOOST_CHECK(index->GetBlockHash() == Params().GetConsensus().hashGenesisBlock);
+    BOOST_CHECK_EQUAL(mapBlockIndex.size(), 1);
+
+    // A later copy follows the existing duplicate-header path.
+    CBlockIndex* duplicate = nullptr;
+    BOOST_CHECK(AcceptBlockHeader(Params().GenesisBlock().GetBlockHeader(), state, &duplicate));
+    BOOST_CHECK(duplicate == index);
+    BOOST_CHECK_EQUAL(mapBlockIndex.size(), 1);
+}
+
 bool read_block(const std::string& filename, CBlock& block)
 {
     namespace fs = boost::filesystem;

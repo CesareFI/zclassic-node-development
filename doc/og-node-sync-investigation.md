@@ -946,3 +946,27 @@ accounting clears, and shutdown exits zero without peer or sanitizer findings.
 Evidence: mission/import-pause-*. This milestone covers scheduler-observed pauses;
 short intervals between visits and publication of cross-thread import flags
 remain the next lifecycle review. Production was not restarted or modified.
+
+
+## Import entry and genesis reindex
+
+A short import can finish between scheduler visits. The import guard now releases
+peer requests and active header roles when import begins, retains preferred
+eligibility, and publishes import/reindex flags atomically. The old short-import
+fixture retained 128 requests and later disconnected the peer; three repeated
+short imports now resume with fresh deadlines and validate through block 129.
+A focused TSAN fixture reproduced the former import-flag race and now passes.
+
+The new real-file import/reindex test also exposed an existing genesis crash.
+AcceptBlockHeader dereferenced the genesis block's nonexistent parent in the
+failed-ancestor check added by d57bf7a5e1 in 2019. The prior candidate reproduced
+the crash, gdb identified the null access, and UBSAN confirmed it. The lookup is
+now conditional on a parent existing. Genesis hash, header and full block checks
+remain intact; non-genesis ancestry validation is unchanged.
+
+Normal and ASAN/UBSAN/leak builds pass 11 selected cases and 5,566 assertions.
+Both daemons pass import, restart, reindex and another restart in a newly created
+test datadir, preserving the exact height-129 tip and empty download accounting.
+The two focused TSAN guard/publication cases pass six assertions; cleanup itself
+is covered by the real download-state tests. Evidence: mission/import-entry-* and
+mission/import-publication-tsan-*. Production remains untouched.

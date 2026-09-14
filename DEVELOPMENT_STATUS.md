@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-14 06:11 UTC.
+Updated: 2026-09-14 06:35 UTC.
 
 ## Current mission
 
@@ -16,7 +16,8 @@ reformulation. Current user instruction was read from
 ## Repository and production
 
 - Working directory /opt/zclassic-money, branch fix/og-node-sync-20260913.
-- Latest committed milestone 6271d5701: HTTP resource budget validation.
+- Latest committed milestone bb281eb0d: scheduler-observed import pauses.
+- Prior 6271d5701: HTTP resource budget validation.
 - Prior 61231d83b: HTTP worker handle ownership.
 - Prior 7c9c6bdc1: HTTP work-queue interruption.
 - Prior e891a2958: script-thread budget conversion.
@@ -664,3 +665,64 @@ Production PID 503646 and its executable inode were verified unchanged again at
 06:06 UTC: running SHA 6c4a80ec792c894aa1be9d27332f7d05e857e36408485e3b651fe114f3be14ad;
 on-disk src/zclassicd SHA bc161f5339039ca1bacd1653dd45c2b42f409c4982b029609e8316869cca3c4f.
 No restart, deployment or production datadir changes were performed.
+
+
+## Import entry ownership, publication and genesis reindex
+
+CImportingNow now lives in importing.h, publishes fImporting atomically, and
+releases all peer requests and active header roles under cs_main before importing
+block-file contents. fReindex is also atomic. The guard cannot be copied and
+restores the flag on scope exit/unwinding. Preferred eligibility is retained.
+This covers short imports that begin/end between peer scheduler visits.
+
+A deterministic short-import baseline failed six assertions: 128 requests and
+one header role survived import, causing timeout/disconnect at the next visit.
+The new ordinary fixture repeats three short imports with no scheduling inside
+those scopes, then verifies immediate fresh requests and validation through 129.
+Evidence: mission/import-entry-before.log and mission/import-entry-final.log.
+
+A focused TSAN harness using the actual guard reproduced its old bool write
+racing a concurrent reader: mission/import-publication-tsan-work-before.log,
+exit 66. An initial empty scope was optimized enough to miss the race; the final
+regression yields within the scope to represent nonempty import work. Both guard
+and publication cases now pass six assertions under TSAN. This focused harness
+stubs request cleanup; the ordinary download tests exercise the real cleanup.
+
+qa/rpc-tests/import-blocks.py verifies the fixture digest, creates its own datadir,
+imports with -loadblock/-stopafterblockimport, restarts and checks the exact tip,
+reindexes only that new datadir, then restarts and checks the tip again. This
+found an existing SIGSEGV during genesis reindex, reproduced by both the prior
+bb281eb0d candidate and the initial new candidate. A separate copied test datadir
+under gdb traced it to AcceptBlockHeader dereferencing the null genesis parent.
+UBSAN independently confirmed the null member call. Evidence:
+mission/import-entry-files-{baseline,after,asan-baseline}/ and
+mission/import-entry-reindex-debug/gdb.log. All failed datadirs/logs are preserved.
+
+The unconditional parent check dates to d57bf7a5e1 (2019-08-30); its parent source
+already accepted the configured genesis with no parent. The failed-ancestor
+lookup now runs only when a parent exists. Every existing header, contextual,
+transaction and block check remains intact. Non-genesis headers still require a
+known parent and run the same failed-ancestor checks. No consensus rule changed.
+A direct genesis-header/duplicate-header regression is in CheckBlock_tests.
+
+Final normal and ASAN/UBSAN/leak selections both pass 11 cases and 5,566 assertions,
+covering genesis, import scopes/publication, both scheduler pause modes, short
+imports, preferred takeover/reconnects, role diagnostics, teardown and header
+completion. Evidence: mission/import-entry-{final,asan-final}.log. Normal and
+instrumented candidates both pass all four file-import/reindex/restart phases,
+retain the exact tip at 129, clear all request counters, and exit zero with no
+sanitizer findings: mission/import-entry-files-{fixed,asan-fixed}/. Changed source
+bytes were compared across the normal and ASAN trees. The initial helper linkage
+mistake was corrected before these final checks; its failed build log remains.
+
+Eight older untracked, nonexecuting generated candidates (config, defaults,
+prune and threads for normal/ASAN) were compressed into new exclusive-created
+archives, verified by decompressed SHA, and recorded in
+mission/candidate-archives-20260914.jsonl before removing uncompressed copies.
+Files and directory entries have been fsynced. No source, log, wallet, production
+file or existing backup was removed or overwritten. Headroom is about 5.3 GiB.
+
+Next review: outbound address selection currently ends its search when the first
+candidate belongs to an already-connected group or a local address. Check whether
+eligible candidates can be considered within a strictly bounded selection cycle
+while retaining network diversity and retry/port policy. No changes there yet.

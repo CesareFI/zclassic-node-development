@@ -8,6 +8,7 @@
 #endif
 
 #include "init.h"
+#include "importing.h"
 #include "crypto/common.h"
 #include "addrman.h"
 #include "amount.h"
@@ -605,20 +606,6 @@ static void BlockNotifyCallback(const uint256& hashNewTip)
     boost::replace_all(strCmd, "%s", hashNewTip.GetHex());
     boost::thread t(runCommand, strCmd); // thread runs free
 }
-
-struct CImportingNow
-{
-    CImportingNow() {
-        assert(fImporting == false);
-        fImporting = true;
-    }
-
-    ~CImportingNow() {
-        assert(fImporting == true);
-        fImporting = false;
-    }
-};
-
 
 // If we're using -prune with -reindex, then delete block files that will be ignored by the
 // reindex.  Since reindexing works by starting at block file 0 and looping until a blockfile

@@ -67,6 +67,7 @@ BITCOIN_TESTS =\
   test/Checkpoints_tests.cpp \
   test/coins_tests.cpp \
   test/init_tests.cpp \
+  test/importing_tests.cpp \
   test/compress_tests.cpp \
   test/convertbits_tests.cpp \
   test/crypto_tests.cpp \

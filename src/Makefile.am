@@ -155,6 +155,7 @@ BITCOIN_CORE_H = \
   httprpc.h \
   httpserver.h \
   http_workqueue.h \
+  importing.h \
   init.h \
   startuptimer.h \
   key.h \
