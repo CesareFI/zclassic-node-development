@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-14 02:36 UTC.
+Updated: 2026-09-14 02:42 UTC.
 
 ## Current mission
 
@@ -16,7 +16,8 @@ reformulation. Current user instruction was read from
 ## Repository and production
 
 - Working directory /opt/zclassic-money, branch fix/og-node-sync-20260913.
-- Latest committed milestone 5631a27da: pruning budget validation.
+- Latest committed milestone 4dcfff81b: configuration read/error handling.
+- Prior 5631a27da: pruning budget validation.
 - Prior f5ef27a3c: seed queue permit ownership.
 - Prior a3e91ee5d: scheduler deadline ownership.
 - Prior 8a11ae4eb: VerifyDB reconnect cancellation.
@@ -455,3 +456,26 @@ explicit-txindex conflict check, defeating its intended automatic interaction.
 Use fresh genesis-only datadirs to verify removal of the redundant generated
 setting preserves normal indexing and permits the requested pruning mode. Never
 prune existing data or change a user's existing configuration.
+
+
+## Validated first-run pruning defaults
+
+The new qa/rpc-tests/prune-defaults.py confirms first-run pruning fails because
+the generated config makes the source's txindex default explicit. The normal
+unpruned baseline starts/restarts with indexing enabled but fails the new implicit
+setting assertion. Explicit txindex=1 plus pruning correctly fails and preserves
+that operator-provided file.
+
+- Removed only the generated txindex assignment; normal source default remains
+  true, and the existing pruning interaction can soft-set it false. Existing
+  configuration files and authentication settings are unchanged.
+- Both zclassicd-defaults candidates build. Normal and ASan/UBSan/leak matrices
+  pass all three scenarios: pruned/unpruned startup and restart at genesis, plus
+  explicit conflict. All five startups per build complete as expected, with no
+  block deletion or sanitizer findings. All processes completed.
+- Evidence: mission/prune-defaults-{before,after,asan-after}/ and associated logs.
+- Relevant candidate sources compare equal. All checks completed before commit.
+- Next resource finding: -par is narrowed to int before applying its existing
+  64-thread cap. Large positive/negative values can change sign or become auto.
+  Keep it signed 64-bit until after bounds, and use ordinary isolated startup
+  checks (no blocks/mining/production access) if pursuing this task.

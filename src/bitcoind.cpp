@@ -73,7 +73,7 @@ static void ReadOrCreateConfig()
         std::ofstream config(path.string());
         if (!config)
             throw std::runtime_error("Unable to create configuration file.");
-        config << "txindex=1" << std::endl;
+        // Leave txindex at its source default so -prune can disable it.
         config << "rpcuser=zcluser" << std::endl;
         config << "rpcpassword=zclpass" << std::endl;
         config.close();
