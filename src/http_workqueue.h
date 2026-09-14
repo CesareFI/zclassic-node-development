@@ -6,6 +6,7 @@
 
 #include "sync.h"
 
+#include <boost/thread.hpp>
 #include <cstddef>
 #include <deque>
 
@@ -16,48 +17,40 @@ template <typename WorkItem>
 class WorkQueue
 {
 private:
-    /** Mutex protects entire object */
+    /** Protects queued tasks and interruption state. */
     CWaitableCriticalSection cs;
     CConditionVariable cond;
     /* XXX in C++11 we can use std::unique_ptr here and avoid manual cleanup */
     std::deque<WorkItem*> queue;
     bool running;
     size_t maxDepth;
-    int numThreads;
-
-    /** RAII object to keep track of number of running worker threads */
-    class ThreadCounter
-    {
-    public:
-        WorkQueue &wq;
-        ThreadCounter(WorkQueue &w): wq(w)
-        {
-            boost::lock_guard<boost::mutex> lock(wq.cs);
-            wq.numThreads += 1;
-        }
-        ~ThreadCounter()
-        {
-            boost::lock_guard<boost::mutex> lock(wq.cs);
-            wq.numThreads -= 1;
-            wq.cond.notify_all();
-        }
-    };
+    boost::thread_group workers;
 
 public:
-    WorkQueue(size_t maxDepth) : running(true),
-                                 maxDepth(maxDepth),
-                                 numThreads(0)
+    WorkQueue(size_t maxDepth) : running(true), maxDepth(maxDepth)
     {
     }
-    /*( Precondition: worker threads have all stopped
-     * (call WaitExit)
-     */
+    /** Stop owned workers before destroying queued tasks. Callers that invoke
+     *  Run directly must join their own threads before destroying the queue. */
     ~WorkQueue()
     {
+        Interrupt();
+        WaitExit();
         while (!queue.empty()) {
             delete queue.front();
             queue.pop_front();
         }
+    }
+    /** Start owned workers, running per-thread initialization before the loop.
+     *  Start and WaitExit must be called by the lifecycle owner, sequentially. */
+    template<typename ThreadInit>
+    void Start(int count, ThreadInit initialize)
+    {
+        for (int i = 0; i < count; ++i)
+            workers.create_thread([this, initialize] {
+                initialize();
+                Run();
+            });
     }
     /** Enqueue a work item */
     bool Enqueue(WorkItem* item)
@@ -73,7 +66,6 @@ public:
     /** Thread function */
     void Run()
     {
-        ThreadCounter count(*this);
         for (;;) {
             WorkItem* i = 0;
             {
@@ -99,9 +91,8 @@ public:
     /** Wait for worker threads to exit */
     void WaitExit()
     {
-        boost::unique_lock<boost::mutex> lock(cs);
-        while (numThreads > 0)
-            cond.wait(lock);
+        // A launched worker may still be initializing and not yet inside Run.
+        workers.join_all();
     }
 
     /** Return current depth of queue */

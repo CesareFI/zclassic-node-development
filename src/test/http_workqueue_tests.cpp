@@ -10,9 +10,9 @@
 #include <memory>
 
 namespace {
-bool WaitFor(const std::atomic<bool>& flag)
+bool WaitFor(const std::atomic<bool>& flag, unsigned timeoutMs = 5000)
 {
-    const auto deadline = boost::chrono::steady_clock::now() + boost::chrono::seconds(5);
+    const auto deadline = boost::chrono::steady_clock::now() + boost::chrono::milliseconds(timeoutMs);
     while (!flag.load() && boost::chrono::steady_clock::now() < deadline)
         boost::this_thread::sleep_for(boost::chrono::milliseconds(1));
     return flag.load();
@@ -93,6 +93,39 @@ BOOST_AUTO_TEST_CASE(queue_capacity_and_pending_task_cleanup)
         queue.Interrupt();
     }
     BOOST_CHECK_EQUAL(destroyed.load(), 3);
+}
+
+BOOST_AUTO_TEST_CASE(shutdown_waits_for_launched_worker_before_queue_entry)
+{
+    std::atomic<bool> initializing(false);
+    std::atomic<bool> releaseInitializer(false);
+    std::atomic<bool> initialized(false);
+    std::atomic<bool> waiterStarted(false);
+    std::atomic<bool> waiterFinished(false);
+    std::atomic<bool> waitedForInitialization(false);
+    WorkQueue<Task> queue(1);
+    queue.Start(1, [&] {
+        initializing = true;
+        initialized = WaitFor(releaseInitializer);
+    });
+    const bool workerLaunched = WaitFor(initializing);
+    queue.Interrupt();
+    boost::thread waiter([&] {
+        waiterStarted = true;
+        queue.WaitExit();
+        waitedForInitialization = initialized.load();
+        waiterFinished = true;
+    });
+    const bool waitStarted = WaitFor(waiterStarted);
+    const bool returnedBeforeRelease = WaitFor(waiterFinished, 100);
+    releaseInitializer = true;
+    waiter.join();
+    BOOST_CHECK(workerLaunched);
+    BOOST_CHECK(waitStarted);
+    BOOST_CHECK(!returnedBeforeRelease);
+    BOOST_CHECK(waitedForInitialization.load());
+    // The owner retains every launched handle for safe cleanup even when the
+    // old active-worker counter lets WaitExit return before Run has started.
 }
 
 BOOST_AUTO_TEST_SUITE_END()

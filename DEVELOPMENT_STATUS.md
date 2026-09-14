@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-14 05:32 UTC.
+Updated: 2026-09-14 05:46 UTC.
 
 ## Current mission
 
@@ -16,7 +16,8 @@ reformulation. Current user instruction was read from
 ## Repository and production
 
 - Working directory /opt/zclassic-money, branch fix/og-node-sync-20260913.
-- Latest committed milestone e891a2958: script-thread budget conversion.
+- Latest committed milestone 7c9c6bdc1: HTTP work-queue interruption.
+- Prior e891a2958: script-thread budget conversion.
 - Prior c943c90f1: first-run pruning defaults.
 - Prior 4dcfff81b: configuration read/error handling.
 - Prior 5631a27da: pruning budget validation.
@@ -540,3 +541,67 @@ unchanged. Detached worker registration/lifetime is a separate pending review.
   candidates with verified hashes before creating further full daemon candidates.
   Next: examine worker ownership independently, using only ordinary in-process
   lifecycle tests. Do not run the excluded socket/malformed-message sequence.
+
+
+## Candidate archives and active HTTP worker ownership
+
+Six older generated executables (fallback, mission, failure in normal/ASan trees)
+were compressed into adjacent .gz archives. Each archive was decompressed and
+SHA256-verified before removing its uncompressed generated file. Repository
+tracking and executing-inode checks confirmed the files were disposable build
+outputs, not tracked files or running processes. All archives were synced.
+The full hashes, sizes, modes and mtimes are recorded in
+mission/candidate-archives-20260914.jsonl. All data remain recoverable; logs,
+source, current candidates, production, and backups were untouched. Free ~6.6 GiB.
+
+Next test: shutdown can miss a launched HTTP worker delayed before Run increments
+its active counter. The queue now has a Start helper that retains thread handles
+and performs caller-supplied per-thread initialization; production does not use
+it yet. WaitExit still uses the original active counter for the baseline. The
+new helper's destructor joins retained handles so the regression can demonstrate
+an early WaitExit safely, without freeing memory under a live worker.
+
+New in-process test gates worker initialization and observes whether WaitExit
+finishes before that gate opens. No server, sockets, requests or credentials.
+Standalone normal baseline build is running; changes in http_workqueue.h and
+http_workqueue_tests.cpp are uncommitted. ASan tree still has the committed queue
+interruption snapshot. Source-group Start/WaitExit lifecycle calls are sequential.
+After reproducing, replace the counter with joins of owned handles, route the
+production thread initializer through Start, and preserve thread naming.
+
+
+## Validated HTTP worker ownership
+
+The delayed-initialization fixture reproduces an early WaitExit with two failed
+assertions against the original active-worker counter. The test retains handles
+for safe cleanup, so no live queue is destroyed during baseline reproduction.
+
+WorkQueue now owns a thread group and joins launched handles, including workers
+still initializing. Removed ThreadCounter/numThreads and detached worker startup.
+The production Start callback keeps the existing zcl-httpworker name. Destruction
+interrupts and joins owned workers before disposing pending tasks; direct Run
+callers retain their existing obligation to join their own thread. StopHTTPServer
+also clears its deleted queue pointer.
+
+- Normal and ASan/UBSan/leak: nine queue/scheduler/seed-queue cases, all 116
+  assertions pass. Standalone TSAN: four queue cases, 19 assertions pass.
+- Baseline: mission/http-worker-ownership-before.log. Final evidence:
+  mission/http-worker-ownership-{after,asan-after,tsan}.log. No sockets involved.
+- Both zclassicd-httpworkers candidates build. Normal and instrumented startup
+  controls (RPC off/on) and a successful RPC request/stop smoke all pass. Normal
+  stop exits zero, no late workers or sanitizer findings. Evidence:
+  mission/httpworkers-integration-{after,asan-after}/. The private composition
+  harness is mission/httpworkers-integration.py, using committed QA helpers.
+  All build/test processes completed; relevant source files compare equal.
+- A final mutex-comment clarification does not change the tested code. New
+  daemon builds include it; normal and ASan header copies match.
+- No production action, excluded sequence, authentication change, or tool refusal.
+
+
+Next resource review: HTTP startup narrows rpcworkqueue and rpcthreads from a
+signed 64-bit argument to int after only applying a lower bound. Large settings
+can wrap into an oversized queue limit or no worker threads. Use ordinary startup
+fixtures and safe boundary values; do not attempt to create billions of workers.
+Keep validation before HTTP resource allocation/startup and preserve the existing
+minimum-one behavior for nonpositive settings. No authentication or protocol
+changes are needed. No new task source changes yet.

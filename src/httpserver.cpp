@@ -252,13 +252,6 @@ static bool HTTPBindAddresses(struct evhttp* http)
     return !boundSockets.empty();
 }
 
-/** Simple wrapper to set thread name and run work queue */
-static void HTTPWorkQueueRun(WorkQueue<HTTPClosure>* queue)
-{
-    RenameThread("zcl-httpworker");
-    queue->Run();
-}
-
 /** libevent event log callback */
 static void libevent_log_cb(int severity, const char *msg)
 {
@@ -361,10 +354,7 @@ bool StartHTTPServer()
     LogPrintf("HTTP: starting %d worker threads\n", rpcThreads);
     threadHTTP = boost::thread(boost::bind(&ThreadHTTP, eventBase, eventHTTP));
 
-    for (int i = 0; i < rpcThreads; i++) {
-        boost::thread rpc_worker(HTTPWorkQueueRun, workQueue);
-        rpc_worker.detach();
-    }
+    workQueue->Start(rpcThreads, [] { RenameThread("zcl-httpworker"); });
     return true;
 }
 
@@ -390,6 +380,7 @@ void StopHTTPServer()
         LogPrint("http", "Waiting for HTTP worker threads to exit\n");
         workQueue->WaitExit();
         delete workQueue;
+        workQueue = nullptr;
     }
     if (eventBase) {
         LogPrint("http", "Waiting for HTTP event thread to exit\n");
