@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-14 02:30 UTC.
+Updated: 2026-09-14 02:36 UTC.
 
 ## Current mission
 
@@ -16,7 +16,8 @@ reformulation. Current user instruction was read from
 ## Repository and production
 
 - Working directory /opt/zclassic-money, branch fix/og-node-sync-20260913.
-- Latest committed milestone f5ef27a3c: seed queue permit ownership.
+- Latest committed milestone 5631a27da: pruning budget validation.
+- Prior f5ef27a3c: seed queue permit ownership.
 - Prior a3e91ee5d: scheduler deadline ownership.
 - Prior 8a11ae4eb: VerifyDB reconnect cancellation.
 - Prior c32d3ba5d: join workers after startup failure.
@@ -422,3 +423,35 @@ stop on -onlynet=invalid before opening any block database; no pruning is done.
 - Separate static review finding: first config read catches any std::exception
   and opens the existing config for replacement. Investigate ordinary local
   config-error handling without touching production settings or authentication.
+
+
+## Validated configuration read/error handling
+
+The first config read caught all std::exceptions and opened the config for
+replacement. A simple local syntax typo replaced the file with generated defaults
+instead of reporting the error. Valid existing files were also read twice,
+appending every list option twice; one addnode appeared twice in RPC.
+
+ReadOrCreateConfig now reads an existing config once. Syntax errors reach the
+existing startup error handler. Only missing-file errors trigger creation, with
+an existing-path guard and checked write/close results. Default contents are
+unchanged; no authentication behavior or production configuration was modified.
+This addresses ordinary error handling, not an atomic first-creation guarantee.
+
+- New qa/rpc-tests/config-load.py: both normal baseline cases fail (file replaced;
+  duplicate configured peer). Fixed normal and ASan/UBSan/leak four-case matrices
+  pass, including first creation and missing-parent write failure.
+- The typo file is byte-for-byte unchanged; getaddednodeinfo lists exactly one
+  configured loopback destination and RPC stop exits zero. Creation/error controls
+  stop before opening a block database. No sanitizer findings.
+- Evidence: mission/config-load-{before,after,asan-after}/ and associated logs.
+  Both zclassicd-config candidates build and source bytes match. All jobs complete.
+- Production PID 503646 and both binary hashes rechecked unchanged at 02:34 UTC.
+  Root datadir, service, paused stash and historical validation evidence untouched.
+
+Next concrete finding: the auto-generated config explicitly writes txindex=1,
+even though that is the source default. This makes first-run -prune fail the
+explicit-txindex conflict check, defeating its intended automatic interaction.
+Use fresh genesis-only datadirs to verify removal of the redundant generated
+setting preserves normal indexing and permits the requested pruning mode. Never
+prune existing data or change a user's existing configuration.

@@ -21,6 +21,7 @@
 
 #include <fstream>
 #include <iostream>
+#include <stdexcept>
 
 
 /* Introduction text for doxygen: */
@@ -57,6 +58,30 @@ void WaitForShutdown(boost::thread_group* threadGroup)
     }
 }
 
+
+static void ReadOrCreateConfig()
+{
+    try {
+        ReadConfigFile(mapArgs, mapMultiArgs);
+    } catch (const missing_zcash_conf&) {
+        const boost::filesystem::path path = GetConfigFile();
+        // missing_zcash_conf also covers an existing file that cannot be read.
+        // Never replace that file with generated defaults.
+        if (boost::filesystem::exists(path))
+            throw std::runtime_error("Unable to read existing configuration file.");
+
+        std::ofstream config(path.string());
+        if (!config)
+            throw std::runtime_error("Unable to create configuration file.");
+        config << "txindex=1" << std::endl;
+        config << "rpcuser=zcluser" << std::endl;
+        config << "rpcpassword=zclpass" << std::endl;
+        config.close();
+        if (!config)
+            throw std::runtime_error("Unable to write configuration file.");
+        ReadConfigFile(mapArgs, mapMultiArgs);
+    }
+}
 
 //////////////////////////////////////////////////////////////////////////////
 //
@@ -116,24 +141,9 @@ bool AppInit(int argc, char* argv[])
             return false;
         }
 
-        
         try
         {
-            ReadConfigFile(mapArgs, mapMultiArgs);
-        } catch (const std::exception& e) {
-            boost::filesystem::path config_file_path = GetConfigFile();
-
-            std::ofstream basic_conf_file (config_file_path.string());
-            basic_conf_file << "txindex=1" << std::endl;
-            basic_conf_file << "rpcuser=zcluser" << std::endl;
-            basic_conf_file << "rpcpassword=zclpass" << std::endl;
-            basic_conf_file.close();
-
-        }        
-
-        try
-        {
-            ReadConfigFile(mapArgs, mapMultiArgs);
+            ReadOrCreateConfig();
         } catch (const missing_zcash_conf& e) {
             fprintf(stderr,
                 (_("Before starting zclassicd, you need to create a configuration file:\n"
