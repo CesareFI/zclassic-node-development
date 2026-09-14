@@ -584,7 +584,8 @@ void ProcessBlockAvailability(NodeId nodeid) {
 bool HasPreferredDownloadSource()
 {
     AssertLockHeld(cs_main);
-    if (nPreferredDownload == 0)
+    int preferredRemaining = nPreferredDownload;
+    if (preferredRemaining == 0)
         return false;
     const CBlockIndex* tip = chainActive.Tip();
     for (auto& entry : mapNodeState) {
@@ -601,6 +602,10 @@ bool HasPreferredDownloadSource()
         if (best && best->IsValid(BLOCK_VALID_TREE) &&
             (!tip || best->nChainWork > tip->nChainWork))
             return true;
+        // Once every preferred peer is checked, later inbound entries cannot
+        // change the result. Avoid scanning a large idle inbound pool again.
+        if (--preferredRemaining == 0)
+            break;
     }
     return false;
 }

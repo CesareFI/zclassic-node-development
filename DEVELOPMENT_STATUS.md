@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-13 23:57 UTC.
+Updated: 2026-09-14 00:21 UTC.
 
 ## Current mission
 
@@ -16,7 +16,8 @@ reformulation. Current user instruction was read from
 ## Repository and production
 
 - Working directory /opt/zclassic-money, branch fix/og-node-sync-20260913.
-- Latest validated milestone: header-aware inbound fallback (this snapshot).
+- Latest validated milestone: bounded preferred-source scan (this snapshot).
+- Prior 0514633fa: inbound fallback after completed preferred discovery.
 - Prior 865993abf: header-response deadlines; 286036078: header completion.
 - Prior a7f7bd07d: peer download role diagnostics.
 - Prior 60548418a: immediate owned-notfound response recovery.
@@ -143,5 +144,25 @@ beyond the active tip retain priority. Known inventory is resolved before decidi
   {before,after,asan}-capacity. Unit/build logs: mission/inbound-fallback-*.
 - Normal and ASan next candidates are zclassicd-fallback, separately named from
   the completed timer binaries. No production executable/service/data changed.
-- All test/build processes completed. Next measure scheduling overhead using
-  ordinary local state fixtures. Do not resume the paused stash.
+- All fallback test/build processes completed. Do not resume the paused stash.
+
+
+## Validated idle scheduling optimization
+
+Stop checking peer state once the existing preferred count has been examined.
+No additional mutable index or ownership state. Three quiet loop measurements
+(1,000 full rounds; preferred peer first) improved median 125-peer time from
+0.103885s to 0.023699s; 750-peer time from 2.528977s to 0.157800s. These are local
+scheduling-loop measurements, not whole-node CPU estimates.
+
+- Added bounded 125/750-peer completed-role coverage and a preferred source after
+  64 inbound peers. Late preferred discovery/work retains priority, then cleanup
+  allows inbound takeover and full fixture validation.
+- 18 selected ordinary cases / 20,067 assertions pass normally (21.007s) and
+  ASan/UBSan/leak (46.137s). Both zclassicd-mission candidates rebuild successfully.
+- All builds/tests complete; evidence mission/scheduling-{idle,scale}-*.
+- Initial benchmark constructor had an unsigned-overload ambiguity; corrected to
+  the explicitly bounded int port before recording successful measurements.
+- Next: isolate and test cache-size conversion. init.cpp currently shifts the
+  signed -dbcache argument before clamping. Test pure arithmetic without startup
+  or live datadir access, then fix conversion order if reproduced.

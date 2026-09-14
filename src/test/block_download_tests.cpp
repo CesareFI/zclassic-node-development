@@ -18,6 +18,7 @@
 #include <map>
 #include <random>
 #include <limits>
+#include <chrono>
 
 extern bool ProcessMessage(CNode*, std::string, CDataStream&, int64_t);
 extern UniValue CallRPC(std::string);
@@ -260,6 +261,37 @@ struct DownloadSetup : TestingSetup {
 
 BOOST_FIXTURE_TEST_SUITE(block_download_tests, DownloadSetup)
 
+BOOST_DATA_TEST_CASE(idle_peer_scheduling_preserves_completed_roles,
+                    boost::unit_test::data::make({125U, 750U}), peerCount)
+{
+    std::vector<std::unique_ptr<CNode>> peers;
+    for (unsigned index = 0; index < peerCount; ++index) {
+        peers.emplace_back(new CNode(INVALID_SOCKET,
+            CAddress(CService("127.0.0.1", static_cast<int>(index + 1))), "idle", index != 0));
+        Handshake(*peers.back());
+        BOOST_REQUIRE(SendMessages(peers.back().get(), false));
+        Headers(*peers.back(), 0);
+    }
+    BOOST_REQUIRE_EQUAL(GetBlockDownloadStats().nPreferredDownloadPeers, 1);
+    BOOST_REQUIRE_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 0);
+    const auto begin = std::chrono::steady_clock::now();
+    bool sent = true;
+    for (unsigned round = 0; round < 1000; ++round)
+        for (const auto& peer : peers)
+            sent &= SendMessages(peer.get(), false);
+    const std::chrono::duration<double> elapsed = std::chrono::steady_clock::now() - begin;
+    BOOST_TEST_MESSAGE("idle_peer_count=" << peerCount << " idle_scheduling_seconds=" << elapsed.count());
+    BOOST_CHECK(sent);
+    for (const auto& peer : peers) {
+        BOOST_CHECK(!peer->fDisconnect);
+        BOOST_CHECK_EQUAL(Sent(*peer, "getheaders"), 1);
+        BOOST_CHECK_EQUAL(Stats(*peer).nBlocksInFlight, 0);
+    }
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nPreferredDownloadPeers, 1);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
+}
+
 BOOST_AUTO_TEST_CASE(inbound_discovers_work_after_preferred_sources_finish_without_headers)
 {
     CNode outbound(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "A", false);
@@ -282,6 +314,43 @@ BOOST_AUTO_TEST_CASE(inbound_discovers_work_after_preferred_sources_finish_witho
     Deliver(inbound, 129);
     BOOST_CHECK_EQUAL(chainActive.Height(), 129);
     BOOST_CHECK(!outbound.fDisconnect);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
+}
+
+BOOST_AUTO_TEST_CASE(preferred_source_after_many_inbounds_retains_priority)
+{
+    std::vector<std::unique_ptr<CNode>> inbounds;
+    for (unsigned index = 0; index < 64; ++index) {
+        inbounds.emplace_back(new CNode(INVALID_SOCKET,
+            CAddress(CService("127.0.0.1", static_cast<int>(index + 10))), "inbound", true));
+        Handshake(*inbounds.back());
+    }
+    CNode preferred(INVALID_SOCKET, CAddress(CService("127.0.0.2", 1)), "preferred", false);
+    Handshake(preferred);
+    BOOST_REQUIRE(SendMessages(&preferred, false));
+    for (const auto& peer : inbounds) {
+        BOOST_REQUIRE(SendMessages(peer.get(), false));
+        BOOST_CHECK_EQUAL(Sent(*peer, "getheaders"), 0);
+    }
+    Headers(preferred);
+    for (const auto& peer : inbounds) {
+        BOOST_REQUIRE(SendMessages(peer.get(), false));
+        BOOST_CHECK_EQUAL(Sent(*peer, "getheaders"), 0);
+        BOOST_CHECK_EQUAL(Stats(*peer).nBlocksInFlight, 0);
+    }
+    BOOST_REQUIRE(SendMessages(&preferred, false));
+    BOOST_REQUIRE_EQUAL(Stats(preferred).nBlocksInFlight, 128);
+    GetNodeSignals().DisconnectNode(preferred.GetId());
+    CNode& fallback = *inbounds.front();
+    BOOST_REQUIRE(SendMessages(&fallback, false));
+    BOOST_CHECK_EQUAL(Sent(fallback, "getheaders"), 1);
+    Headers(fallback);
+    BOOST_REQUIRE(SendMessages(&fallback, false));
+    BOOST_REQUIRE_EQUAL(Stats(fallback).nBlocksInFlight, 128);
+    for (size_t height = 1; height <= 128; ++height) Deliver(fallback, height);
+    BOOST_REQUIRE(SendMessages(&fallback, false));
+    Deliver(fallback, 129);
+    BOOST_CHECK_EQUAL(chainActive.Height(), 129);
     BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
 }
 

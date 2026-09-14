@@ -904,3 +904,20 @@ allowed only eight connections, below this node's 16 reserved outbound slots;
 the isolated inbound fixture now uses 32, and the earlier failures are retained.
 Run qa/rpc-tests/og-header-discovery.py --inbound-fallback --response empty.
 Evidence: mission/inbound-fallback-*. Production remains untouched.
+
+## Idle scheduling cost
+
+The availability check initially scanned the whole peer-state map even after
+examining every preferred peer. With completed discovery and an empty preferred
+source placed first, that repeated work grows with the idle inbound pool. The
+check now stops after the existing preferred count has been examined, under the
+same lock; it adds no index or lifetime bookkeeping.
+
+In three quiet runs of 1,000 complete scheduling rounds, median time changed from
+0.104s to 0.024s with 125 peers and from 2.529s to 0.158s with 750 peers. These are
+local idle-state loop measurements with preferred entries first, not whole-node
+CPU claims. A preferred source placed after 64 inbounds still retains priority
+during discovery and while it has known work; disconnect then permits takeover.
+All 18 selected ordinary cases pass 20,067 assertions normally (21.007s) and under
+ASan/UBSan/leak checking (46.137s). Both separate candidate daemons build. Evidence:
+mission/scheduling-{idle,scale}-*. Peer selection semantics and consensus are unchanged.
