@@ -8,6 +8,9 @@
 #include <boost/filesystem.hpp>
 #include <boost/thread.hpp>
 
+/** Control the unit-test shutdown query without stopping the test process. */
+void SetShutdownRequestedForTest(bool requested);
+
 /** Basic testing setup.
  * This just configures logging and chain parameters.
  */

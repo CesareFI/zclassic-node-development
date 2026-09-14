@@ -5203,6 +5203,17 @@ bool static LoadBlockIndexDB()
     return true;
 }
 
+// Mirror progress into the warmup status used by the GUI startup watchdog.
+// Publish that status only when the integer percentage changes.
+static void ReportVerifyDBProgress(int percentage, int& lastInitPercent)
+{
+    uiInterface.ShowProgress(_("Verifying blocks..."), percentage);
+    if (percentage != lastInitPercent) {
+        uiInterface.InitMessage(strprintf(_("Verifying blocks... (%d%%)"), percentage));
+        lastInitPercent = percentage;
+    }
+}
+
 CVerifyDB::CVerifyDB()
 {
     uiInterface.ShowProgress(_("Verifying blocks..."), 0);
@@ -5233,21 +5244,12 @@ bool CVerifyDB::VerifyDB(CCoinsView *coinsview, int nCheckLevel, int nCheckDepth
     CValidationState state;
     // No need to verify JoinSplits twice
     auto verifier = libzcash::ProofVerifier::Disabled();
-    // Mirror the ShowProgress percentage into the warmup status string (via
-    // InitMessage) so the GUI watchdog's no-progress timer keeps resetting and
-    // the user sees real movement during this multi-minute phase; ShowProgress
-    // alone is not routed to the RPC warmup status. Throttle to only emit when
-    // the integer percent changes to avoid spamming the status.
     int nLastInitPercent = -1;
     for (CBlockIndex* pindex = chainActive.Tip(); pindex && pindex->pprev; pindex = pindex->pprev)
     {
         boost::this_thread::interruption_point();
         int percentageDone = std::max(1, std::min(99, (int)(((double)(chainActive.Height() - pindex->nHeight)) / (double)nCheckDepth * (nCheckLevel >= 4 ? 50 : 100))));
-        uiInterface.ShowProgress(_("Verifying blocks..."), percentageDone);
-        if (percentageDone != nLastInitPercent) {
-            uiInterface.InitMessage(strprintf(_("Verifying blocks... (%d%%)"), percentageDone));
-            nLastInitPercent = percentageDone;
-        }
+        ReportVerifyDBProgress(percentageDone, nLastInitPercent);
         if (pindex->nHeight < chainActive.Height()-nCheckDepth)
             break;
         CBlock block;
@@ -5292,17 +5294,15 @@ bool CVerifyDB::VerifyDB(CCoinsView *coinsview, int nCheckLevel, int nCheckDepth
         while (pindex != chainActive.Tip()) {
             boost::this_thread::interruption_point();
             int percentageDone = std::max(1, std::min(99, 100 - (int)(((double)(chainActive.Height() - pindex->nHeight)) / (double)nCheckDepth * 50)));
-            uiInterface.ShowProgress(_("Verifying blocks..."), percentageDone);
-            if (percentageDone != nLastInitPercent) {
-                uiInterface.InitMessage(strprintf(_("Verifying blocks... (%d%%)"), percentageDone));
-                nLastInitPercent = percentageDone;
-            }
+            ReportVerifyDBProgress(percentageDone, nLastInitPercent);
             pindex = chainActive.Next(pindex);
             CBlock block;
             if (!ReadBlockFromDisk(block, pindex))
                 return error("VerifyDB(): *** ReadBlockFromDisk failed at %d, hash=%s", pindex->nHeight, pindex->GetBlockHash().ToString());
             if (!ConnectBlock(block, state, pindex, coins))
                 return error("VerifyDB(): *** found unconnectable block at %d, hash=%s", pindex->nHeight, pindex->GetBlockHash().ToString());
+            if (ShutdownRequested())
+                return true;
         }
     }
 

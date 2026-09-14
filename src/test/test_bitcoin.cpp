@@ -25,6 +25,7 @@
 #include <boost/filesystem.hpp>
 #include <boost/test/unit_test.hpp>
 #include <boost/thread.hpp>
+#include <atomic>
 
 #include "librustzcash.h"
 
@@ -163,7 +164,14 @@ void StartShutdown()
   exit(0);
 }
 
+static std::atomic<bool> testShutdownRequested(false);
+
+void SetShutdownRequestedForTest(bool requested)
+{
+    testShutdownRequested = requested;
+}
+
 bool ShutdownRequested()
 {
-  return false;
+  return testShutdownRequested;
 }

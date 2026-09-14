@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-14 01:41 UTC.
+Updated: 2026-09-14 02:10 UTC.
 
 ## Current mission
 
@@ -16,7 +16,7 @@ reformulation. Current user instruction was read from
 ## Repository and production
 
 - Working directory /opt/zclassic-money, branch fix/og-node-sync-20260913.
-- Latest validated milestone: join workers after startup failure (this snapshot).
+- Latest committed milestone c32d3ba5d: join workers after startup failure.
 - Prior 2e921face: PID-file ownership.
 - Prior 01a79bb9e: completed-startup shutdown path.
 - Prior a0f62634d: connection-budget conversion.
@@ -301,3 +301,35 @@ thread ownership and separately managed bootstrap workers match the final code.
 Next: continue ordinary startup/restart and resource-lifecycle review from this
 state. The primary synchronization fixes, historical block-478544 diagnosis, and
 all completed peer/sanitizer evidence remain preserved. Do not resume the stash.
+
+## Validated VerifyDB reconnect cancellation
+
+The new bounded 130-block fixture reproduces a missing shutdown check during
+VerifyDB's reconnect pass: both normal and ASan baselines run 129 reconnect
+iterations after the first stop request, instead of one. Stored tip/coinbase
+controls and subsequent full verification pass. Test-only shutdown state defaults
+to false and is restored on fixture teardown.
+
+VerifyDB now checks the shutdown flag after each reconnect, matching its backward
+pass. A shared progress helper preserves percent-throttled RPC warmup messages.
+The verification cache remains temporary; consensus and block acceptance do not
+change. The full verification control emits 99 distinct progress messages.
+
+- Normal selected tests: 11 cases, 1,015 assertions pass (includes scheduler).
+- ASan/UBSan/leak isolated tests: 10 cases, 1,000 assertions pass (VerifyDB, init,
+  getarg). Evidence: mission/verifydb-cancel-asan-isolated.log.
+- The combined ASan run exposed a separate pre-existing scheduler use-after-free:
+  wait_until retains a reference to a queue deadline while another worker erases
+  that entry. Preserved in mission/verifydb-cancel-asan-after.log. This is the
+  ordinary in-process manythreads test, not an excluded network/security sequence.
+  No tool safety refusal occurred. Fix deadline ownership as a separate milestone.
+- Normal and instrumented zclassicd-verify candidates build successfully. Normal
+  and instrumented temporary-datadir startup cancellation/restart both pass:
+  exact 129-block tip retained, download counters zero, clean shutdown, no
+  sanitizer findings. Evidence: mission/verifydb-startup-cancel-{after,asan-after}/.
+  Integration controls cancel in the backward pass; the new unit fixture
+  specifically exercises reconnect cancellation.
+- All VerifyDB build/test processes completed successfully. Separate scheduler
+  tests have now been added and their instrumented baseline is building; they
+  are excluded from the VerifyDB milestone commit.
+- Production, the paused stash, and all previous evidence remain untouched.
