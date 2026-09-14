@@ -1659,8 +1659,9 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
 
     // Make sure enough file descriptors are available
     int nBind = std::max((int)mapArgs.count("-bind") + (int)mapArgs.count("-whitebind"), 1);
-    nMaxConnections = GetArg("-maxconnections", DEFAULT_MAX_PEER_CONNECTIONS);
-    nMaxConnections = std::max(std::min(nMaxConnections, (int)(FD_SETSIZE - nBind - MIN_CORE_FILEDESCRIPTORS)), 0);
+    const int64_t requestedConnections = GetArg("-maxconnections", DEFAULT_MAX_PEER_CONNECTIONS);
+    const int connectionLimit = std::max((int)FD_SETSIZE - nBind - MIN_CORE_FILEDESCRIPTORS, 0);
+    nMaxConnections = static_cast<int>(std::max<int64_t>(0, std::min<int64_t>(requestedConnections, connectionLimit)));
     int nFD = RaiseFileDescriptorLimit(nMaxConnections + MIN_CORE_FILEDESCRIPTORS);
     if (nFD < MIN_CORE_FILEDESCRIPTORS)
         return InitError(_("Not enough file descriptors available."));

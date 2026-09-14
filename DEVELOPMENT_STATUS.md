@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-14 00:44 UTC.
+Updated: 2026-09-14 00:50 UTC.
 
 ## Current mission
 
@@ -16,7 +16,7 @@ reformulation. Current user instruction was read from
 ## Repository and production
 
 - Working directory /opt/zclassic-money, branch fix/og-node-sync-20260913.
-- Latest validated milestone: cache-budget conversion (this snapshot).
+- Latest committed milestone 073d1e5be: cache-budget conversion.
 - Prior e614b767b: bounded preferred-source scan.
 - Prior 0514633fa: inbound fallback after completed preferred discovery.
 - Prior 865993abf: header-response deadlines; 286036078: header completion.
@@ -190,18 +190,33 @@ existing database module avoids that linkage issue without changing the stubs.
   dbcache-after.log, dbcache-asan-after.log and associated build logs.
 - Production executable/inode hashes rechecked unchanged; no service action.
 
-## Next startup resource check
+## Active connection-budget validation
 
-Untracked qa/rpc-tests/maxconnections.py is a separate pending regression. Real
-startup shows 2^32 configured connections narrows to zero and -2^32+1 narrows to
-one before clamping. Root init.cpp still has that original connection calculation.
-The new test uses fresh regtest directories, loopback-only connections, disabled
-mining/wallets, RPC readiness and normal stop. Baseline running in session 93385:
-mission/maxconnections-rpc-before.log and matching directory. Inspect completion
-before rebuilding that candidate. Initial stopafterblockimport-only experiments
-also exposed an existing early-stop exit-code race; their evidence is preserved,
-and the connection regression now waits for RPC readiness to isolate its subject.
+Uncommitted init.cpp now clamps the 64-bit connection request to the platform
+limit before narrowing it to int. New qa/rpc-tests/maxconnections.py covers nine
+real startups, fresh regtest datadirs, loopback-only connections, disabled mining
+and wallets, RPC readiness, and normal RPC stop.
 
-Next: clamp connection budgets before narrowing, rerun the ordinary startup
-matrix normally and with ASan/UBSan/leak checks, then commit independently.
+- Baseline: three failures; 2^32 and INT64_MAX become zero, -2^32+1 becomes one.
+  All nine baseline daemons exit zero with clean shutdown, isolating arithmetic.
+  Evidence: mission/maxconnections-rpc-before/ and matching .log.
+- Normal fixed matrix: all nine PASS. This host's cap is 873; large positives
+  reach that cap, negatives clamp to zero, ordinary settings remain unchanged.
+- ASan candidate built; ASan/UBSan/leak matrix session 93390 still running,
+  mission/maxconnections-asan.log and directory. Poll before rebuilding it.
+- Both candidates contain only the connection change after 073d1e5be. Source
+  init.cpp compared byte-for-byte between normal and instrumented trees.
+
+## Next ordinary lifecycle check
+
+Initial stopafterblockimport-only experiments also exposed an existing early-stop
+exit-code race: successful initialization can return failure if import requests
+shutdown before AppInit2 returns. That routes around the normal main-thread-group
+join. Logs show worker starts/interrupts after Shutdown begins. Evidence preserved
+in mission/maxconnections-before/; no paused/security sequence is being resumed.
+
+Untracked qa/rpc-tests/stopafterblockimport.py now repeats this ordinary empty-import
+scenario with strict exit-zero and worker-before-shutdown assertions. Normal
+baseline session 82284 is active: mission/import-stop-before.log and directory.
+No lifecycle code changes yet. Complete/commit the connection milestone first.
 Do not duplicate completed scheduling/wire checks or resume the paused sequence.
