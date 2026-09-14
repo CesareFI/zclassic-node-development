@@ -1752,13 +1752,11 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     fCheckpointsEnabled = GetBoolArg("-checkpoints", true);
 
     // -par=0 means autodetect, but nScriptCheckThreads==0 means no concurrency
-    nScriptCheckThreads = GetArg("-par", DEFAULT_SCRIPTCHECK_THREADS);
-    if (nScriptCheckThreads <= 0)
-        nScriptCheckThreads += GetNumCores();
-    if (nScriptCheckThreads <= 1)
-        nScriptCheckThreads = 0;
-    else if (nScriptCheckThreads > MAX_SCRIPTCHECK_THREADS)
-        nScriptCheckThreads = MAX_SCRIPTCHECK_THREADS;
+    int64_t requestedScriptThreads = GetArg("-par", DEFAULT_SCRIPTCHECK_THREADS);
+    if (requestedScriptThreads <= 0)
+        requestedScriptThreads += GetNumCores();
+    nScriptCheckThreads = requestedScriptThreads <= 1 ? 0 :
+        static_cast<int>(std::min<int64_t>(requestedScriptThreads, MAX_SCRIPTCHECK_THREADS));
 
     fServer = GetBoolArg("-server", false);
 

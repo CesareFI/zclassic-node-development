@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-14 02:42 UTC.
+Updated: 2026-09-14 05:20 UTC.
 
 ## Current mission
 
@@ -16,7 +16,8 @@ reformulation. Current user instruction was read from
 ## Repository and production
 
 - Working directory /opt/zclassic-money, branch fix/og-node-sync-20260913.
-- Latest committed milestone 4dcfff81b: configuration read/error handling.
+- Latest committed milestone c943c90f1: first-run pruning defaults.
+- Prior 4dcfff81b: configuration read/error handling.
 - Prior 5631a27da: pruning budget validation.
 - Prior f5ef27a3c: seed queue permit ownership.
 - Prior a3e91ee5d: scheduler deadline ownership.
@@ -479,3 +480,31 @@ that operator-provided file.
   64-thread cap. Large positive/negative values can change sign or become auto.
   Keep it signed 64-bit until after bounds, and use ordinary isolated startup
   checks (no blocks/mining/production access) if pursuing this task.
+
+
+## Validated script-thread budget conversion
+
+The -par input narrows to int before the existing 64-thread cap. New
+qa/rpc-tests/script-threads.py exercises eight startup budgets, including positive
+and negative 64-bit boundaries. It reuses startup-failure.py's owned-process
+cleanup matrix through a new optional script_threads argument (default unchanged).
+Each case deliberately stops at -onlynet=invalid before opening a block database;
+workers remain idle and are joined. No script-validation work/mining is performed.
+
+Normal baseline against zclassicd-defaults reproduces all four boundary failures:
+positive values become 2/0 workers; negative values become 2. All four ordinary
+controls pass and all processes cleanly exit. Source now retains int64_t through
+core adjustment and the existing 64-thread cap, narrowing only the final value.
+
+- Both zclassicd-threads candidates build. Normal and ASan/UBSan/leak matrices
+  pass all eight cases with no sanitizer findings, late workers or open block DBs.
+- Evidence: mission/script-threads-{before,after,asan-after}/ and matching logs.
+  Normal/instrumented init.cpp compare equal; all jobs completed before commit.
+- A subsequent independent HTTP work-queue review is uncommitted. Its original
+  queue class was extracted without behavior changes into http_workqueue.h for
+  ordinary in-process lifecycle tests. Baseline normal/ASan/TSAN tests are now
+  running; no existing socket/malformed-message fixture is executed. The standalone
+  test initially needed an explicit boost/thread.hpp include; build logs retained.
+- Static concerns: an unlocked stop-flag read, accepting work after interruption,
+  and detached worker ownership. Do not claim a fix before reproducing/validating.
+- Production and the paused stash remain unchanged. No tool safety refusal occurred.

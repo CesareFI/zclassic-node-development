@@ -11,7 +11,7 @@ import socket
 import subprocess
 
 
-def run_once(daemon, datadir, rpc_enabled):
+def run_once(daemon, datadir, rpc_enabled, script_threads=2):
     datadir.mkdir()
     with socket.socket() as reservation:
         reservation.bind(("127.0.0.1", 0))
@@ -20,7 +20,7 @@ def run_once(daemon, datadir, rpc_enabled):
                "-daemon=0", "-server=" + str(int(rpc_enabled)), "-rpcport=" + str(port),
                "-rpcbind=127.0.0.1", "-disablewallet=1", "-gen=0", "-bootstrap=0",
                "-listen=0", "-connect=127.0.0.1:1", "-dnsseed=0", "-listenonion=0",
-               "-upnp=0", "-natpmp=0", "-dbcache=4", "-par=2",
+               "-upnp=0", "-natpmp=0", "-dbcache=4", "-par=" + str(script_threads),
                "-printtoconsole=1", "-onlynet=invalid"]
     error = None
     logpath = datadir / "console.log"
