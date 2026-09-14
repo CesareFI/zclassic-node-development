@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-14 05:46 UTC.
+Updated: 2026-09-14 06:08 UTC.
 
 ## Current mission
 
@@ -16,7 +16,8 @@ reformulation. Current user instruction was read from
 ## Repository and production
 
 - Working directory /opt/zclassic-money, branch fix/og-node-sync-20260913.
-- Latest committed milestone 7c9c6bdc1: HTTP work-queue interruption.
+- Latest committed milestone 61231d83b: HTTP worker handle ownership.
+- Prior 7c9c6bdc1: HTTP work-queue interruption.
 - Prior e891a2958: script-thread budget conversion.
 - Prior c943c90f1: first-run pruning defaults.
 - Prior 4dcfff81b: configuration read/error handling.
@@ -605,3 +606,34 @@ fixtures and safe boundary values; do not attempt to create billions of workers.
 Keep validation before HTTP resource allocation/startup and preserve the existing
 minimum-one behavior for nonpositive settings. No authentication or protocol
 changes are needed. No new task source changes yet.
+
+
+## HTTP resource-budget validation
+
+InitHTTPServer now validates -rpcworkqueue and -rpcthreads as int64 values before
+allocating HTTP resources, rejecting values above INT_MAX. It preserves the
+existing minimum-one behavior for nonpositive values and all representable
+positive settings. StartHTTPServer uses the validated worker count. No arbitrary
+low resource cap, authentication, protocol, or consensus change was introduced.
+
+qa/rpc-tests/http-budgets.py covers twelve ordinary startup settings in fresh
+datadirs, stopping before block databases open. startup-failure.py accepts optional
+extra_args with existing callers unchanged. Baseline zclassicd-httpworkers failed
+six overflow cases: INT_MAX+1, 2^32+2, and INT64_MAX each narrowed to incorrect
+queue depths or thread counts. All baseline cases were chosen to avoid allocating
+large worker pools; an INT_MAX queue capacity does not preallocate queue items.
+
+Both normal and ASAN/UBSAN/leak builds now pass all twelve cases, exit cleanly
+with the expected startup error, remove their PID file, and leave block databases
+unopened. Evidence: mission/http-budgets-{before,before-boundary,after,asan-after}/.
+Normal and sanitizer ordinary RPC startup/request/stop controls also pass with
+exit zero and no sanitizer findings; evidence is under
+mission/http-budgets-rpc-{after,asan-after}/. Production remains untouched.
+
+## Next download lifecycle task
+
+Review found block replies ignored during local import/reindex while SendMessages
+still applies block timeouts and schedules new requests. Reproduce with ordinary
+valid-block in-memory transport fixtures before changing scheduling. Preserve
+preferred eligibility across a local pause; do not disconnect healthy peers for
+replies this node chose to ignore. No new download source changes yet.

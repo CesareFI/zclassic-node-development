@@ -14,6 +14,7 @@
 #include "ui_interface.h"
 
 #include <deque>
+#include <limits>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -83,6 +84,8 @@ struct evhttp* eventHTTP = 0;
 static std::vector<CSubNet> rpc_allow_subnets;
 //! Work queue for handling longer requests off the event loop thread
 static WorkQueue<HTTPClosure>* workQueue = 0;
+//! Validated during initialization, before allocating HTTP resources.
+static int httpWorkerCount = DEFAULT_HTTP_THREADS;
 //! Handlers for (sub)paths
 std::vector<HTTPPathHandler> pathHandlers;
 //! Bound listening sockets
@@ -279,10 +282,26 @@ struct evhttp* CreateHTTPServer(struct event_base* base)
     return http;
 }
 
+static bool ReadHTTPResourceLimit(const char* option, int defaultValue, int& limit)
+{
+    const int64_t requested = GetArg(option, defaultValue);
+    if (requested > std::numeric_limits<int>::max()) {
+        LogPrintf("HTTP: %s must not exceed %d.\n", option, std::numeric_limits<int>::max());
+        return false;
+    }
+    limit = static_cast<int>(std::max<int64_t>(requested, 1));
+    return true;
+}
+
 bool InitHTTPServer()
 {
     struct evhttp* http = 0;
     struct event_base* base = 0;
+
+    int workQueueDepth, rpcThreads;
+    if (!ReadHTTPResourceLimit("-rpcworkqueue", DEFAULT_HTTP_WORKQUEUE, workQueueDepth) ||
+        !ReadHTTPResourceLimit("-rpcthreads", DEFAULT_HTTP_THREADS, rpcThreads))
+        return false;
 
     if (!InitHTTPAllowList())
         return false;
@@ -336,10 +355,10 @@ bool InitHTTPServer()
     }
 
     LogPrint("http", "Initialized HTTP server\n");
-    int workQueueDepth = std::max((long)GetArg("-rpcworkqueue", DEFAULT_HTTP_WORKQUEUE), 1L);
     LogPrintf("HTTP: creating work queue of depth %d\n", workQueueDepth);
 
     workQueue = new WorkQueue<HTTPClosure>(workQueueDepth);
+    httpWorkerCount = rpcThreads;
     eventBase = base;
     eventHTTP = http;
     return true;
@@ -350,11 +369,10 @@ boost::thread threadHTTP;
 bool StartHTTPServer()
 {
     LogPrint("http", "Starting HTTP server\n");
-    int rpcThreads = std::max((long)GetArg("-rpcthreads", DEFAULT_HTTP_THREADS), 1L);
-    LogPrintf("HTTP: starting %d worker threads\n", rpcThreads);
+    LogPrintf("HTTP: starting %d worker threads\n", httpWorkerCount);
     threadHTTP = boost::thread(boost::bind(&ThreadHTTP, eventBase, eventHTTP));
 
-    workQueue->Start(rpcThreads, [] { RenameThread("zcl-httpworker"); });
+    workQueue->Start(httpWorkerCount, [] { RenameThread("zcl-httpworker"); });
     return true;
 }
 
