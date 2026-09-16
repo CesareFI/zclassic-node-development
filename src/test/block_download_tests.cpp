@@ -1238,6 +1238,16 @@ BOOST_DATA_TEST_CASE(download_limits_bound_requests_and_recover,
     BOOST_CHECK_EQUAL(Stats(healthy).nGlobalBlocksInFlight, 0);
 }
 
+BOOST_AUTO_TEST_CASE(block_timeout_saturates_at_int64_max)
+{
+    SetMockTimeMicros(std::numeric_limits<int64_t>::max() - 1);
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "boundary", true);
+    Headers(peer, 1);
+    BOOST_REQUIRE(SendMessages(&peer, false));
+    BOOST_CHECK_EQUAL(Stats(peer).nDownloadDeadline,
+                      std::numeric_limits<int64_t>::max());
+}
+
 BOOST_DATA_TEST_CASE(inventory_requests_mix_with_validated_downloads,
                      boost::unit_test::data::make(std::vector<int>{16, 32, 64, 128}))
 {

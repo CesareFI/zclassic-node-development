@@ -434,7 +434,26 @@ void UpdateHeaderSyncProgress(CNodeState& state, const arith_uint256& work)
 // Returns time at which to timeout block request (nTime in microseconds)
 int64_t GetBlockTimeout(int64_t nTime, int nValidatedQueuedBefore, const Consensus::Params &consensusParams, int nHeight)
 {
-    return nTime + 500000 * consensusParams.PoWTargetSpacing(nHeight) * (4 + nValidatedQueuedBefore);
+    const int64_t maxTime = std::numeric_limits<int64_t>::max();
+    const int64_t spacing = consensusParams.PoWTargetSpacing(nHeight);
+
+    // This is an operational deadline, so clamp malformed or extreme input
+    // instead of allowing signed arithmetic to overflow. Normal consensus
+    // parameters and queue sizes take the exact same path as before.
+    if (spacing <= 0)
+        return nTime;
+
+    const int64_t baseDelay = 500000;
+    if (spacing > maxTime / baseDelay)
+        return maxTime;
+
+    const int64_t delayPerBlock = spacing * baseDelay;
+    const int64_t queueSlots = 4 + std::max<int64_t>(
+        0, static_cast<int64_t>(nValidatedQueuedBefore));
+    const int64_t delay = queueSlots > maxTime / delayPerBlock
+        ? maxTime
+        : delayPerBlock * queueSlots;
+    return nTime > maxTime - delay ? maxTime : nTime + delay;
 }
 
 void InitializeNode(NodeId nodeid, const CNode *pnode) {
