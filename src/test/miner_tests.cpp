@@ -15,8 +15,18 @@
 #include "test/test_bitcoin.h"
 
 #include <boost/test/unit_test.hpp>
+#include <limits>
 
 BOOST_FIXTURE_TEST_SUITE(miner_tests, TestingSetup)
+
+BOOST_AUTO_TEST_CASE(miner_thread_requests_are_bounded)
+{
+    BOOST_CHECK_EQUAL(ClampMiningThreads(-1, 8), 8);
+    BOOST_CHECK_EQUAL(ClampMiningThreads(0, 8), 0);
+    BOOST_CHECK_EQUAL(ClampMiningThreads(3, 8), 3);
+    BOOST_CHECK_EQUAL(ClampMiningThreads(std::numeric_limits<int>::max(), 8), 8);
+    BOOST_CHECK_EQUAL(ClampMiningThreads(3, 0), 1);
+}
 
 static
 struct {

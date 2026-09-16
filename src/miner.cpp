@@ -758,8 +758,7 @@ void GenerateBitcoins(bool fGenerate, int nThreads, const CChainParams& chainpar
 {
     static boost::thread_group* minerThreads = NULL;
 
-    if (nThreads < 0)
-        nThreads = GetNumCores();
+    nThreads = ClampMiningThreads(nThreads, GetNumCores());
 
     if (minerThreads != NULL)
     {
@@ -779,3 +778,11 @@ void GenerateBitcoins(bool fGenerate, int nThreads, const CChainParams& chainpar
 }
 
 #endif // ENABLE_MINING
+
+int ClampMiningThreads(int requested, int available)
+{
+    const int safeAvailable = std::max(1, available);
+    if (requested < 0)
+        return safeAvailable;
+    return std::min(requested, safeAvailable);
+}

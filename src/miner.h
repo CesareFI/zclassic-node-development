@@ -35,6 +35,9 @@ void IncrementExtraNonce(CBlock* pblock, CBlockIndex* pindexPrev, unsigned int& 
 void GenerateBitcoins(bool fGenerate, int nThreads, const CChainParams& chainparams);
 #endif
 
+/** Bound a requested miner thread count without creating any threads. */
+int ClampMiningThreads(int requested, int available);
+
 void UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParams, const CBlockIndex* pindexPrev);
 
 #endif // BITCOIN_MINER_H
