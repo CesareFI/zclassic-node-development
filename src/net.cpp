@@ -14,6 +14,7 @@
 #include "chainparams.h"
 #include "clientversion.h"
 #include "net_oneshot.h"
+#include "net_selection.h"
 #include "primitives/transaction.h"
 #include "scheduler.h"
 #include "ui_interface.h"
@@ -1408,54 +1409,25 @@ void ThreadOpenConnections()
         //
         // Choose an address to connect to based on most recently seen
         //
-        CAddress addrConnect;
-
         // Only connect out to one peer per network group (/16 for IPv4).
         // Do this here so we don't have to critsect vNodes inside mapAddresses critsect.
-        int nOutbound = 0;
         set<vector<unsigned char> > setConnected;
         {
             LOCK(cs_vNodes);
             BOOST_FOREACH(CNode* pnode, vNodes) {
                 if (!pnode->fInbound) {
                     setConnected.insert(pnode->addr.GetGroup());
-                    nOutbound++;
                 }
             }
         }
 
-        int64_t nANow = GetAdjustedTime();
-
-        int nTries = 0;
-        while (true)
-        {
-            CAddrInfo addr = addrman.Select();
-
-            // if we selected an invalid address, restart
-            if (!addr.IsValid() || setConnected.count(addr.GetGroup()) || IsLocal(addr))
-                break;
-
-            // If we didn't find an appropriate destination after trying 100 addresses fetched from addrman,
-            // stop this loop, and let the outer loop run again (which sleeps, adds seed nodes, recalculates
-            // already-connected network ranges, ...) before trying new addrman addresses.
-            nTries++;
-            if (nTries > 100)
-                break;
-
-            if (IsLimited(addr))
-                continue;
-
-            // only consider very recently tried nodes after 30 failed attempts
-            if (nANow - addr.nLastTry < 600 && nTries < 30)
-                continue;
-
-            // do not allow non-default ports, unless after 50 invalid addresses selected already
-            if (addr.GetPort() != Params().GetDefaultPort() && nTries < 50)
-                continue;
-
-            addrConnect = addr;
-            break;
-        }
+        const CAddress addrConnect = SelectOutboundAddress(
+            [] { return addrman.Select(); },
+            [&setConnected](const CAddrInfo& addr) {
+                return setConnected.count(addr.GetGroup()) || IsLocal(addr);
+            },
+            [](const CAddrInfo& addr) { return IsLimited(addr); },
+            GetAdjustedTime(), Params().GetDefaultPort());
 
         if (addrConnect.IsValid())
             OpenNetworkConnection(addrConnect, &grant);

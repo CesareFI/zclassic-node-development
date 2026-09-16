@@ -1,6 +1,6 @@
 # Zclassic development status
 
-Updated: 2026-09-14 06:35 UTC.
+Updated: 2026-09-14 06:40 UTC.
 
 ## Current mission
 
@@ -16,7 +16,8 @@ reformulation. Current user instruction was read from
 ## Repository and production
 
 - Working directory /opt/zclassic-money, branch fix/og-node-sync-20260913.
-- Latest committed milestone bb281eb0d: scheduler-observed import pauses.
+- Latest committed milestone 64cdbcf37: import entry ownership/publication and genesis reindex.
+- Prior bb281eb0d: scheduler-observed import pauses.
 - Prior 6271d5701: HTTP resource budget validation.
 - Prior 61231d83b: HTTP worker handle ownership.
 - Prior 7c9c6bdc1: HTTP work-queue interruption.
@@ -726,3 +727,18 @@ Next review: outbound address selection currently ends its search when the first
 candidate belongs to an already-connected group or a local address. Check whether
 eligible candidates can be considered within a strictly bounded selection cycle
 while retaining network diversity and retry/port policy. No changes there yet.
+
+
+## Active bounded outbound-selection regression
+
+The existing selection loop was extracted unchanged into net_selection.h, with
+synchronous callbacks retaining addrman's randomized selection and the existing
+connected-group/local/enabled-network predicates. The now-unused local outbound
+count was removed. No selection behavior has changed yet.
+
+Six deterministic net_selection_tests cases check that excluded first candidates
+do not hide another group/local alternative, that excluded and disabled pools
+stay within 100 draws, that the final permitted draw remains usable, empty pools
+stop immediately, and retry/port preferences hold across time boundaries. Address
+values are only in-memory numeric fixtures: no DNS, sockets or public connections.
+Normal and ASAN baseline builds are running before changing the policy loop.
