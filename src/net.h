@@ -21,6 +21,7 @@
 
 #include <atomic>
 #include <deque>
+#include <limits>
 #include <stdint.h>
 
 #ifndef WIN32
@@ -396,11 +397,17 @@ public:
     }
 
     // requires LOCK(cs_vRecvMsg)
-    unsigned int GetTotalRecvSize()
+    size_t GetTotalRecvSize()
     {
-        unsigned int total = 0;
+        size_t total = 0;
         BOOST_FOREACH(const CNetMessage &msg, vRecvMsg)
-            total += msg.vRecv.size() + 24;
+        {
+            const size_t overhead = 24;
+            if (total > std::numeric_limits<size_t>::max() - overhead ||
+                msg.vRecv.size() > std::numeric_limits<size_t>::max() - total - overhead)
+                return std::numeric_limits<size_t>::max();
+            total += msg.vRecv.size() + overhead;
+        }
         return total;
     }
 

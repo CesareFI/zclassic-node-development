@@ -1248,6 +1248,22 @@ BOOST_AUTO_TEST_CASE(block_timeout_saturates_at_int64_max)
                       std::numeric_limits<int64_t>::max());
 }
 
+BOOST_AUTO_TEST_CASE(receive_queue_size_accounts_message_overhead)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "queue-size", true);
+    CNetMessage first(Params().MessageStart(), SER_NETWORK, PROTOCOL_VERSION);
+    CNetMessage second(Params().MessageStart(), SER_NETWORK, PROTOCOL_VERSION);
+    first.vRecv.resize(1024);
+    second.vRecv.resize(2048);
+    {
+        LOCK(peer.cs_vRecvMsg);
+        peer.vRecvMsg.push_back(first);
+        peer.vRecvMsg.push_back(second);
+        BOOST_CHECK_EQUAL(peer.GetTotalRecvSize(), 1024 + 2048 + 2 * 24);
+        peer.vRecvMsg.clear();
+    }
+}
+
 BOOST_DATA_TEST_CASE(inventory_requests_mix_with_validated_downloads,
                      boost::unit_test::data::make(std::vector<int>{16, 32, 64, 128}))
 {
