@@ -4,6 +4,7 @@
 #include <iostream>
 
 #include <libsnark/common/default_types/r1cs_ppzksnark_pp.hpp>
+#include <libsnark/algebra/scalar_multiplication/multiexp.hpp>
 #include <libsnark/relations/constraint_satisfaction_problems/r1cs/examples/r1cs_examples.hpp>
 #include <libsnark/zk_proof_systems/ppzksnark/r1cs_ppzksnark/r1cs_ppzksnark.hpp>
 
@@ -20,6 +21,40 @@ typedef libsnark::default_r1cs_ppzksnark_pp::Fqe_type curve_Fq2;
 #include "streams.h"
 #include "version.h"
 #include "utilstrencodings.h"
+
+template<typename Group>
+static void CheckMultiExpChunks()
+{
+    // Include empty input, identity points, zero scalars, uneven partitions,
+    // and more chunks than points. Compare both algorithms to an independent
+    // sum of scalar multiplications, including the verifier's single chunk.
+    for (size_t count : {0u, 1u, 2u, 7u, 17u}) {
+        std::vector<Group> points;
+        std::vector<curve_Fr> scalars;
+        Group expected = Group::zero();
+        for (size_t i = 0; i < count; ++i) {
+            points.push_back(i % 5 == 0 ? Group::zero() : curve_Fr(i + 1) * Group::one());
+            scalars.emplace_back(i % 3 == 0 ? 0 : i * i + 1);
+            expected = expected + scalars.back() * points.back();
+        }
+        for (size_t chunks : {1u, 2u, 4u, 32u}) {
+            for (bool optimized : {false, true}) {
+                SCOPED_TRACE(::testing::Message() << "count=" << count
+                             << " chunks=" << chunks << " optimized=" << optimized);
+                const Group actual = libsnark::multi_exp<Group, curve_Fr>(
+                    points.begin(), points.end(), scalars.begin(), scalars.end(),
+                    chunks, optimized);
+                EXPECT_TRUE(actual == expected);
+            }
+        }
+    }
+}
+
+TEST(proofs, multiexp_chunk_equivalence)
+{
+    CheckMultiExpChunks<curve_G1>();
+    CheckMultiExpChunks<curve_G2>();
+}
 
 TEST(proofs, g1_pairing_at_infinity)
 {

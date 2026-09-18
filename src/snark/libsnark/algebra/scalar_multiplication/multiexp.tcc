@@ -287,7 +287,9 @@ T multi_exp(typename std::vector<T>::const_iterator vec_start,
     if (use_multiexp)
     {
 #ifdef MULTICORE
-#pragma omp parallel for
+        // Verification accumulates a single chunk. Starting a worker team for
+        // one iteration only adds synchronization and idle-worker CPU usage.
+#pragma omp parallel for if(chunks > 1)
 #endif
         for (size_t i = 0; i < chunks; ++i)
         {
@@ -300,7 +302,7 @@ T multi_exp(typename std::vector<T>::const_iterator vec_start,
     else
     {
 #ifdef MULTICORE
-#pragma omp parallel for
+#pragma omp parallel for if(chunks > 1)
 #endif
         for (size_t i = 0; i < chunks; ++i)
         {
