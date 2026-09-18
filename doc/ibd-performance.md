@@ -257,3 +257,47 @@ parameter file and compiles as C++11 with `-Wall -Wextra -Werror`.
 All 177 GoogleTests passed, including the new tests and the existing proof,
 transaction, and validation suites. No additional warnings arose in the helper;
 the full legacy build still emits pre-existing warnings in unrelated code.
+
+## Recovering a stalled initial header source (2026-09-18)
+
+During early IBD, a single peer owns header synchronization. A connected peer
+that answers pings but supplies no headers could retain that slot indefinitely,
+even with another usable outbound peer connected. A loopback regression using
+ordinary mainnet data reproduced zero headers and zero blocks after 90 seconds
+on the preceding parameter-hash build.
+
+The candidate tracks each header source's highest-work validated header and its
+last progress time. After 60 seconds without progress, it disconnects the source
+only when another preferred peer has completed its handshake, no block requests
+remain outstanding from the source, and synchronization is still more than a
+day behind. Empty or duplicate header responses do not reset the deadline.
+Existing cleanup releases the header slot. There is no ban, and all header and
+block validation remains unchanged. A sole source is retained.
+
+The same regression with the final candidate accepted its first headers at
+63.22 seconds and finished all 100 blocks at 64.23 seconds. It made exactly 100
+block requests, logged one header-stall disconnect, and reached the expected
+tip `00001071e9da677300cf65b92f954b00184f941e6b51e9e6d5927be0ac277271`.
+The healthy-only case accepted headers at 3.00 seconds without a disconnect.
+These are controlled availability-fault results, not a general steady-state
+throughput or total-chain IBD claim. Timing has approximately one second of RPC
+sampling uncertainty.
+
+The Python 3 integration driver creates private scratch datadirs and loopback
+fixtures, retaining all logs for inspection. Its scenarios cover failover,
+healthy operation, retaining a sole source, and retaining the current source
+when the alternative has not completed its handshake:
+
+```sh
+python3 qa/zcash/test-header-progress.py \
+  --daemon /path/to/candidate-zclassicd --blocks /path/to/stopped-capture/blocks \
+  --output-dir /tmp/header-progress-failover --scenario failover
+# Repeat with a new output directory for healthy, sole, and unready.
+```
+
+The fixture is fixed to loopback. Its fault modes are opt-in test controls;
+normal replay still serves all requested captured headers and blocks.
+All four scenarios passed with the final binary. The full 177-test GoogleTest
+suite and the 32 selected Boost networking/validation tests passed (46,068,001
+assertions). Python syntax checks and `git diff --check` passed. Compiler
+warnings were reviewed and remain in pre-existing legacy code.

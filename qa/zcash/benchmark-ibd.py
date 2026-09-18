@@ -20,12 +20,12 @@ import subprocess
 import time
 
 
-def rpc(port, cookie, method):
+def rpc(port, cookie, method, params=None):
     connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
     try:
         auth = base64.b64encode(cookie.read_bytes().strip()).decode("ascii")
         connection.request("POST", "/", json.dumps({"id": 1, "method": method,
-                                                  "params": []}),
+                                                  "params": [] if params is None else params}),
                            {"Authorization": "Basic " + auth})
         response = json.loads(connection.getresponse().read())
         if response.get("error"):

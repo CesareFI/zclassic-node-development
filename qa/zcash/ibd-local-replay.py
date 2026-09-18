@@ -93,9 +93,11 @@ def send(connection, command, payload=b""):
                        struct.pack("<I", len(payload)) + hash256(payload)[:4] + payload)
 
 
-def serve(connection, chain, entries):
+def serve(connection, chain, entries, stall_headers=False, withhold_verack=False):
     heights = {h: i for i, h in enumerate(chain)}
-    connection.settimeout(30)
+    # The fault fixture must not disconnect itself before the node can detect
+    # the lack of progress. It remains reachable and answers the node's pings.
+    connection.settimeout(None if stall_headers else 180)
     while True:
         header = receive(connection, 24)
         size = struct.unpack("<I", header[16:20])[0]
@@ -112,10 +114,16 @@ def serve(connection, chain, entries):
                        struct.pack("<Q", 123456789) + compact(len(agent)) + agent +
                        struct.pack("<i?", len(chain) - 1, False))
             send(connection, "version", version)
-            send(connection, "verack")
+            if not withhold_verack:
+                send(connection, "verack")
         elif command == b"ping" and len(payload) == 8:
             send(connection, "pong", payload)
         elif command == b"getheaders":
+            if stall_headers:
+                # Controlled local availability fault: stay responsive to ping
+                # while withholding headers. Never enabled on the normal fixture.
+                print(json.dumps({"headers_withheld": True, "time": time.time()}), flush=True)
+                continue
             count, offset = read_compact(payload, 4)
             if count > 101 or len(payload) != offset + 32 * count + 32:
                 raise ValueError("invalid locator")
@@ -154,6 +162,10 @@ def main():
     parser.add_argument("--blocks", type=Path, required=True)
     parser.add_argument("--height", type=int, default=5000)
     parser.add_argument("--port", type=int, default=18444)
+    parser.add_argument("--stall-headers", action="store_true",
+                        help="local fault test: answer pings but withhold headers")
+    parser.add_argument("--withhold-verack", action="store_true",
+                        help="local fault test: leave the version handshake incomplete")
     args = parser.parse_args()
     if not 1 <= args.height <= 100000 or not 1 <= args.port <= 65535:
         parser.error("height must be 1..100000 and port must be valid")
@@ -168,7 +180,7 @@ def main():
             connection, _ = listener.accept()
             with connection:
                 try:
-                    serve(connection, chain, entries)
+                    serve(connection, chain, entries, args.stall_headers, args.withhold_verack)
                 except (EOFError, OSError, ValueError, IndexError) as error:
                     print(json.dumps({"connection_closed": type(error).__name__}), flush=True)
 
