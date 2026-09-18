@@ -7,6 +7,7 @@
 #include "util.h"
 
 
+#ifdef ENABLE_MINING
 TEST(Miner, GetScriptForMinerAddress) {
     SelectParams(CBaseChainParams::MAIN);
 
@@ -72,3 +73,4 @@ TEST(Miner, GetScriptForMinerAddress) {
         EXPECT_EQ(expectedCoinbaseScript, coinbaseScript->reserveScript);
     }
 }
+#endif // ENABLE_MINING

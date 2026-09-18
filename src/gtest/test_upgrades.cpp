@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <boost/optional/optional_io.hpp>
 
 #include "chainparams.h"
 #include "consensus/upgrades.h"
