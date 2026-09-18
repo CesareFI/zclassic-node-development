@@ -93,7 +93,7 @@ def send(connection, command, payload=b""):
                        struct.pack("<I", len(payload)) + hash256(payload)[:4] + payload)
 
 
-def serve(connection, chain, entries, stall_headers=False, withhold_verack=False):
+def serve(connection, chain, entries, stall_headers=False, withhold_verack=False, stall_blocks=False):
     heights = {h: i for i, h in enumerate(chain)}
     # The fault fixture must not disconnect itself before the node can detect
     # the lack of progress. It remains reachable and answers the node's pings.
@@ -144,6 +144,9 @@ def serve(connection, chain, entries, stall_headers=False, withhold_verack=False
             count, offset = read_compact(payload, 0)
             if count > 50000 or len(payload) != offset + 36 * count:
                 raise ValueError("invalid inventory")
+            if stall_blocks:
+                print(json.dumps({"blocks_withheld": count, "time": time.time()}), flush=True)
+                continue
             for i in range(count):
                 kind = struct.unpack_from("<I", payload, offset + 36 * i)[0]
                 block_hash = payload[offset + 36 * i + 4:offset + 36 * (i + 1)]
@@ -166,6 +169,8 @@ def main():
                         help="local fault test: answer pings but withhold headers")
     parser.add_argument("--withhold-verack", action="store_true",
                         help="local fault test: leave the version handshake incomplete")
+    parser.add_argument("--stall-blocks", action="store_true",
+                        help="local fault test: serve headers but withhold block bodies")
     args = parser.parse_args()
     if not 1 <= args.height <= 100000 or not 1 <= args.port <= 65535:
         parser.error("height must be 1..100000 and port must be valid")
@@ -180,7 +185,7 @@ def main():
             connection, _ = listener.accept()
             with connection:
                 try:
-                    serve(connection, chain, entries, args.stall_headers, args.withhold_verack)
+                    serve(connection, chain, entries, args.stall_headers, args.withhold_verack, args.stall_blocks)
                 except (EOFError, OSError, ValueError, IndexError) as error:
                     print(json.dumps({"connection_closed": type(error).__name__}), flush=True)
 

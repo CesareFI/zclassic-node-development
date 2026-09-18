@@ -301,3 +301,50 @@ All four scenarios passed with the final binary. The full 177-test GoogleTest
 suite and the 32 selected Boost networking/validation tests passed (46,068,001
 assertions). Python syntax checks and `git diff --check` passed. Compiler
 warnings were reviewed and remain in pre-existing legacy code.
+
+## Removing disconnected requests from timeout accounting (2026-09-18)
+
+The next loopback experiment found an accounting leak: disconnect cleanup erased
+the peer's requests but did not subtract its validated in-flight count from the
+global count used by block-request deadlines. Read-only debugger inspection of
+the running scratch daemon confirmed 100 counted requests with an empty request
+map after disconnect. Repeated disconnects accumulated this stale count.
+
+`getpeerinfo` now exposes the existing oldest-request Unix deadline, in seconds,
+as optional `blockdownloadtimeout`. It is absent when that peer has no pending
+block requests. The deadline can shorten as the download queue drains. This
+reports scheduling state only and adds no network or consensus dependencies.
+
+Using the same instrumentation before and after the one-line accounting fix,
+the integration regression connected a loopback peer, requested 100 validated
+headers' blocks, disconnected it, and repeated twice. Remaining deadlines were:
+
+| Connection | Before cleanup fix | After cleanup fix |
+| --- | ---: | ---: |
+| Initial | 300.00 s | 300.00 s |
+| After first disconnect | 7,800.00 s | 300.00 s |
+| After second disconnect | 15,299.99 s | 299.99 s |
+
+Each run then connected a healthy replay peer and fully validated all 100
+blocks to the expected tip recorded above. Each issued exactly 400 requests:
+three abandoned batches and one successful reassignment. There were no block
+timeouts during the test because it explicitly disconnected each test peer.
+These figures measure scheduled timeout inflation, not elapsed recovery after
+waiting for those timeouts. The regression fails on the instrumented baseline
+and passes with cleanup corrected. Existing timeout policy and consensus target
+spacing are unchanged; only actually outstanding requests remain counted.
+
+```sh
+python3 qa/zcash/test-download-reassignment.py \
+  --daemon /path/to/candidate-zclassicd --blocks /path/to/stopped-capture/blocks \
+  --output-dir /tmp/download-reassignment
+```
+
+Validation passed: all 177 GoogleTests and all 372 Boost tests (142,412,568
+assertions), the reconnect regression, Python syntax checks, and
+`git diff --check`. A further 5,000-block replay reached the same expected hash
+in 138.51 seconds with 140.34 CPU-seconds, exactly 5,000 requests, no timeouts,
+and no sampled repeated in-flight heights. This profiled run overlapped the
+test suites, so it is a consistency check rather than a speedup estimate.
+The exact diff changes request accounting and adds observability; it does not
+change block, transaction, proof, signature, or chain-selection validity.

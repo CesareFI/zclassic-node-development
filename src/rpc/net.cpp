@@ -103,6 +103,7 @@ UniValue getpeerinfo(const UniValue& params, bool fHelp)
             "    \"banscore\": n,             (numeric) The ban score\n"
             "    \"synced_headers\": n,       (numeric) The last header we have in common with this peer\n"
             "    \"synced_blocks\": n,        (numeric) The last block we have in common with this peer\n"
+            "    \"blockdownloadtimeout\": t, (numeric) Unix deadline in seconds for the oldest block request, if any; may shorten as other requests finish\n"
             "    \"inflight\": [\n"
             "       n,                        (numeric) The heights of blocks we're currently asking from this peer\n"
             "       ...\n"
@@ -151,6 +152,8 @@ UniValue getpeerinfo(const UniValue& params, bool fHelp)
             obj.push_back(Pair("banscore", statestats.nMisbehavior));
             obj.push_back(Pair("synced_headers", statestats.nSyncHeight));
             obj.push_back(Pair("synced_blocks", statestats.nCommonHeight));
+            if (statestats.nBlockDownloadTimeout != 0)
+                obj.push_back(Pair("blockdownloadtimeout", statestats.nBlockDownloadTimeout / 1000000.0));
             UniValue heights(UniValue::VARR);
             BOOST_FOREACH(int height, statestats.vHeightInFlight) {
                 heights.push_back(height);

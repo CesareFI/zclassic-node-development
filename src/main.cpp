@@ -389,6 +389,9 @@ void FinalizeNode(NodeId nodeid) {
         AddressCurrentlyConnected(state->address);
     }
 
+    // Disconnected requests no longer consume the global download queue. Leaving
+    // them counted would inflate future block deadlines after every reconnect.
+    nQueuedValidatedHeaders -= state->nBlocksInFlightValidHeaders;
     BOOST_FOREACH(const QueuedBlock& entry, state->vBlocksInFlight)
         mapBlocksInFlight.erase(entry.hash);
     EraseOrphansFor(nodeid);
@@ -585,6 +588,7 @@ bool GetNodeStateStats(NodeId nodeid, CNodeStateStats &stats) {
     stats.nMisbehavior = state->nMisbehavior;
     stats.nSyncHeight = state->pindexBestKnownBlock ? state->pindexBestKnownBlock->nHeight : -1;
     stats.nCommonHeight = state->pindexLastCommonBlock ? state->pindexLastCommonBlock->nHeight : -1;
+    stats.nBlockDownloadTimeout = state->vBlocksInFlight.empty() ? 0 : state->vBlocksInFlight.front().nTimeDisconnect;
     BOOST_FOREACH(const QueuedBlock& queue, state->vBlocksInFlight) {
         if (queue.pindex)
             stats.vHeightInFlight.push_back(queue.pindex->nHeight);

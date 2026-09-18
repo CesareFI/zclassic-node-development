@@ -282,6 +282,7 @@ struct CNodeStateStats {
     int nMisbehavior;
     int nSyncHeight;
     int nCommonHeight;
+    int64_t nBlockDownloadTimeout; //!< Oldest request's Unix deadline, microseconds; 0 if idle.
     std::vector<int> vHeightInFlight;
 };
 
