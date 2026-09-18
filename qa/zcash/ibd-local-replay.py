@@ -93,8 +93,11 @@ def send(connection, command, payload=b""):
                        struct.pack("<I", len(payload)) + hash256(payload)[:4] + payload)
 
 
-def serve(connection, chain, entries, stall_headers=False, withhold_verack=False, stall_blocks=False):
+def serve(connection, chain, entries, stall_headers=False, withhold_verack=False,
+          stall_blocks=False, announce_tip=False, initial_header_limit=160):
     heights = {h: i for i, h in enumerate(chain)}
+    announced_tip = False
+    first_headers = True
     # The fault fixture must not disconnect itself before the node can detect
     # the lack of progress. It remains reachable and answers the node's pings.
     connection.settimeout(None if stall_headers else 180)
@@ -119,6 +122,11 @@ def serve(connection, chain, entries, stall_headers=False, withhold_verack=False
         elif command == b"ping" and len(payload) == 8:
             send(connection, "pong", payload)
         elif command == b"getheaders":
+            if announce_tip and not announced_tip:
+                # Model an ordinary tip announcement arriving while the node's
+                # initial header request is outstanding.
+                send(connection, "inv", compact(1) + struct.pack("<I", 2) + chain[-1])
+                announced_tip = True
             if stall_headers:
                 # Controlled local availability fault: stay responsive to ping
                 # while withholding headers. Never enabled on the normal fixture.
@@ -134,12 +142,15 @@ def serve(connection, chain, entries, stall_headers=False, withhold_verack=False
                     start = heights[locator]
                     break
             stop = payload[-32:]
-            end = min(start + 160, len(chain) - 1)
+            limit = initial_header_limit if first_headers else 160
+            first_headers = False
+            end = min(start + limit, len(chain) - 1)
             if stop in heights and heights[stop] > start:
                 end = min(end, heights[stop])
             hashes = chain[start + 1:end + 1]
             send(connection, "headers", compact(len(hashes)) +
                  b"".join(entries[h][3] + b"\0" for h in hashes))
+            print(json.dumps({"headers_sent": len(hashes), "locator_height": start}), flush=True)
         elif command == b"getdata":
             count, offset = read_compact(payload, 0)
             if count > 50000 or len(payload) != offset + 36 * count:
@@ -171,9 +182,15 @@ def main():
                         help="local fault test: leave the version handshake incomplete")
     parser.add_argument("--stall-blocks", action="store_true",
                         help="local fault test: serve headers but withhold block bodies")
+    parser.add_argument("--announce-tip", action="store_true",
+                        help="announce the captured tip during the initial header request")
+    parser.add_argument("--initial-header-limit", type=int, default=160,
+                        help="local test: limit the first response to 0..160 headers")
     args = parser.parse_args()
     if not 1 <= args.height <= 100000 or not 1 <= args.port <= 65535:
         parser.error("height must be 1..100000 and port must be valid")
+    if not 0 <= args.initial_header_limit <= 160:
+        parser.error("initial header limit must be 0..160")
     chain, entries = load_blocks(args.blocks, args.height)
     print(json.dumps({"height": args.height, "tip": chain[-1][::-1].hex(),
                       "bind": "127.0.0.1", "port": args.port}), flush=True)
@@ -185,7 +202,8 @@ def main():
             connection, _ = listener.accept()
             with connection:
                 try:
-                    serve(connection, chain, entries, args.stall_headers, args.withhold_verack, args.stall_blocks)
+                    serve(connection, chain, entries, args.stall_headers, args.withhold_verack,
+                          args.stall_blocks, args.announce_tip, args.initial_header_limit)
                 except (EOFError, OSError, ValueError, IndexError) as error:
                     print(json.dumps({"connection_closed": type(error).__name__}), flush=True)
 

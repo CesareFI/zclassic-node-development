@@ -58,7 +58,10 @@ def emit(record):
 
 def log_metrics(path, start_wall):
     result = {"block_requests": 0, "block_download_timeouts": 0,
-              "block_stall_disconnects": 0, "header_stall_disconnects": 0}
+              "block_stall_disconnects": 0, "header_stall_disconnects": 0,
+              "header_requests": 0, "header_requests_coalesced": 0,
+              "header_response_messages": 0, "header_payload_bytes": 0,
+              "block_payload_bytes": 0}
     markers = {"startup_to_first_version_log": "receive version message:",
                "startup_to_first_header_request_log": "initial getheaders",
                "startup_to_first_block_request_log": "Requesting block "}
@@ -75,6 +78,15 @@ def log_metrics(path, start_wall):
             result["block_download_timeouts"] += "Timeout downloading block " in line
             result["block_stall_disconnects"] += "is stalling block download" in line
             result["header_stall_disconnects"] += "is stalling header download" in line
+            result["header_requests"] += "sending: getheaders (" in line
+            result["header_requests_coalesced"] += "Coalescing getheaders request " in line
+            payload = re.search(r"received: (headers|block) \((\d+) bytes\)", line)
+            if payload:
+                if payload[1] == "headers":
+                    result["header_response_messages"] += 1
+                    result["header_payload_bytes"] += int(payload[2])
+                else:
+                    result["block_payload_bytes"] += int(payload[2])
     return result
 
 

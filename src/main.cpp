@@ -308,6 +308,10 @@ struct CNodeState {
     const CBlockIndex *pindexHeadersSyncProgress;
     //! Time of the last header progress, in microseconds (or sync start time).
     int64_t nHeadersSyncProgressTime;
+    //! Outstanding getheaders request time, in microseconds; zero after a response.
+    int64_t nHeadersRequestTime;
+    //! An announcement arrived while a header response was outstanding.
+    bool fHeadersRequestDeferred;
     //! Since when we're stalling block download progress (in microseconds), or 0.
     int64_t nStallingSince;
     list<QueuedBlock> vBlocksInFlight;
@@ -329,6 +333,8 @@ struct CNodeState {
         fSyncStarted = false;
         pindexHeadersSyncProgress = NULL;
         nHeadersSyncProgressTime = 0;
+        nHeadersRequestTime = 0;
+        fHeadersRequestDeferred = false;
         nStallingSince = 0;
         nBlocksInFlight = 0;
         nBlocksInFlightValidHeaders = 0;
@@ -346,6 +352,27 @@ CNodeState *State(NodeId pnode) {
     if (it == mapNodeState.end())
         return NULL;
     return &it->second;
+}
+
+// Requires cs_main. During early IBD, an inventory announcement must not start
+// a second continuation stream while this peer is already answering getheaders.
+// Permit a retry after a bounded wait, and preserve near-tip announcement behavior.
+bool RequestHeaders(CNode* node, const CBlockIndex* start, const uint256& stop)
+{
+    AssertLockHeld(cs_main);
+    CNodeState& state = *State(node->GetId());
+    const int64_t now = GetTimeMicros();
+    static const int64_t HEADERS_RESPONSE_TIMEOUT = 60 * 1000000LL;
+    if (pindexBestHeader && pindexBestHeader->GetBlockTime() <= GetAdjustedTime() - 24 * 60 * 60 &&
+        state.nHeadersRequestTime != 0 && state.nHeadersRequestTime > now - HEADERS_RESPONSE_TIMEOUT) {
+        state.fHeadersRequestDeferred = true;
+        LogPrint("net", "Coalescing getheaders request peer=%d while a response is pending\n", node->id);
+        return false;
+    }
+    node->PushMessage("getheaders", chainActive.GetLocator(start), stop);
+    state.nHeadersRequestTime = now;
+    state.fHeadersRequestDeferred = false;
+    return true;
 }
 
 int GetHeight()
@@ -6471,7 +6498,8 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
                     // time the block arrives, the header chain leading up to it is already validated. Not
                     // doing this will result in the received block being rejected as an orphan in case it is
                     // not a direct successor.
-                    pfrom->PushMessage("getheaders", chainActive.GetLocator(pindexBestHeader), inv.hash);
+                    if (RequestHeaders(pfrom, pindexBestHeader, inv.hash))
+                        LogPrint("net", "getheaders (%d) %s to peer=%d\n", pindexBestHeader->nHeight, inv.hash.ToString(), pfrom->id);
                     CNodeState *nodestate = State(pfrom->GetId());
                     if (chainActive.Tip()->GetBlockTime() > GetAdjustedTime() - chainparams.GetConsensus().PoWTargetSpacing(pindexBestHeader->nHeight) * 20 &&
                         nodestate->nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
@@ -6480,7 +6508,6 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
                         // later (within the same cs_main lock, though).
                         MarkBlockAsInFlight(pfrom->GetId(), inv.hash, chainparams.GetConsensus());
                     }
-                    LogPrint("net", "getheaders (%d) %s to peer=%d\n", pindexBestHeader->nHeight, inv.hash.ToString(), pfrom->id);
                 }
             }
 
@@ -6758,8 +6785,16 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
 
         LOCK(cs_main);
 
+        CNodeState* headerState = State(pfrom->GetId());
+        const bool deferredRequest = headerState->fHeadersRequestDeferred;
+        headerState->nHeadersRequestTime = 0;
+        headerState->fHeadersRequestDeferred = false;
         if (nCount == 0) {
-            // Nothing interesting. Stop asking this peers for more headers.
+            // A newer announcement may have arrived after this empty response
+            // was prepared. Preserve that discovery opportunity with one retry.
+            if (deferredRequest)
+                RequestHeaders(pfrom, pindexBestHeader, uint256());
+            // Otherwise an empty response ends this header request stream.
             return true;
         }
 
@@ -6791,12 +6826,12 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
             }
         }
 
-        if (nCount == MAX_HEADERS_RESULTS && pindexLast) {
-            // Headers message had its maximum size; the peer may have more headers.
+        if ((nCount == MAX_HEADERS_RESULTS || deferredRequest) && pindexLast) {
+            // A full response or a deferred announcement may indicate more headers.
             // TODO: optimize: if pindexLast is an ancestor of chainActive.Tip or pindexBestHeader, continue
             // from there instead.
-            LogPrint("net", "more getheaders (%d) to end to peer=%d (startheight:%d)\n", pindexLast->nHeight, pfrom->id, pfrom->nStartingHeight);
-            pfrom->PushMessage("getheaders", chainActive.GetLocator(pindexLast), uint256());
+            if (RequestHeaders(pfrom, pindexLast, uint256()))
+                LogPrint("net", "more getheaders (%d) to end to peer=%d (startheight:%d)\n", pindexLast->nHeight, pfrom->id, pfrom->nStartingHeight);
         }
 
         CheckBlockIndex();
@@ -7332,8 +7367,8 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
                 state.nHeadersSyncProgressTime = GetTimeMicros();
                 nSyncStarted++;
                 CBlockIndex *pindexStart = pindexBestHeader->pprev ? pindexBestHeader->pprev : pindexBestHeader;
-                LogPrint("net", "initial getheaders (%d) to peer=%d (startheight:%d)\n", pindexStart->nHeight, pto->id, pto->nStartingHeight);
-                pto->PushMessage("getheaders", chainActive.GetLocator(pindexStart), uint256());
+                if (RequestHeaders(pto, pindexStart, uint256()))
+                    LogPrint("net", "initial getheaders (%d) to peer=%d (startheight:%d)\n", pindexStart->nHeight, pto->id, pto->nStartingHeight);
             }
         }
 

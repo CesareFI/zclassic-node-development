@@ -375,3 +375,57 @@ request streams. At one observation there were 5,876 distinct block requests
 and 5,621 distinct received blocks, with no repeated block hashes, but 36.66 MB
 of header payload versus 22.95 MB of block payload. Repeated continuation
 requests from the same header heights warrant a controlled reproduction.
+
+## Coalescing overlapping header requests (2026-09-18)
+
+The public-network baseline reached height 20,012 in 581.63 seconds and received
+577.15 MB. Its logs contained 2,072 outgoing header requests, 486.40 MB of header
+payload, and 85.51 MB of block payload. An inventory announcement received during
+an outstanding header request started another continuation stream. Repeated tip
+announcements accumulated overlapping streams requesting the same headers.
+
+The candidate records an outstanding header request per peer and coalesces new
+requests during early IBD. An announcement arriving during that wait is retained:
+a short or empty response leads to one follow-up request. A full response already
+continues the stream normally. A request can be retried after 60 seconds, and
+near-tip announcements retain their existing immediate-request behavior. Header
+parsing, bounds, proof-of-work checks, chain selection, and block validation are
+unchanged. All scheduling state remains under the existing `cs_main` lock.
+
+A loopback fixture announces its ordinary captured tip while the initial request
+is outstanding. Before the change, both streams repeatedly requested the same
+headers; after it, each captured header was sent once:
+
+| Measurement | Before | After |
+| --- | ---: | ---: |
+| Headers sent for 640 blocks | 1,280 | 640 |
+| Received bytes, 640 blocks | 3,462,944 | 2,510,499 |
+| Time to validate 640 blocks | 12.14 s | 12.14 s |
+| Headers sent for 5,000 blocks | 10,000 | 5,000 |
+| Header requests, 5,000 blocks | 64 | 32 |
+| Received bytes, 5,000 blocks | 35,223,880 | 27,783,080 |
+| Time to validate 5,000 blocks | 138.63 s | 138.51 s |
+| CPU-seconds, 5,000 blocks | 140.84 | 141.81 |
+
+The 5,000-block runs reached the same previously recorded tip with exactly 5,000
+block requests. Received bytes decreased by 21.1%; elapsed time and CPU are
+effectively unchanged on this CPU-limited host. This is a measured bandwidth
+improvement, not evidence of faster total-chain IBD on this machine. The 640-block
+reproduction fails against the baseline and passes against the candidate, also
+when the fixture's first response contains 80 headers or no headers at all.
+
+```sh
+python3 qa/zcash/test-header-request-coalescing.py \
+  --daemon /path/to/candidate-zclassicd --blocks /path/to/stopped-capture/blocks \
+  --output-dir /tmp/header-coalescing --height 5000
+# With a new output directory, also test --initial-header-limit 80 and 0.
+```
+
+Two focused Boost tests check early-IBD coalescing, the deferred empty-response
+retry, and immediate requests near the tip. All 177 GoogleTests and 89 selected
+Boost tests passed (46,069,175 assertions), including networking and bootstrap
+protocol tests. All four header-progress scenarios and the repeated block
+reassignment regression still pass. Python syntax checks, compiler-warning
+review, and `git diff --check` passed. The benchmark now separately counts header
+requests, coalesced requests, header response messages, and header/block payload
+bytes, so this overhead remains observable.

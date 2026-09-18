@@ -15,6 +15,7 @@
 #include "pow.h"
 #include "script/sign.h"
 #include "serialize.h"
+#include "timedata.h"
 #include "util.h"
 
 #include "test/test_bitcoin.h"
@@ -31,6 +32,7 @@
 extern bool AddOrphanTx(const CTransaction& tx, NodeId peer);
 extern void EraseOrphansFor(NodeId peer);
 extern unsigned int LimitOrphanTxSize(unsigned int nMaxOrphans);
+extern bool ProcessMessage(CNode* pfrom, std::string strCommand, CDataStream& vRecv, int64_t nTimeReceived);
 struct COrphanTx {
     CTransaction tx;
     NodeId fromPeer;
@@ -46,6 +48,68 @@ CService ip(uint32_t i)
 }
 
 BOOST_FIXTURE_TEST_SUITE(DoS_tests, TestingSetup)
+
+static size_t CountHeaderRequests(const CNode& node)
+{
+    size_t count = 0;
+    for (const auto& message : node.vSendMsg) {
+        CDataStream stream(message.begin(), message.end(), SER_NETWORK, PROTOCOL_VERSION);
+        CMessageHeader header(Params().MessageStart());
+        stream >> header;
+        count += header.GetCommand() == "getheaders";
+    }
+    return count;
+}
+
+static void CheckHeaderRequestCoalescing(bool earlyIBD)
+{
+    LOCK(cs_main);
+    // Only the peer-selection clock context is synthetic. No block is submitted
+    // with a changed header, and the original global pointer is always restored.
+    CBlockIndex header = *chainActive.Tip();
+    header.nTime = GetAdjustedTime() - (earlyIBD ? 2 * 24 * 60 * 60 : 0);
+    struct RestoreHeader {
+        CBlockIndex* previous;
+        ~RestoreHeader() { pindexBestHeader = previous; }
+    } restore{pindexBestHeader};
+    pindexBestHeader = &header;
+    CNode node(INVALID_SOCKET, CAddress(ip(0xa0b0c030)), "", true);
+    node.nVersion = PROTOCOL_VERSION;
+    BOOST_REQUIRE(SendMessages(&node, false));
+    BOOST_CHECK_EQUAL(CountHeaderRequests(node), 1);
+
+    const auto announce = [&node]() {
+        CDataStream payload(SER_NETWORK, PROTOCOL_VERSION);
+        payload << std::vector<CInv>{CInv(MSG_BLOCK, GetRandHash())};
+        return ProcessMessage(&node, "inv", payload, GetTimeMicros());
+    };
+    const auto emptyResponse = [&node]() {
+        CDataStream payload(SER_NETWORK, PROTOCOL_VERSION);
+        WriteCompactSize(payload, 0);
+        return ProcessMessage(&node, "headers", payload, GetTimeMicros());
+    };
+
+    BOOST_REQUIRE(announce());
+    BOOST_CHECK_EQUAL(CountHeaderRequests(node), earlyIBD ? 1 : 2);
+    BOOST_REQUIRE(emptyResponse());
+    // Early IBD preserves the deferred announcement with exactly one retry.
+    // Near the tip, the announcement was already requested immediately.
+    BOOST_CHECK_EQUAL(CountHeaderRequests(node), 2);
+    BOOST_REQUIRE(emptyResponse());
+    BOOST_CHECK_EQUAL(CountHeaderRequests(node), 2);
+    BOOST_REQUIRE(announce());
+    BOOST_CHECK_EQUAL(CountHeaderRequests(node), 3);
+}
+
+BOOST_AUTO_TEST_CASE(header_request_coalescing_early_ibd)
+{
+    CheckHeaderRequestCoalescing(true);
+}
+
+BOOST_AUTO_TEST_CASE(header_requests_immediate_near_tip)
+{
+    CheckHeaderRequestCoalescing(false);
+}
 
 BOOST_AUTO_TEST_CASE(DoS_banning)
 {
