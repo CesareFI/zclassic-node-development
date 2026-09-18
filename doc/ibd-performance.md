@@ -348,3 +348,30 @@ and no sampled repeated in-flight heights. This profiled run overlapped the
 test suites, so it is a consistency check rather than a speedup estimate.
 The exact diff changes request accounting and adds observability; it does not
 change block, transaction, proof, signature, or chain-selection validity.
+
+## Follow-up arithmetic experiment (2026-09-18)
+
+A 20-second CPU profile of the latest 5,000-block replay attributed 8.77% of
+sampled cycles to GMP's `__gmpn_copyi`, alongside substantial field arithmetic.
+An isolated experiment replaced nine fixed-size copies in a temporary copy of
+`fp.tcc` with `std::copy_n`. No daemon arithmetic source was changed.
+
+The 100-million-operation multiplication benchmark measured 4.046 seconds with
+the existing code and 4.182–4.195 seconds with the experiment. The representative
+20,000-iteration single-chunk multi-exponentiation benchmark was effectively
+unchanged: 3.216 versus 3.213 seconds. These measurements do not support shipping
+the copy replacement. `benchmark-field.cpp` preserves the independent GMP
+modular-integer result check and a small reproducible profiling workload:
+
+```sh
+g++ -std=c++11 -O2 -Wall -Wextra -Wno-unused-parameter -DCURVE_ALT_BN128 \
+  -Isrc/snark -Isrc/snark/libsnark qa/zcash/benchmark-field.cpp \
+  src/snark/libsnark.a -lgmpxx -lgmp -lsodium -fopenmp -o /tmp/benchmark-field
+/tmp/benchmark-field 100000000
+```
+
+The longer public-network run exposed another target: overlapping header
+request streams. At one observation there were 5,876 distinct block requests
+and 5,621 distinct received blocks, with no repeated block hashes, but 36.66 MB
+of header payload versus 22.95 MB of block payload. Repeated continuation
+requests from the same header heights warrant a controlled reproduction.
