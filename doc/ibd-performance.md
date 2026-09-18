@@ -130,6 +130,13 @@ result to a scalar-multiplication sum:
 This synthetic workload isolates worker overhead; it does not predict whole
 chain throughput. The largest benefit is on machines with many CPU cores.
 
+A second replay pair reached the same height and hash in 161.97 s before and
+141.74 s after (12.5% less elapsed time), using 3,074.70 and 145.27 CPU-seconds,
+respectively. It again downloaded exactly 27,783,019 bytes with 5,000 block
+requests and no timeouts. Across both pairs, the observed elapsed reduction is
+12.5–14.4%; this remains a measurement of the historical prefix, not the whole
+chain. The optimization and its tooling are preserved in commit `20847e87a`.
+
 ### Reproducing the controlled replay
 
 After a scratch mainnet node has validated more than 5,000 blocks and shut down,
@@ -190,3 +197,63 @@ The next measured startup target is the full parameter-file SHA-256 pass:
 7,552.6 ms of 8,987.8 ms before networking in the first controlled baseline.
 Any optimization must still read and hash every required byte and compare the
 same compiled digests. No integrity check may be skipped to improve this time.
+
+## Parameter hashing before peer startup (2026-09-18)
+
+After the OpenMP improvement, startup still spent 7.54 seconds hashing parameter
+files with the legacy scalar SHA-256 implementation. The candidate uses the
+existing libcrypto dependency's SHA-256 backend for these file-integrity checks
+only. Consensus hashing and serialization code are untouched. Every byte is
+still read, the same compiled digests are compared, and cache eligibility,
+Sprout verification-key checks, refetch policy, and Rust's independent parameter
+verification remain unchanged.
+
+The stream helper owns its digest context and fixed 256 KiB heap buffer. It
+checks all digest operations, distinguishes read errors from EOF, and clears the
+output on failure. `check_file_hash` now closes its file through RAII on every
+path. A read error no longer spins in a `while (!feof(file))` loop.
+
+Alternating candidate/control/candidate fresh-datadir runs against the local
+replay measured:
+
+| Measurement | Control | Candidate 1 | Candidate 2 |
+| --- | ---: | ---: | ---: |
+| Full parameter SHA-256 phase | 7,538.5 ms | 1,303.7 ms | 1,304.5 ms |
+| Total AppInit2 startup | 8,779.4 ms | 2,545.0 ms | 2,553.9 ms |
+| First peer observed by RPC | 9.01 s | 3.00 s | 3.00 s |
+| First accepted block observed by RPC | 10.05 s | 3.00 s | 3.00 s |
+
+All three logs report `param-cache: 0 skipped, 5 hashed`. All five digests are
+identical between the control and both candidates. Startup decreased by about
+71% on this host. Parameters were installed beforehand and warm in the OS cache;
+these timings do not include downloading parameters. RPC times have one sample
+interval of uncertainty; phase timings come from the node's existing timer.
+
+A further 5,000-block replay completed in 138.25 s, using 140.98 CPU-seconds and
+reaching the same previously recorded tip hash, with 5,000 requests and no
+timeouts. Compare this with the preceding OpenMP-only runs at 141.74–143.11 s;
+the precise total-time gain varies with normal execution noise. The repeatable
+startup-phase improvement is the main evidence for this second change.
+
+The standalone file benchmark reads the 910,173,851-byte Sprout proving file:
+legacy 4.426 s, candidate 0.762 s, with the same digest. Disabling OpenSSL's x86
+CPU capabilities via `OPENSSL_ia32cap=0` measured 2.999 s. Backend acceleration
+is platform/build dependent; the repository's portable OpenSSL recipe uses
+`no-asm`, so the native host's SHA-accelerated result must not be claimed for
+every release build.
+
+```sh
+g++ -std=c++11 -O2 -Wall -Wextra -Werror -Isrc \
+  qa/zcash/benchmark-parameter-hash.cpp src/sha256.cpp -lcrypto \
+  -o /tmp/benchmark-parameter-hash
+/tmp/benchmark-parameter-hash legacy /path/to/sprout-proving.key
+/tmp/benchmark-parameter-hash candidate /path/to/sprout-proving.key
+```
+
+Focused tests cover SHA-256 known vectors, padding boundaries, exact/partial
+256 KiB chunks, binary input, initial stream failures, and a read failure after
+a complete chunk. The file benchmark also passed ASan/UBSan on the actual
+parameter file and compiles as C++11 with `-Wall -Wextra -Werror`.
+All 177 GoogleTests passed, including the new tests and the existing proof,
+transaction, and validation suites. No additional warnings arose in the helper;
+the full legacy build still emits pre-existing warnings in unrelated code.

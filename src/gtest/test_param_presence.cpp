@@ -6,6 +6,10 @@
 #include <string>
 #include <cstdint>
 #include "bootstrap.h"
+#include "crypto/sha256stream.h"
+#include "sha256.h"
+#include "utilstrencodings.h"
+#include <sstream>
 
 #if defined(__unix__) || defined(__APPLE__)
 #include <sys/stat.h>
@@ -154,4 +158,49 @@ TEST(ParamPresence, PresentDoesNotImplyHashValid) {
         ASSERT_TRUE(WriteSizedFile(dir / kParams[i].name, kParams[i].size));
     EXPECT_TRUE(ZcashParamsPresentInDir(dir)); // correct sizes, all-zero bytes
     boost::filesystem::remove_all(dir);
+}
+
+TEST(ParamHash, KnownDigestsAndChunkBoundaries) {
+    for (const auto& vector : std::vector<std::pair<std::string, std::string>>{
+            {"", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+            {"abc", "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"},
+            {std::string(1000000, 'a'), "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0"}}) {
+        std::istringstream input(vector.first);
+        std::array<unsigned char, 32> digest;
+        ASSERT_TRUE(SHA256Stream(input, digest));
+        EXPECT_EQ(HexStr(digest.begin(), digest.end()), vector.second);
+    }
+    for (size_t size : {1u, 55u, 56u, 63u, 64u, 65u, 262143u, 262144u, 262145u, 524288u}) {
+        SCOPED_TRACE(size);
+        std::string data(size, '\0');
+        for (size_t i = 0; i < size; ++i) data[i] = static_cast<char>(i % 251);
+        std::istringstream input(data);
+        std::array<unsigned char, 32> digest;
+        ASSERT_TRUE(SHA256Stream(input, digest));
+        EXPECT_EQ(HexStr(digest.begin(), digest.end()), SHA256::hashString(data));
+    }
+}
+
+TEST(ParamHash, ReadFailureDoesNotHashAPrefix) {
+    class FailingBuffer : public std::stringbuf {
+        unsigned int reads = 0;
+        std::streamsize xsgetn(char* output, std::streamsize size) override {
+            if (reads++ != 0) throw std::ios_base::failure("injected read failure");
+            return std::stringbuf::xsgetn(output, size);
+        }
+    public:
+        FailingBuffer() : std::stringbuf(std::string(262145, 'a')) {}
+    } buffer;
+    std::istream input(&buffer);
+    std::array<unsigned char, 32> digest;
+    digest.fill(0xff);
+    EXPECT_FALSE(SHA256Stream(input, digest));
+    EXPECT_TRUE(input.bad());
+    EXPECT_EQ(digest, (std::array<unsigned char, 32>{}));
+
+    std::istringstream failed("abc");
+    failed.setstate(std::ios::failbit);
+    digest.fill(0xff);
+    EXPECT_FALSE(SHA256Stream(failed, digest));
+    EXPECT_EQ(digest, (std::array<unsigned char, 32>{}));
 }
