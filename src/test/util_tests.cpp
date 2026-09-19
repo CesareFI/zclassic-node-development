@@ -41,6 +41,21 @@ BOOST_AUTO_TEST_CASE(util_filecommit_flush_failure)
 }
 #endif
 
+BOOST_AUTO_TEST_CASE(util_renameover)
+{
+    const boost::filesystem::path source = GetDataDir() / "rename-source";
+    const boost::filesystem::path destination = GetDataDir() / "rename-destination";
+    FILE* file = fopen(source.string().c_str(), "wb");
+    BOOST_REQUIRE(file != NULL);
+    BOOST_REQUIRE_EQUAL(fwrite("zclassic", 1, 8, file), 8);
+    BOOST_REQUIRE_EQUAL(fclose(file), 0);
+
+    BOOST_CHECK(RenameOver(source, destination));
+    BOOST_CHECK(!boost::filesystem::exists(source));
+    BOOST_CHECK_EQUAL(boost::filesystem::file_size(destination), 8);
+    boost::filesystem::remove(destination);
+}
+
 BOOST_AUTO_TEST_CASE(util_criticalsection)
 {
     CCriticalSection cs;

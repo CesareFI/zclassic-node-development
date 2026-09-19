@@ -662,6 +662,13 @@ void CleanupBlockRevFiles()
     }
 }
 
+static void ArchiveBootstrapFile(const boost::filesystem::path& source,
+                                 const boost::filesystem::path& destination)
+{
+    if (!RenameOver(source, destination))
+        LogPrintf("Warning: Could not archive bootstrap file %s\n", source.string());
+}
+
 void ThreadImport(std::vector<boost::filesystem::path> vImportFiles)
 {
     RenameThread("zcl-loadblk");
@@ -696,7 +703,7 @@ void ThreadImport(std::vector<boost::filesystem::path> vImportFiles)
             boost::filesystem::path pathBootstrapOld = GetDataDir() / "bootstrap.dat.old";
             LogPrintf("Importing bootstrap.dat...\n");
             LoadExternalBlockFile(file);
-            RenameOver(pathBootstrap, pathBootstrapOld);
+            ArchiveBootstrapFile(pathBootstrap, pathBootstrapOld);
         } else {
             LogPrintf("Warning: Could not open bootstrap file %s\n", pathBootstrap.string());
         }
