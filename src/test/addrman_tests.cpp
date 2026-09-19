@@ -17,12 +17,10 @@ using namespace std;
 class CAddrManTest : public CAddrMan
 {
     uint64_t state;
+    unsigned int randomCalls;
 
 public:
-    CAddrManTest()
-    {
-        state = 1;
-    }
+    CAddrManTest() : state(1), randomCalls(0) {}
 
     //! Ensure that bucket placement is always the same for testing purposes.
     void MakeDeterministic()
@@ -31,11 +29,23 @@ public:
         seed_insecure_rand(true);
     }
 
+    //! Exercise the production sparse-table path with reproducible randomness.
+    void MakeSparseSelectionDeterministic()
+    {
+        nKey = uint256S("1");
+        seed_insecure_rand(true);
+        state = 1;
+        randomCalls = 0;
+    }
+
     int RandomInt(int nMax)
     {
+        randomCalls++;
         state = (CHashWriter(SER_GETHASH, 0) << state).GetHash().GetCheapHash();
         return (unsigned int)(state % nMax);
     }
+
+    unsigned int RandomCalls() const { return randomCalls; }
 
     CAddrInfo* Find(const CNetAddr& addr, int* pnId = NULL)
     {
@@ -54,6 +64,25 @@ public:
 };
 
 BOOST_FIXTURE_TEST_SUITE(addrman_tests, BasicTestingSetup)
+
+BOOST_AUTO_TEST_CASE(addrman_sparse_selection)
+{
+    const CAddress address(CService("250.1.1.1", 8333));
+    const CNetAddr source("252.2.2.2");
+
+    CAddrManTest newTable;
+    BOOST_REQUIRE(newTable.Add(address, source));
+    newTable.MakeSparseSelectionDeterministic();
+    BOOST_CHECK_EQUAL(newTable.Select().ToString(), address.ToString());
+    BOOST_CHECK_GT(newTable.RandomCalls(), 0);
+
+    CAddrManTest triedTable;
+    BOOST_REQUIRE(triedTable.Add(address, source));
+    triedTable.Good(address);
+    triedTable.MakeSparseSelectionDeterministic();
+    BOOST_CHECK_EQUAL(triedTable.Select().ToString(), address.ToString());
+    BOOST_CHECK_GT(triedTable.RandomCalls(), 0);
+}
 
 BOOST_AUTO_TEST_CASE(addrman_clear_reuse)
 {

@@ -8,6 +8,29 @@
 #include "serialize.h"
 #include "streams.h"
 
+namespace {
+
+static const int MAX_SELECT_RETRIES = 200000;
+
+template <size_t BucketCount>
+int FindOccupiedSlot(const int (&buckets)[BucketCount][ADDRMAN_BUCKET_SIZE],
+                     int bucket, int position)
+{
+    const int bucketCount = static_cast<int>(BucketCount);
+    for (int attempts = 0; ; attempts++) {
+        const int id = buckets[bucket][position];
+        if (id != -1)
+            return id;
+
+        bucket = (bucket + insecure_rand()) % bucketCount;
+        position = (position + insecure_rand()) % ADDRMAN_BUCKET_SIZE;
+        if (attempts > MAX_SELECT_RETRIES)
+            return -1;
+    }
+}
+
+} // namespace
+
 int CAddrInfo::GetTriedBucket(const uint256& nKey) const
 {
     uint64_t hash1 = (CHashWriter(SER_GETHASH, 0) << nKey << GetKey()).GetHash().GetCheapHash();
@@ -334,63 +357,33 @@ CAddrInfo CAddrMan::Select_(bool newOnly)
     if (size() == 0)
         return CAddrInfo();
 
-    // Track number of attempts to find a table entry, before giving up to avoid infinite loop
-    const int kMaxRetries = 200000;         // magic number so unit tests can pass
-    const int kRetriesBetweenSleep = 1000;
-    const int kRetrySleepInterval = 100;    // milliseconds
-
     if (newOnly && nNew == 0)
         return CAddrInfo();
 
     // Use a 50% chance for choosing between tried and new table entries.
-    if (!newOnly &&
-       (nTried > 0 && (nNew == 0 || RandomInt(2) == 0))) { 
-        // use a tried node
-        double fChanceFactor = 1.0;
-        while (1) {
-            int i = 0;
-            int nKBucket = RandomInt(ADDRMAN_TRIED_BUCKET_COUNT);
-            int nKBucketPos = RandomInt(ADDRMAN_BUCKET_SIZE);
-            while (vvTried[nKBucket][nKBucketPos] == -1) {
-                nKBucket = (nKBucket + insecure_rand()) % ADDRMAN_TRIED_BUCKET_COUNT;
-                nKBucketPos = (nKBucketPos + insecure_rand()) % ADDRMAN_BUCKET_SIZE;
-                if (i++ > kMaxRetries)
-                    return CAddrInfo();
-                if (i % kRetriesBetweenSleep == 0 && !nKey.IsNull())
-                    MilliSleep(kRetrySleepInterval);
-            }
-            int nId = vvTried[nKBucket][nKBucketPos];
-            assert(mapInfo.count(nId) == 1);
-            CAddrInfo& info = mapInfo[nId];
-            if (RandomInt(1 << 30) < fChanceFactor * info.GetChance() * (1 << 30))
-                return info;
-            fChanceFactor *= 1.2;
+    const bool selectTried = !newOnly && nTried > 0 &&
+        (nNew == 0 || RandomInt(2) == 0);
+    double chanceFactor = 1.0;
+    while (true) {
+        int id;
+        if (selectTried) {
+            const int bucket = RandomInt(ADDRMAN_TRIED_BUCKET_COUNT);
+            const int position = RandomInt(ADDRMAN_BUCKET_SIZE);
+            id = FindOccupiedSlot(vvTried, bucket, position);
+        } else {
+            const int bucket = RandomInt(ADDRMAN_NEW_BUCKET_COUNT);
+            const int position = RandomInt(ADDRMAN_BUCKET_SIZE);
+            id = FindOccupiedSlot(vvNew, bucket, position);
         }
-    } else {
-        // use a new node
-        double fChanceFactor = 1.0;
-        while (1) {
-            int i = 0;
-            int nUBucket = RandomInt(ADDRMAN_NEW_BUCKET_COUNT);
-            int nUBucketPos = RandomInt(ADDRMAN_BUCKET_SIZE);
-            while (vvNew[nUBucket][nUBucketPos] == -1) {
-                nUBucket = (nUBucket + insecure_rand()) % ADDRMAN_NEW_BUCKET_COUNT;
-                nUBucketPos = (nUBucketPos + insecure_rand()) % ADDRMAN_BUCKET_SIZE;
-                if (i++ > kMaxRetries)
-                    return CAddrInfo();
-                if (i % kRetriesBetweenSleep == 0 && !nKey.IsNull())
-                    MilliSleep(kRetrySleepInterval);
-            }
-            int nId = vvNew[nUBucket][nUBucketPos];
-            assert(mapInfo.count(nId) == 1);
-            CAddrInfo& info = mapInfo[nId];
-            if (RandomInt(1 << 30) < fChanceFactor * info.GetChance() * (1 << 30))
-                return info;
-            fChanceFactor *= 1.2;
-        }
+        if (id == -1)
+            return CAddrInfo();
+
+        assert(mapInfo.count(id) == 1);
+        CAddrInfo& info = mapInfo[id];
+        if (RandomInt(1 << 30) < chanceFactor * info.GetChance() * (1 << 30))
+            return info;
+        chanceFactor *= 1.2;
     }
-    
-    return CAddrInfo();
 }
 
 #ifdef DEBUG_ADDRMAN
