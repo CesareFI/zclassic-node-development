@@ -91,6 +91,29 @@ BOOST_AUTO_TEST_CASE(datastream_ignore_bounds)
     BOOST_CHECK_EQUAL(stream[0], 'z');
 }
 
+BOOST_AUTO_TEST_CASE(datastream_growth_bounds)
+{
+    CDataStream stream(SER_NETWORK, 0);
+    stream.write("abcd", 4);
+    stream.ignore(1);
+    const size_t tooLarge = std::numeric_limits<size_t>::max();
+    BOOST_CHECK_THROW(stream.reserve(tooLarge), std::length_error);
+    BOOST_CHECK_EQUAL(stream.str(), "bcd");
+    BOOST_CHECK_THROW(stream.resize(tooLarge), std::length_error);
+    BOOST_REQUIRE_EQUAL(stream.size(), 3);
+    BOOST_CHECK_EQUAL(stream.str(), "bcd");
+    stream.reserve(8);
+    BOOST_CHECK_EQUAL(stream.str(), "bcd");
+    stream.resize(5, 'x');
+    BOOST_CHECK_EQUAL(stream.str(), "bcdxx");
+    stream.resize(1);
+    BOOST_CHECK_EQUAL(stream.str(), "b");
+    stream.resize(0);
+    BOOST_CHECK(stream.empty());
+    BOOST_CHECK(stream.Rewind(1));
+    BOOST_CHECK_EQUAL(stream.str(), "a");
+}
+
 class CSerializeMethodsTestSingle
 {
 protected:

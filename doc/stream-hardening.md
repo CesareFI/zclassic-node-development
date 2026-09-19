@@ -46,3 +46,31 @@ This is a compatibility check, not a performance claim.
 The full Boost suite also passed: 376 cases and 142,446,319 assertions.
 `git diff --check` passed. Compiler warnings were reviewed; none originated in
 the changed read/skip implementation or the new test cases.
+
+## In-memory capacity requests (2026-09-19)
+
+The follow-up review reproduced a related failure in `resize` and `reserve`.
+After consuming one byte, requesting `SIZE_MAX` remaining bytes wrapped the
+underlying vector size to zero. `reserve` silently succeeded, and `resize`
+shrunk the backing vector while leaving the cursor beyond its end. The stream
+then reported `SIZE_MAX` remaining bytes. The regression failed before the fix
+without requiring a large allocation.
+
+Both methods now check the request against `vch.max_size() - nReadPos` before
+adding the cursor. Invalid requests throw `std::length_error` while preserving
+the unread bytes. The new regression also checks ordinary reservation, growth,
+shrinking, zero remaining length, and rewind behavior. All three stream test
+bodies passed in a C++11 ASan/UBSan executable (48 assertions); the focused GCC
+analyzer check completed without diagnostics.
+
+These checks change neither serialized bytes nor any transaction or block
+validity rule. They reject impossible storage requests at the buffer boundary.
+
+The rebuilt daemon passed another 640-block replay with the same expected tip,
+640 block requests, 640 headers sent, and five header requests. All 15
+serialization cases passed (202,399 assertions), as did 107 broader Boost cases
+covering allocation, address management, networking, DoS handling, bootstrap
+protocols, validation, coins, and database wrappers (47,320,609 assertions).
+All 177 enabled GoogleTests passed. Compiler warnings were reviewed and
+`git diff --check` passed. The full Boost suite result above belongs to the
+preceding read-bound change; this follow-up used the stated relevant suites.

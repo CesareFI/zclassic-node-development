@@ -17,6 +17,7 @@
 #include <set>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdexcept>
 #include <string>
 #include <string.h>
 #include <utility>
@@ -170,8 +171,18 @@ public:
     iterator end()                                   { return vch.end(); }
     size_type size() const                           { return vch.size() - nReadPos; }
     bool empty() const                               { return vch.size() == nReadPos; }
-    void resize(size_type n, value_type c=0)         { vch.resize(n + nReadPos, c); }
-    void reserve(size_type n)                        { vch.reserve(n + nReadPos); }
+    void resize(size_type n, value_type c=0)
+    {
+        if (n > vch.max_size() - nReadPos)
+            throw std::length_error("CBaseDataStream::resize(): size too large");
+        vch.resize(n + nReadPos, c);
+    }
+    void reserve(size_type n)
+    {
+        if (n > vch.max_size() - nReadPos)
+            throw std::length_error("CBaseDataStream::reserve(): size too large");
+        vch.reserve(n + nReadPos);
+    }
     const_reference operator[](size_type pos) const  { return vch[pos + nReadPos]; }
     reference operator[](size_type pos)              { return vch[pos + nReadPos]; }
     void clear()                                     { vch.clear(); nReadPos = 0; }
