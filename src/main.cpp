@@ -4216,6 +4216,8 @@ static bool ValidateBlockFilePosition(CValidationState& state, const CDiskBlockP
                                       unsigned int addSize, bool known)
 {
     if (known) {
+        if (pos.nFile < 0)
+            return state.Error("block file index out of range");
         if (addSize > std::numeric_limits<unsigned int>::max() - pos.nPos)
             return state.Error("block position overflow");
         return true;

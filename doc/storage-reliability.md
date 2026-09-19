@@ -74,8 +74,10 @@ current 32-bit file size before comparing with the 128 MiB block-file limit. A
 wrapped sum could bypass rollover. Reindex positions also added their offset and
 record size without checking the unsigned result. Input validation now rejects
 records at least as large as a whole block file and rejects reindex positions
-that cannot be represented. The rollover comparison uses subtraction after the
-size check, avoiding overflow while preserving the existing boundary behavior.
+that cannot be represented. It also rejects a negative known/reindex file number
+before conversion to the unsigned vector index. The rollover comparison uses
+subtraction after the size check, avoiding overflow while preserving the
+existing boundary behavior.
 
 Validation runs before file metadata, file handles, or block accounting are
 modified. Extracting it limits `FindBlockPos()` to McCabe complexity 16, one
@@ -84,7 +86,8 @@ daemon and Boost test binary rebuilt successfully, and the focused main, coins,
 and database-wrapper groups passed. The complete Boost suite then passed all 386
 cases and 143,422,545 assertions. `git diff --check` passed. This changes
 malformed local position handling only; accepted block serialization and
-consensus validation are unchanged.
+consensus validation are unchanged. The follow-up signed-index guard rebuilt the
+same binaries and passed the focused main, coins, and database-wrapper groups.
 
 The paired undo allocator now rejects negative or out-of-range file indices
 before indexing `vinfoBlockFile`, and bounds size growth so both the 32-bit undo
