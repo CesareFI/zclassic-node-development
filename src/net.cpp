@@ -1965,6 +1965,25 @@ void CNode::Fuzz(int nChance)
 // CAddrDB
 //
 
+namespace {
+
+void ReadAddrFile(CAutoFile& file, const boost::filesystem::path& path,
+                  std::vector<unsigned char>& data, uint256& checksum)
+{
+    const uintmax_t fileSize = boost::filesystem::file_size(path);
+    const uintmax_t minimumSize = MESSAGE_START_SIZE + sizeof(uint256);
+    const uintmax_t maximumSize = static_cast<uintmax_t>(MAX_SIZE) + sizeof(uint256);
+    if (fileSize < minimumSize || fileSize > maximumSize)
+        throw std::ios_base::failure("peers.dat size out of range");
+
+    const size_t dataSize = static_cast<size_t>(fileSize - sizeof(uint256));
+    data.resize(dataSize);
+    file.read(reinterpret_cast<char*>(data.data()), data.size());
+    file >> checksum;
+}
+
+} // namespace
+
 CAddrDB::CAddrDB()
 {
     pathAddr = GetDataDir() / "peers.dat";
@@ -2016,20 +2035,12 @@ bool CAddrDB::Read(CAddrMan& addr)
     if (filein.IsNull())
         return error("%s: Failed to open file %s", __func__, pathAddr.string());
 
-    // use file size to size memory buffer
-    int fileSize = boost::filesystem::file_size(pathAddr);
-    int dataSize = fileSize - sizeof(uint256);
-    // Don't try to resize to a negative number if file is small
-    if (dataSize < 0)
-        dataSize = 0;
     vector<unsigned char> vchData;
-    vchData.resize(dataSize);
     uint256 hashIn;
 
-    // read data and checksum from file
+    // Bound the local cache before allocating and read its data and checksum.
     try {
-        filein.read((char *)&vchData[0], dataSize);
-        filein >> hashIn;
+        ReadAddrFile(filein, pathAddr, vchData, hashIn);
     }
     catch (const std::exception& e) {
         return error("%s: Deserialize or I/O error - %s", __func__, e.what());

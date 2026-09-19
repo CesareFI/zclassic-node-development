@@ -42,3 +42,37 @@ The change affects peer-cache cleanup only. Address serialization and scheduling
 policy are unchanged, as are chain history, all consensus parameters, block and
 transaction validity, and cryptographic validation. No production datadir or
 wallet was used, and generated files are excluded from the commit.
+
+## Cache file size bounds (2026-09-19)
+
+`CAddrDB::Read()` previously narrowed the filesystem's unsigned file size to
+`int`, allocated the resulting payload before applying any upper bound, and
+formed `&vchData[0]` even when the payload vector was empty. A local sparse-file
+fixture one byte above the 32 MiB serialization limit was fully allocated and
+hashed before rejection. A checksum-only fixture exercised the empty-payload
+path.
+
+The extracted file reader now validates the full file size before allocation.
+A cache must contain at least the four-byte network magic plus its 32-byte
+checksum, and its payload may not exceed the existing `MAX_SIZE` serialization
+bound. Only then is the checked `uintmax_t` length converted to `size_t` and read
+through `vector::data()`. Filesystem exceptions, allocation failures, and read
+errors remain handled by the existing `CAddrDB::Read()` exception boundary.
+Its measured McCabe complexity decreased from 5 to 4; the helper measures 3.
+
+The focused fixture passed before and after because both versions eventually
+reject malformed files, but peak RSS fell from about 148 MB to 83 MB and wall
+time fell from 1.55 to 1.31 seconds. Test-process startup and parameter loading
+dominate those times. The test uses a sparse temporary file under
+`TestingSetup`; no production cache is read or retained.
+
+All 28 addrman, netbase, and database-wrapper cases passed (3,348 assertions).
+Valgrind reported zero errors and no definite, indirect, or possible leaks for
+the focused bounds fixture. The daemon and Boost test executable rebuilt with
+the normal warning set, with no warning at a changed line. A full GCC analyzer
+run over the large `net.cpp` translation unit was stopped after two minutes at
+roughly 14 GB RSS; it had emitted only existing conversion and `tinyformat.h`
+warnings and had not produced a finding. `git diff --check` passed.
+
+This is local peer-cache parsing only. The serialized cache format and all
+network and consensus behavior remain unchanged.

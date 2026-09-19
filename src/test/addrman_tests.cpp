@@ -143,6 +143,31 @@ BOOST_FIXTURE_TEST_CASE(addrman_corrupt_database_recovery, TestingSetup)
     BOOST_CHECK_EQUAL(roundtrip.Select().ToString(), address.ToString());
 }
 
+BOOST_FIXTURE_TEST_CASE(addrman_database_size_bounds, TestingSetup)
+{
+    const boost::filesystem::path path = GetDataDir() / "peers.dat";
+    CAddrDB database;
+
+    // A checksum with no network magic or address payload is structurally short.
+    {
+        CDataStream empty(SER_DISK, CLIENT_VERSION);
+        empty << Hash(empty.begin(), empty.end());
+        CAutoFile file(fopen(path.string().c_str(), "wb"), SER_DISK, CLIENT_VERSION);
+        BOOST_REQUIRE(!file.IsNull());
+        file << empty;
+    }
+    CAddrManTest shortFile;
+    BOOST_CHECK(!database.Read(shortFile));
+    BOOST_CHECK_EQUAL(shortFile.size(), 0);
+
+    // Keep the fixture sparse: this checks the size before allocating or reading.
+    boost::filesystem::resize_file(
+        path, static_cast<uintmax_t>(MAX_SIZE) + sizeof(uint256) + 1);
+    CAddrManTest oversizedFile;
+    BOOST_CHECK(!database.Read(oversizedFile));
+    BOOST_CHECK_EQUAL(oversizedFile.size(), 0);
+}
+
 BOOST_AUTO_TEST_CASE(addrman_simple)
 {
     CAddrManTest addrman;
