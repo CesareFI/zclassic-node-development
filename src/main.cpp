@@ -1793,6 +1793,9 @@ bool WriteBlockToDisk(CBlock& block, CDiskBlockPos& pos, const CMessageHeader::M
     pos.nPos = (unsigned int)fileOutPos;
     fileout << block;
 
+    if (!fileout.fclose())
+        return error("WriteBlockToDisk: fclose failed");
+
     return true;
 }
 
@@ -2268,6 +2271,9 @@ bool UndoWriteToDisk(const CBlockUndo& blockundo, CDiskBlockPos& pos, const uint
     hasher << hashBlock;
     hasher << blockundo;
     fileout << hasher.GetHash();
+
+    if (!fileout.fclose())
+        return error("%s: fclose failed", __func__);
 
     return true;
 }

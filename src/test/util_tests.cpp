@@ -39,12 +39,25 @@ BOOST_AUTO_TEST_CASE(util_filecommit_flush_failure)
     BOOST_CHECK(!FileCommit(file));
     fclose(file);
 }
+
+BOOST_AUTO_TEST_CASE(util_autofile_close_failure)
+{
+    CAutoFile file(fopen("/dev/full", "wb"), SER_DISK, CLIENT_VERSION);
+    BOOST_REQUIRE(!file.IsNull());
+    BOOST_REQUIRE_EQUAL(fwrite("zclassic", 1, 8, file.Get()), 8);
+    BOOST_CHECK(!file.fclose());
+    BOOST_CHECK(file.IsNull());
+    BOOST_CHECK(file.fclose());
+}
 #endif
 
 BOOST_AUTO_TEST_CASE(util_renameover)
 {
-    const boost::filesystem::path source = GetDataDir() / "rename-source";
-    const boost::filesystem::path destination = GetDataDir() / "rename-destination";
+    const boost::filesystem::path root = boost::filesystem::temp_directory_path() /
+        boost::filesystem::unique_path("zclassic-rename-%%%%-%%%%-%%%%");
+    boost::filesystem::create_directories(root);
+    const boost::filesystem::path source = root / "source";
+    const boost::filesystem::path destination = root / "destination";
     FILE* file = fopen(source.string().c_str(), "wb");
     BOOST_REQUIRE(file != NULL);
     BOOST_REQUIRE_EQUAL(fwrite("zclassic", 1, 8, file), 8);
@@ -53,7 +66,7 @@ BOOST_AUTO_TEST_CASE(util_renameover)
     BOOST_CHECK(RenameOver(source, destination));
     BOOST_CHECK(!boost::filesystem::exists(source));
     BOOST_CHECK_EQUAL(boost::filesystem::file_size(destination), 8);
-    boost::filesystem::remove(destination);
+    boost::filesystem::remove_all(root);
 }
 
 BOOST_AUTO_TEST_CASE(util_criticalsection)

@@ -44,3 +44,25 @@ rename regression. The daemon and Boost test binary rebuilt successfully, and
 
 This changes diagnostics after legacy block import only. Block parsing,
 validation, indexing, and consensus behavior are unchanged.
+
+## Block writer close failures (2026-09-20)
+
+`CAutoFile` previously discarded the return from `fclose()`. Block and undo
+writers could therefore report success when buffered data failed during close,
+allowing later index updates to reference incomplete records. Explicit
+`CAutoFile::fclose()` now reports success, clears its pointer before calling
+libc, and remains idempotent. Its destructor continues to provide nonthrowing
+cleanup. The block and undo writers return failure when their explicit close
+fails, using their existing caller error paths.
+
+A Linux `/dev/full` regression verifies close-failure reporting, pointer
+invalidation, and idempotent cleanup. The rename regression was also moved to a
+unique temporary directory after the first full run exposed its dependence on
+the shared test datadir lifetime. Focused utility, main, and coins groups passed;
+the final complete Boost run passed all 386 cases and 141,725,857 assertions.
+Valgrind reported zero errors and no definite, indirect, or possible leaks for
+the close-failure regression. The daemon and test binary rebuilt with the normal
+warning set, and `git diff --check` passed.
+
+This changes write-error propagation only. Block and undo bytes, serialization,
+validation order, chain selection, and consensus behavior are unchanged.

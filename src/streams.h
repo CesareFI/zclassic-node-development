@@ -429,12 +429,14 @@ public:
         fclose();
     }
 
-    void fclose()
+    bool fclose()
     {
         if (file) {
-            ::fclose(file);
+            FILE* closing = file;
             file = NULL;
+            return ::fclose(closing) == 0;
         }
+        return true;
     }
 
     /** Get wrapped FILE* with transfer of ownership.
