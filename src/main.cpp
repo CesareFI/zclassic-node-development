@@ -2446,27 +2446,31 @@ DisconnectResult DisconnectBlock(const CBlock& block, const CBlockIndex* pindex,
     return fClean ? DISCONNECT_OK : DISCONNECT_UNCLEAN;
 }
 
-void static FlushBlockFile(bool fFinalize = false)
+static bool FlushBlockFileHandle(FILE* file, bool finalize, unsigned int finalSize)
+{
+    const bool truncated = !finalize || TruncateFile(file, finalSize);
+    const bool committed = FileCommit(file);
+    const bool closed = fclose(file) == 0;
+    return truncated && committed && closed;
+}
+
+bool static FlushBlockFile(bool fFinalize = false)
 {
     LOCK(cs_LastBlockFile);
 
     CDiskBlockPos posOld(nLastBlockFile, 0);
+    bool success = true;
 
     FILE *fileOld = OpenBlockFile(posOld);
-    if (fileOld) {
-        if (fFinalize)
-            TruncateFile(fileOld, vinfoBlockFile[nLastBlockFile].nSize);
-        FileCommit(fileOld);
-        fclose(fileOld);
-    }
+    if (fileOld)
+        success = FlushBlockFileHandle(fileOld, fFinalize, vinfoBlockFile[nLastBlockFile].nSize);
 
     fileOld = OpenUndoFile(posOld);
     if (fileOld) {
-        if (fFinalize)
-            TruncateFile(fileOld, vinfoBlockFile[nLastBlockFile].nUndoSize);
-        FileCommit(fileOld);
-        fclose(fileOld);
+        const bool undoSuccess = FlushBlockFileHandle(fileOld, fFinalize, vinfoBlockFile[nLastBlockFile].nUndoSize);
+        success = undoSuccess && success;
     }
+    return success;
 }
 
 bool FindUndoPos(CValidationState &state, int nFile, CDiskBlockPos &pos, unsigned int nAddSize);
@@ -2907,7 +2911,8 @@ bool static FlushStateToDisk(CValidationState &state, FlushStateMode mode) {
         if (!CheckDiskSpace(0))
             return state.Error("out of disk space");
         // First make sure all block and undo data is flushed to disk.
-        FlushBlockFile();
+        if (!FlushBlockFile())
+            return AbortNode(state, "Failed to flush block and undo files");
         // Then update all block file information (which may refer to block and undo files).
         {
             std::vector<std::pair<int, const CBlockFileInfo*> > vFiles;
@@ -4224,7 +4229,8 @@ bool FindBlockPos(CValidationState &state, CDiskBlockPos &pos, unsigned int nAdd
         if (!fKnown) {
             LogPrintf("Leaving block file %i: %s\n", nFile, vinfoBlockFile[nFile].ToString());
         }
-        FlushBlockFile(!fKnown);
+        if (!FlushBlockFile(!fKnown))
+            return AbortNode(state, "Failed to finalize block and undo files");
         nLastBlockFile = nFile;
     }
 
