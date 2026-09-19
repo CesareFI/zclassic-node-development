@@ -7273,6 +7273,37 @@ bool ProcessMessages(CNode* pfrom)
 }
 
 
+static void CheckBlockDownloadTimeout(CNode* node, CNodeState& state, int64_t now,
+                                      const Consensus::Params& consensusParams,
+                                      const CBlockIndex* bestHeader)
+{
+    // Stalling is set only when another peer blocks the download window, so
+    // this normally fires during initial block download rather than steady state.
+    if (!node->fDisconnect && state.nStallingSince &&
+        state.nStallingSince < now - 1000000 * BLOCK_STALLING_TIMEOUT) {
+        LogPrintf("Peer=%d is stalling block download, disconnecting\n", node->id);
+        node->fDisconnect = true;
+    }
+    if (node->fDisconnect || state.vBlocksInFlight.empty())
+        return;
+
+    QueuedBlock& queuedBlock = state.vBlocksInFlight.front();
+    const int64_t timeoutIfRequestedNow = GetBlockTimeout(
+        now, nQueuedValidatedHeaders - state.nBlocksInFlightValidHeaders,
+        consensusParams, bestHeader->nHeight);
+    if (queuedBlock.nTimeDisconnect > timeoutIfRequestedNow) {
+        LogPrint("net", "Reducing block download timeout for peer=%d block=%s, orig=%d new=%d\n",
+                 node->id, queuedBlock.hash.ToString(), queuedBlock.nTimeDisconnect,
+                 timeoutIfRequestedNow);
+        queuedBlock.nTimeDisconnect = timeoutIfRequestedNow;
+    }
+    if (queuedBlock.nTimeDisconnect < now) {
+        LogPrintf("Timeout downloading block %s from peer=%d, disconnecting\n",
+                  queuedBlock.hash.ToString(), node->id);
+        node->fDisconnect = true;
+    }
+}
+
 bool SendMessages(CNode* pto, bool fSendTrickle)
 {
     const Consensus::Params& consensusParams = Params().GetConsensus();
@@ -7477,13 +7508,6 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
 
         // Detect whether we're stalling
         int64_t nNow = GetTimeMicros();
-        if (!pto->fDisconnect && state.nStallingSince && state.nStallingSince < nNow - 1000000 * BLOCK_STALLING_TIMEOUT) {
-            // Stalling only triggers when the block download window cannot move. During normal steady state,
-            // the download window should be much larger than the to-be-downloaded set of blocks, so disconnection
-            // should only happen during initial block download.
-            LogPrintf("Peer=%d is stalling block download, disconnecting\n", pto->id);
-            pto->fDisconnect = true;
-        }
         // In case there is a block that has been in flight from this peer for (2 + 0.5 * N) times the block interval
         // (with N the number of validated blocks that were in flight at the time it was requested), disconnect due to
         // timeout. We compensate for in-flight blocks to prevent killing off peers due to our own downstream link
@@ -7494,18 +7518,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         // only looking at this peer's oldest request).  This way a large queue in the past doesn't result in a
         // permanently large window for this block to be delivered (ie if the number of blocks in flight is decreasing
         // more quickly than once every 5 minutes, then we'll shorten the download window for this block).
-        if (!pto->fDisconnect && state.vBlocksInFlight.size() > 0) {
-            QueuedBlock &queuedBlock = state.vBlocksInFlight.front();
-            int64_t nTimeoutIfRequestedNow = GetBlockTimeout(nNow, nQueuedValidatedHeaders - state.nBlocksInFlightValidHeaders, consensusParams, pindexBestHeader->nHeight);
-            if (queuedBlock.nTimeDisconnect > nTimeoutIfRequestedNow) {
-                LogPrint("net", "Reducing block download timeout for peer=%d block=%s, orig=%d new=%d\n", pto->id, queuedBlock.hash.ToString(), queuedBlock.nTimeDisconnect, nTimeoutIfRequestedNow);
-                queuedBlock.nTimeDisconnect = nTimeoutIfRequestedNow;
-            }
-            if (queuedBlock.nTimeDisconnect < nNow) {
-                LogPrintf("Timeout downloading block %s from peer=%d, disconnecting\n", queuedBlock.hash.ToString(), pto->id);
-                pto->fDisconnect = true;
-            }
-        }
+        CheckBlockDownloadTimeout(pto, state, nNow, consensusParams, pindexBestHeader);
 
         //
         // Message: getdata (blocks)

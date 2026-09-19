@@ -504,3 +504,18 @@ warning points to a changed line. `git diff --check` passed.
 This affects only crash handling for the local optimization cache. Parameter
 verification semantics, cryptographic validation, and consensus behavior are
 unchanged.
+
+## Block download timeout extraction (2026-09-20)
+
+Peer stall detection, adaptive oldest-request deadline shortening, and timeout
+disconnection previously occupied one nested block inside `SendMessages()`. The
+logic is now a focused helper with an early exit once a peer is already marked
+for disconnection. Existing timestamps, counters, deadline calculation, log
+messages, and disconnect decisions are unchanged.
+
+The extraction reduces `SendMessages()` from McCabe complexity 80 to 73; the
+helper measures 8. The daemon and Boost test binary rebuilt successfully.
+Focused DoS, main, and netbase groups passed 23 cases and more than 46 million
+assertions, followed by all 387 Boost cases and 142,519,452 assertions.
+`git diff --check` passed. No scheduling constants, request windows, validation,
+or consensus behavior changed.
