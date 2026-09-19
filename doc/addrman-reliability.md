@@ -110,16 +110,16 @@ peer selection, networking, and consensus validation remain unchanged.
 `FileCommit()` previously discarded errors from `fflush()` and the platform
 durability operation. Consequently, `CAddrDB::Write()` could rename a temporary
 peer cache into place after either operation failed. `FileCommit()` now reports
-success, and the address database treats a failed commit like its other
+success, and the address database treats a failed commit or close like its other
 serialization and I/O failures. The existing scoped remover deletes the
 temporary file after the stream closes, while the prior `peers.dat` remains in
-place.
+place. Rename occurs only after both operations succeed.
 
-The commit check is isolated in a small helper so `CAddrDB::Write()` retains its
-McCabe complexity of 3; the helper measures 2. Other callers retain their
-existing behavior until their failure handling can be audited separately. A
+The commit and close checks are isolated in a small helper so
+`CAddrDB::Write()` retains its McCabe complexity of 3; the helper measures 3. A
 focused utility regression verifies the successful write, flush, and durability
-path without using a production datadir.
+path without using a production datadir, and the close-failure regression
+verifies pointer invalidation and deterministic cleanup.
 
 The daemon and Boost test executable rebuilt successfully. Three focused tests
 passed (18 assertions), covering the commit path, failed-write cleanup, and
@@ -129,6 +129,11 @@ definite, indirect, or possible leaks for the commit regression. A bounded GCC
 analyzer run over the legacy `util.cpp` translation unit was stopped after its
 RSS grew to approximately 7.6 GB without a project finding; the normal warning
 build completed without a warning at a changed line. `git diff --check` passed.
+
+After close-result propagation was added, all 29 addrman, netbase, and
+database-wrapper cases passed (3,351 assertions), as did the focused close
+failure regression. Valgrind reported zero errors and no definite, indirect, or
+possible leaks for the forced cache write-cleanup path.
 
 This changes local peer-cache crash handling only. Peer-cache serialization,
 network behavior, and all consensus rules and validation remain unchanged.
