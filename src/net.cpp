@@ -1967,6 +1967,29 @@ void CNode::Fuzz(int nChance)
 
 namespace {
 
+class ScopedFileRemover
+{
+private:
+    const boost::filesystem::path path;
+    bool active;
+
+    ScopedFileRemover(const ScopedFileRemover&) = delete;
+    ScopedFileRemover& operator=(const ScopedFileRemover&) = delete;
+
+public:
+    explicit ScopedFileRemover(const boost::filesystem::path& pathIn) : path(pathIn), active(true) {}
+
+    ~ScopedFileRemover()
+    {
+        if (active) {
+            boost::system::error_code ignored;
+            boost::filesystem::remove(path, ignored);
+        }
+    }
+
+    void Dismiss() { active = false; }
+};
+
 void ReadAddrFile(CAutoFile& file, const boost::filesystem::path& path,
                   std::vector<unsigned char>& data, uint256& checksum)
 {
@@ -2006,9 +2029,10 @@ bool CAddrDB::Write(const CAddrMan& addr)
     // open temp output file, and associate with CAutoFile
     boost::filesystem::path pathTmp = GetDataDir() / tmpfn;
     FILE *file = fopen(pathTmp.string().c_str(), "wb");
-    CAutoFile fileout(file, SER_DISK, CLIENT_VERSION);
-    if (fileout.IsNull())
+    if (file == NULL)
         return error("%s: Failed to open file %s", __func__, pathTmp.string());
+    ScopedFileRemover removeTemporaryFile(pathTmp);
+    CAutoFile fileout(file, SER_DISK, CLIENT_VERSION);
 
     // Write and commit header, data
     try {
@@ -2023,6 +2047,7 @@ bool CAddrDB::Write(const CAddrMan& addr)
     // replace existing peers.dat, if any, with new peers.dat.XXXX
     if (!RenameOver(pathTmp, pathAddr))
         return error("%s: Rename-into-place failed", __func__);
+    removeTemporaryFile.Dismiss();
 
     return true;
 }

@@ -168,6 +168,23 @@ BOOST_FIXTURE_TEST_CASE(addrman_database_size_bounds, TestingSetup)
     BOOST_CHECK_EQUAL(oversizedFile.size(), 0);
 }
 
+BOOST_FIXTURE_TEST_CASE(addrman_database_write_failure_cleanup, TestingSetup)
+{
+    const boost::filesystem::path destination = GetDataDir() / "peers.dat";
+    BOOST_REQUIRE(boost::filesystem::create_directory(destination));
+
+    CAddrManTest addrman;
+    CAddrDB database;
+    BOOST_CHECK(!database.Write(addrman));
+
+    size_t temporaryFiles = 0;
+    for (boost::filesystem::directory_iterator it(GetDataDir()), end; it != end; ++it) {
+        const std::string name = it->path().filename().string();
+        temporaryFiles += name.find("peers.dat.") == 0;
+    }
+    BOOST_CHECK_EQUAL(temporaryFiles, 0);
+}
+
 BOOST_AUTO_TEST_CASE(addrman_simple)
 {
     CAddrManTest addrman;

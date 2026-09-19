@@ -76,3 +76,29 @@ warnings and had not produced a finding. `git diff --check` passed.
 
 This is local peer-cache parsing only. The serialized cache format and all
 network and consensus behavior remain unchanged.
+
+## Temporary-file cleanup (2026-09-19)
+
+`CAddrDB::Write()` writes a randomly named `peers.dat.XXXX` file, closes it,
+and renames it over the final cache. When the rename failed, the temporary file
+was left in the datadir. Repeated failures could accumulate stale cache files;
+an exception during serialization had the same cleanup gap.
+
+A local regression makes the final `peers.dat` path a directory so the rename
+fails without fault injection. Before the fix, one temporary file remained.
+The write path now owns every successfully opened temporary path through a
+noncopyable scoped remover. Declaration order closes the `CAutoFile` before
+cleanup, which also works on platforms that cannot unlink an open file. A
+successful rename immediately dismisses cleanup, preventing a later file with
+the same name from being removed. `CAddrDB::Write()` remains at McCabe
+complexity 3.
+
+The final tree rebuilt `zclassicd` and `test/test_bitcoin`. Three focused cache
+recovery, bounds, and write-cleanup tests passed (19 assertions), followed by 48
+addrman, netbase, database-wrapper, and utility cases (3,618 assertions).
+Valgrind reported zero errors and no definite, indirect, or possible leaks in
+the forced rename-failure case. The normal warning review and
+`git diff --check` passed.
+
+This changes failure cleanup only. Successful cache bytes and rename behavior,
+peer selection, networking, and consensus validation remain unchanged.
