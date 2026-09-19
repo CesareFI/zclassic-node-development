@@ -1319,6 +1319,26 @@ static bool VerifyBootstrapDownloadedFile(const boost::filesystem::path& path, c
     return true;
 }
 
+static bool FinalizeBootstrapDownloadedFile(FILE*& file,
+                                            const boost::filesystem::path& partPath,
+                                            const boost::filesystem::path& finalPath,
+                                            const CBootstrapSnapshotFile& manifestFile,
+                                            std::string& error)
+{
+    const bool committed = FileCommit(file);
+    const bool closed = fclose(file) == 0;
+    file = NULL;
+    if (!committed || !closed) {
+        error = strprintf("could not commit bootstrap staging file: %s", partPath.string());
+        return false;
+    }
+    if (!VerifyBootstrapDownloadedFile(partPath, manifestFile, error))
+        return false;
+
+    boost::filesystem::rename(partPath, finalPath);
+    return true;
+}
+
 // Pipeline window: how many chunk requests the client keeps in flight at once.
 // This hides per-chunk round-trip latency, which otherwise caps throughput on
 // high-latency links. It must not exceed the server's per-peer queue limit
@@ -1554,19 +1574,10 @@ static bool DownloadBootstrapFileSubset(SOCKET socket, const CBootstrapSnapshotM
 
         // Finalize the file once its final chunk has been written.
         if (request.nOffset + request.nLength >= file.nSize) {
-            FileCommit(fp);
-            const bool closed = (fclose(fp) == 0);
-            fp = NULL;
-            if (!closed) {
-                error = strprintf("could not close bootstrap staging file: %s", open_part.string());
+            if (!FinalizeBootstrapDownloadedFile(fp, open_part, open_path, file, error)) {
                 ok = false;
                 break;
             }
-            if (!VerifyBootstrapDownloadedFile(open_part, file, error)) {
-                ok = false;
-                break;
-            }
-            boost::filesystem::rename(open_part, open_path);
         }
 
         // Log on each whole-percent advance so an operator watching the console

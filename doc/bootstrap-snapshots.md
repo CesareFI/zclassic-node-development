@@ -471,6 +471,21 @@ This follows the same broad model as Bitcoin AssumeUTXO, Geth snap sync, Cosmos
 state sync, and Mithril-certified snapshots: fast state acquisition first,
 normal validation after the trusted hash point.
 
+Completed snapshot files receive the same durability treatment before their
+`.part` paths are renamed into the staging tree. The download loop previously
+ignored `FileCommit()` and proceeded to hash and rename after a failed flush or
+sync. Its extracted finalizer now always closes and clears the owned `FILE*`,
+then verifies and renames only after commit and close both succeed. The main
+download routine's McCabe complexity decreased from 29 to 28; the finalizer
+measures 4.
+
+All 55 bootstrap protocol tests passed again (1,154 assertions), and the daemon
+and Boost test binary rebuilt with the normal warning set. The private socket
+download path has no direct unit fixture; commit success and buffered-flush
+failure are covered by the utility tests, while the bootstrap suite covers
+manifest, chunk, marker, and staging policy. Snapshot bytes and SHA-256 checks,
+installation order, and consensus behavior are unchanged.
+
 ## Zcash Parameters Over P2P
 
 A fresh node needs the zk-SNARK parameter files (`sapling-*.params`,
