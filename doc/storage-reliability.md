@@ -97,3 +97,22 @@ complexity 6, one required branch above its prior score; the validation helper
 measures 5. Focused main, coins, and database-wrapper tests passed after the
 change. The complete Boost suite passed all 386 cases and 142,483,793
 assertions. Undo serialization and validation semantics are unchanged.
+
+## Pruned reindex filename filtering (2026-09-20)
+
+`CleanupBlockRevFiles()` previously classified files by length, a three-byte
+prefix, and `.dat` suffix alone. During `-reindex -prune`, an unrelated name such
+as `revision.dat` therefore matched the `rev?????.dat` shape and was deleted.
+Block and undo cleanup now requires exactly five decimal digits between the
+prefix and suffix before a path is considered.
+
+The exact-name predicate is a pure utility with focused cases for valid block
+and undo names, nondigits, wrong prefixes, unrelated names, and extra suffixes.
+`CleanupBlockRevFiles()` decreases from McCabe complexity 8 to 6; the predicate
+measures 5. All 24 utility cases passed (291 assertions), the three main tests
+passed, and Valgrind reported zero errors and no definite, indirect, or possible
+leaks for the predicate regression. The daemon and test binary rebuilt with the
+normal warning set, and `git diff --check` passed.
+
+This narrows destructive local cleanup only. Reindex parsing, block validation,
+and consensus behavior are unchanged.

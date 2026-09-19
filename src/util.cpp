@@ -18,6 +18,7 @@
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <algorithm>
 
 #if (defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__DragonFly__))
 #include <pthread.h>
@@ -36,7 +37,6 @@
 
 #endif // __linux__
 
-#include <algorithm>
 #include <fcntl.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
@@ -663,6 +663,15 @@ bool RenameOver(boost::filesystem::path src, boost::filesystem::path dest)
     int rc = std::rename(src.string().c_str(), dest.string().c_str());
     return (rc == 0);
 #endif /* WIN32 */
+}
+
+bool IsNumberedBlockFile(const std::string& filename, const std::string& prefix)
+{
+    return filename.size() == 12 &&
+        filename.compare(0, 3, prefix) == 0 &&
+        filename.compare(8, 4, ".dat") == 0 &&
+        std::all_of(filename.begin() + 3, filename.begin() + 8,
+                    [](char c) { return c >= '0' && c <= '9'; });
 }
 
 /**

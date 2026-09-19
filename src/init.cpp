@@ -637,15 +637,13 @@ void CleanupBlockRevFiles()
     LogPrintf("Removing unusable blk?????.dat and rev?????.dat files for -reindex with -prune\n");
     path blocksdir = GetDataDir() / "blocks";
     for (directory_iterator it(blocksdir); it != directory_iterator(); it++) {
-        if (is_regular_file(*it) &&
-            it->path().filename().string().length() == 12 &&
-            it->path().filename().string().substr(8,4) == ".dat")
-        {
-            if (it->path().filename().string().substr(0,3) == "blk")
-                mapBlockFiles[it->path().filename().string().substr(3,5)] = it->path();
-            else if (it->path().filename().string().substr(0,3) == "rev")
-                remove(it->path());
-        }
+        if (!is_regular_file(*it))
+            continue;
+        const string filename = it->path().filename().string();
+        if (IsNumberedBlockFile(filename, "blk"))
+            mapBlockFiles[filename.substr(3, 5)] = it->path();
+        else if (IsNumberedBlockFile(filename, "rev"))
+            remove(it->path());
     }
 
     // Remove all block files that aren't part of a contiguous set starting at

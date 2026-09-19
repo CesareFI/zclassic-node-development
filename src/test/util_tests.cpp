@@ -69,6 +69,16 @@ BOOST_AUTO_TEST_CASE(util_renameover)
     boost::filesystem::remove_all(root);
 }
 
+BOOST_AUTO_TEST_CASE(util_numbered_block_file_names)
+{
+    BOOST_CHECK(IsNumberedBlockFile("blk00000.dat", "blk"));
+    BOOST_CHECK(IsNumberedBlockFile("rev99999.dat", "rev"));
+    BOOST_CHECK(!IsNumberedBlockFile("revision.dat", "rev"));
+    BOOST_CHECK(!IsNumberedBlockFile("blk0000x.dat", "blk"));
+    BOOST_CHECK(!IsNumberedBlockFile("blk00000.dat.old", "blk"));
+    BOOST_CHECK(!IsNumberedBlockFile("rev00000.dat", "blk"));
+}
+
 BOOST_AUTO_TEST_CASE(util_criticalsection)
 {
     CCriticalSection cs;
