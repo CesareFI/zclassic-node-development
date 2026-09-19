@@ -477,3 +477,30 @@ fixture independently checked the aggregation, and Python syntax validation
 passed. The public-network table above was rechecked against both retained
 benchmark summaries and their height-20,000 validation logs before committing.
 Raw logs, authentication data, and captured chain databases are not included.
+
+## Parameter cache durability (2026-09-19)
+
+The verified-parameter cache is an optional startup optimization: its temporary
+file is intended to be committed before it is renamed into place. The writer
+previously ignored both `FileCommit()` and `fclose()` failures, so a failed
+flush, durability operation, or close could still replace the last complete
+cache.
+
+A focused finalization helper now always closes the file and renames it only
+when both commit and close succeed. On failure it logs the condition and removes
+the temporary file with nonthrowing cleanup. `StoreVerifiedParamCache()` has a
+McCabe complexity of 4 after the extraction, down from 5. The cache format,
+eligibility checks, compiled parameter digests, and full-hash fallback are
+unchanged.
+
+A Linux regression using `/dev/full` verifies that buffered flush failure is
+reported. All 21 utility tests passed (274 assertions), all six focused
+parameter presence/hash GoogleTests passed, and the full GoogleTest suite passed
+177 tests across 30 suites. Valgrind reported zero errors and no definite,
+indirect, or possible leaks for the failure regression. `zclassicd`, the Boost
+test binary, and the GoogleTest binary rebuilt with the normal warning set; no
+warning points to a changed line. `git diff --check` passed.
+
+This affects only crash handling for the local optimization cache. Parameter
+verification semantics, cryptographic validation, and consensus behavior are
+unchanged.

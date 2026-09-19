@@ -894,6 +894,20 @@ static bool LoadVerifiedParamCache(std::map<std::string, ParamCacheRecord>& out)
     return true;
 }
 
+static void CommitAndInstallParamCache(FILE* file,
+                                       const boost::filesystem::path& tmpPath,
+                                       const boost::filesystem::path& finalPath)
+{
+    const bool committed = FileCommit(file);
+    const bool closed = fclose(file) == 0;
+    if (committed && closed && RenameOver(tmpPath, finalPath))
+        return;
+
+    LogPrintf("param-cache: could not commit or install %s\n", finalPath.string());
+    boost::system::error_code ignored;
+    boost::filesystem::remove(tmpPath, ignored);
+}
+
 // Atomically rewrite the whole cache 0600 in DATADIR: tmp (O_CREAT|O_WRONLY|
 // O_TRUNC, 0600) -> FileCommit(fdatasync) -> RenameOver. A kill mid-write can
 // never leave a half-record a future parse misreads as a valid skip.
@@ -920,11 +934,7 @@ static void StoreVerifiedParamCache(const std::map<std::string, ParamCacheRecord
                 (long long)it->second.mtime,
                 it->second.verifiedHash.c_str());
     }
-    FileCommit(f);
-    fclose(f);
-    if (!RenameOver(tmpPath, finalPath)) {
-        boost::filesystem::remove(tmpPath);
-    }
+    CommitAndInstallParamCache(f, tmpPath, finalPath);
 }
 
 } // anonymous namespace

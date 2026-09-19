@@ -30,6 +30,17 @@ BOOST_AUTO_TEST_CASE(util_filecommit)
     BOOST_CHECK_EQUAL(fclose(file), 0);
 }
 
+#ifdef __linux__
+BOOST_AUTO_TEST_CASE(util_filecommit_flush_failure)
+{
+    FILE* file = fopen("/dev/full", "wb");
+    BOOST_REQUIRE(file != NULL);
+    BOOST_REQUIRE_EQUAL(fwrite("zclassic", 1, 8, file), 8);
+    BOOST_CHECK(!FileCommit(file));
+    fclose(file);
+}
+#endif
+
 BOOST_AUTO_TEST_CASE(util_criticalsection)
 {
     CCriticalSection cs;
