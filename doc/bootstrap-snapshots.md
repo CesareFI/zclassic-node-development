@@ -500,6 +500,15 @@ content matching a compiled hash is installed. A serving node (`-bootstrapserve`
 answers `getbspman`/`getbspchk` from its own params directory, subject to the
 same per-IP serve quota as snapshots.
 
+Parameter `.part` files must also commit and close successfully before the
+compiled digest check and rename. Failed transfers still close without syncing
+and are removed by the caller. Extracting successful-transfer finalization
+reduced `DownloadZcashParamFile()` from McCabe complexity 21 to 19; the helper
+measures 3. All 55 bootstrap protocol tests passed 1,154 assertions, the
+buffered-flush failure regression passed, and the daemon and Boost test binary
+rebuilt successfully. Parameter sizes, expected hashes, wire messages, and
+cryptographic validation are unchanged.
+
 ## Serving Limits (Bandwidth Abuse)
 
 A serving node caps how much one IP can download per rolling 24-hour window:

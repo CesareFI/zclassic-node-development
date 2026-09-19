@@ -4051,6 +4051,19 @@ bool ReadZcashParamChunk(const CBootstrapSnapshotChunkRequest& request, CBootstr
     return true;
 }
 
+static bool CommitAndCloseZcashParamFile(FILE* file,
+                                         const boost::filesystem::path& path,
+                                         std::string& error)
+{
+    const bool committed = FileCommit(file);
+    const bool closed = fclose(file) == 0;
+    if (committed && closed)
+        return true;
+
+    error = strprintf("could not commit zcash param staging file: %s", path.string());
+    return false;
+}
+
 static bool DownloadZcashParamFile(SOCKET socket, uint32_t file_index, uint64_t size, uint32_t chunk_size, const boost::filesystem::path& part_path, const std::string& display_name, int timeout_ms, std::string& error)
 {
     boost::filesystem::create_directories(part_path.parent_path());
@@ -4151,14 +4164,11 @@ static bool DownloadZcashParamFile(SOCKET socket, uint32_t file_index, uint64_t 
         }
     }
 
-    if (ok) {
-        FileCommit(fp);
-    }
-    if (fclose(fp) != 0 && ok) {
-        error = strprintf("could not close zcash param staging file: %s", part_path.string());
+    if (!ok) {
+        fclose(fp);
         return false;
     }
-    return ok;
+    return CommitAndCloseZcashParamFile(fp, part_path, error);
 }
 
 bool FetchZcashParamsFromPeer(const std::string& peer, std::string& error)
