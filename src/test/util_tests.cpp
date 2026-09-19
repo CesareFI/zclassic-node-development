@@ -21,6 +21,15 @@ using namespace std;
 
 BOOST_FIXTURE_TEST_SUITE(util_tests, BasicTestingSetup)
 
+BOOST_AUTO_TEST_CASE(util_filecommit)
+{
+    FILE* file = tmpfile();
+    BOOST_REQUIRE(file != NULL);
+    BOOST_REQUIRE_EQUAL(fwrite("zclassic", 1, 8, file), 8);
+    BOOST_CHECK(FileCommit(file));
+    BOOST_CHECK_EQUAL(fclose(file), 0);
+}
+
 BOOST_AUTO_TEST_CASE(util_criticalsection)
 {
     CCriticalSection cs;

@@ -2005,6 +2005,12 @@ void ReadAddrFile(CAutoFile& file, const boost::filesystem::path& path,
     file >> checksum;
 }
 
+void CommitAddrFile(CAutoFile& file, const boost::filesystem::path& path)
+{
+    if (!FileCommit(file.Get()))
+        throw std::ios_base::failure(strprintf("failed to commit %s", path.string()));
+}
+
 } // namespace
 
 CAddrDB::CAddrDB()
@@ -2037,11 +2043,11 @@ bool CAddrDB::Write(const CAddrMan& addr)
     // Write and commit header, data
     try {
         fileout << ssPeers;
+        CommitAddrFile(fileout, pathTmp);
     }
     catch (const std::exception& e) {
         return error("%s: Serialize or I/O error - %s", __func__, e.what());
     }
-    FileCommit(fileout.Get());
     fileout.fclose();
 
     // replace existing peers.dat, if any, with new peers.dat.XXXX

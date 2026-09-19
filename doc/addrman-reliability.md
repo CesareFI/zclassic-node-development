@@ -102,3 +102,31 @@ the forced rename-failure case. The normal warning review and
 
 This changes failure cleanup only. Successful cache bytes and rename behavior,
 peer selection, networking, and consensus validation remain unchanged.
+
+## Durable cache commit checks (2026-09-19)
+
+`FileCommit()` previously discarded errors from `fflush()` and the platform
+durability operation. Consequently, `CAddrDB::Write()` could rename a temporary
+peer cache into place after either operation failed. `FileCommit()` now reports
+success, and the address database treats a failed commit like its other
+serialization and I/O failures. The existing scoped remover deletes the
+temporary file after the stream closes, while the prior `peers.dat` remains in
+place.
+
+The commit check is isolated in a small helper so `CAddrDB::Write()` retains its
+McCabe complexity of 3; the helper measures 2. Other callers retain their
+existing behavior until their failure handling can be audited separately. A
+focused utility regression verifies the successful write, flush, and durability
+path without using a production datadir.
+
+The daemon and Boost test executable rebuilt successfully. Three focused tests
+passed (18 assertions), covering the commit path, failed-write cleanup, and
+corrupt-cache recovery. All 49 utility, addrman, netbase, and database-wrapper
+cases then passed (3,622 assertions). Valgrind reported zero errors and no
+definite, indirect, or possible leaks for the commit regression. A bounded GCC
+analyzer run over the legacy `util.cpp` translation unit was stopped after its
+RSS grew to approximately 7.6 GB without a project finding; the normal warning
+build completed without a warning at a changed line. `git diff --check` passed.
+
+This changes local peer-cache crash handling only. Peer-cache serialization,
+network behavior, and all consensus rules and validation remain unchanged.

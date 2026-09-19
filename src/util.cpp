@@ -684,19 +684,20 @@ bool TryCreateDirectory(const boost::filesystem::path& p)
     return false;
 }
 
-void FileCommit(FILE *fileout)
+bool FileCommit(FILE *fileout)
 {
-    fflush(fileout); // harmless if redundantly called
+    if (fflush(fileout) != 0)
+        return false;
 #ifdef WIN32
     HANDLE hFile = (HANDLE)_get_osfhandle(_fileno(fileout));
-    FlushFileBuffers(hFile);
+    return FlushFileBuffers(hFile) != 0;
 #else
     #if defined(__linux__) || defined(__NetBSD__)
-    fdatasync(fileno(fileout));
+    return fdatasync(fileno(fileout)) == 0;
     #elif defined(__APPLE__) && defined(F_FULLFSYNC)
-    fcntl(fileno(fileout), F_FULLFSYNC, 0);
+    return fcntl(fileno(fileout), F_FULLFSYNC, 0) == 0;
     #else
-    fsync(fileno(fileout));
+    return fsync(fileno(fileout)) == 0;
     #endif
 #endif
 }
