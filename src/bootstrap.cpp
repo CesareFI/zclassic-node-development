@@ -2971,6 +2971,19 @@ bool SetupAutoBootstrapServe(const boost::filesystem::path& data_dir, std::strin
 // outlive the install->verify window (see BootstrapFromPeer): if the marker were
 // lost, an imported (possibly forged) UTXO set would be trusted with no further
 // check. Returns false (with `err` set) if the marker could not be made durable.
+static bool CommitAndCloseDatadirMarker(FILE* file,
+                                        const boost::filesystem::path& path,
+                                        std::string& err)
+{
+    const bool committed = FileCommit(file);
+    const bool closed = fclose(file) == 0;
+    if (committed && closed)
+        return true;
+
+    err = strprintf("could not commit %s", path.string());
+    return false;
+}
+
 static bool WriteDurableDatadirMarker(const boost::filesystem::path& path,
                                       const std::string& contents, std::string& err)
 {
@@ -2984,11 +2997,8 @@ static bool WriteDurableDatadirMarker(const boost::filesystem::path& path,
         err = strprintf("could not write %s", path.string());
         return false;
     }
-    FileCommit(f); // fsync the file's data before we rely on it
-    if (fclose(f) != 0) {
-        err = strprintf("could not flush %s", path.string());
+    if (!CommitAndCloseDatadirMarker(f, path, err))
         return false;
-    }
 #ifndef WIN32
     // fsync the containing directory so the new file's directory entry is durable
     // (fsync'ing the file alone does not guarantee the link is persisted). Best

@@ -450,6 +450,23 @@ after LevelDB is open. It runs as a pre-database bootstrap phase:
 - After install, the daemon opens the databases and uses normal validation from
   that point forward.
 
+Before installation, the client persists a verification-pending marker in the
+datadir. This closes the restart window between moving the snapshot into place
+and running its post-open commitment checks: after a crash, marker presence
+forces verification to resume. The marker writer now checks both the file
+durability operation and `fclose()` before allowing installation to continue.
+Either failure aborts the bootstrap before chain data is moved. The marker
+writer retains its McCabe complexity of 6; its extracted commit/close helper
+measures 3.
+
+The focused marker lifecycle regression passed 21 assertions, and all 55
+bootstrap snapshot protocol tests passed 1,154 assertions. Valgrind reported
+zero errors and no definite, indirect, or possible leaks for the focused case.
+The daemon and Boost test binary rebuilt with the normal warning set, and
+`git diff --check` passed. This changes failure handling only; marker contents,
+snapshot validation, transaction and block validity, and consensus behavior are
+unchanged.
+
 This follows the same broad model as Bitcoin AssumeUTXO, Geth snap sync, Cosmos
 state sync, and Mithril-certified snapshots: fast state acquisition first,
 normal validation after the trusted hash point.
