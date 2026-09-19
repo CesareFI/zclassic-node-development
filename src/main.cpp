@@ -4287,12 +4287,27 @@ bool FindBlockPos(CValidationState &state, CDiskBlockPos &pos, unsigned int nAdd
     return true;
 }
 
+static bool ValidateUndoFilePosition(CValidationState& state, int fileNumber,
+                                     unsigned int addSize)
+{
+    if (fileNumber < 0 || static_cast<size_t>(fileNumber) >= vinfoBlockFile.size())
+        return state.Error("undo file index out of range");
+    const unsigned int maximumRoundedSize =
+        std::numeric_limits<unsigned int>::max() - (UNDOFILE_CHUNK_SIZE - 1);
+    if (vinfoBlockFile[fileNumber].nUndoSize > maximumRoundedSize ||
+        addSize > maximumRoundedSize - vinfoBlockFile[fileNumber].nUndoSize)
+        return state.Error("undo file size overflow");
+    return true;
+}
+
 bool FindUndoPos(CValidationState &state, int nFile, CDiskBlockPos &pos, unsigned int nAddSize)
 {
-    pos.nFile = nFile;
-
     LOCK(cs_LastBlockFile);
 
+    if (!ValidateUndoFilePosition(state, nFile, nAddSize))
+        return false;
+
+    pos.nFile = nFile;
     unsigned int nNewSize;
     pos.nPos = vinfoBlockFile[nFile].nUndoSize;
     nNewSize = vinfoBlockFile[nFile].nUndoSize += nAddSize;

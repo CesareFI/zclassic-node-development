@@ -85,3 +85,12 @@ and database-wrapper groups passed. The complete Boost suite then passed all 386
 cases and 143,422,545 assertions. `git diff --check` passed. This changes
 malformed local position handling only; accepted block serialization and
 consensus validation are unchanged.
+
+The paired undo allocator now rejects negative or out-of-range file indices
+before indexing `vinfoBlockFile`, and bounds size growth so both the 32-bit undo
+size and its one-MiB chunk rounding remain representable. These checks also run
+before position, size, or dirty-index mutation. `FindUndoPos()` measures McCabe
+complexity 6, one required branch above its prior score; the validation helper
+measures 5. Focused main, coins, and database-wrapper tests passed after the
+change. The complete Boost suite passed all 386 cases and 142,483,793
+assertions. Undo serialization and validation semantics are unchanged.
