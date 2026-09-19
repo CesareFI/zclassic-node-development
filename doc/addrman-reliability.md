@@ -19,7 +19,9 @@ address, peer selection, serialization round trips, and recovery after a failed
 cache parse. Files are confined to the existing `TestingSetup` temporary
 directory. Both tests failed before the fix and passed afterward (22
 assertions). The final fixtures use the existing deterministic address-manager
-test support to avoid random selection delays.
+test support to avoid random selection delays. The clear/reuse fixture seeds
+bucket placement before its first insertion so unrelated suite RNG state cannot
+cause a new-bucket collision and evict the address under test.
 
 Validation:
 

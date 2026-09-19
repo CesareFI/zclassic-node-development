@@ -87,6 +87,7 @@ BOOST_AUTO_TEST_CASE(addrman_sparse_selection)
 BOOST_AUTO_TEST_CASE(addrman_clear_reuse)
 {
     CAddrManTest addrman;
+    addrman.MakeDeterministic();
     const CAddress address(CService("250.1.1.1", 8333));
     const CAddress tried(CService("250.1.1.2", 8333));
     const CNetAddr source("252.2.2.2");
