@@ -2056,6 +2056,9 @@ bool CAddrDB::Read(CAddrMan& addr)
         ssPeers >> addr;
     }
     catch (const std::exception& e) {
+        // Deserialization can populate entries before their bucket memberships.
+        // Discard that partial state so peer discovery can start from scratch.
+        addr.Clear();
         return error("%s: Deserialize or I/O error - %s", __func__, e.what());
     }
 

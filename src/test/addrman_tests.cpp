@@ -2,6 +2,9 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include "addrman.h"
+#include "chainparams.h"
+#include "clientversion.h"
+#include "net.h"
 #include "test/test_bitcoin.h"
 #include <string>
 #include <boost/test/unit_test.hpp>
@@ -51,6 +54,65 @@ public:
 };
 
 BOOST_FIXTURE_TEST_SUITE(addrman_tests, BasicTestingSetup)
+
+BOOST_AUTO_TEST_CASE(addrman_clear_reuse)
+{
+    CAddrManTest addrman;
+    const CAddress address(CService("250.1.1.1", 8333));
+    const CAddress tried(CService("250.1.1.2", 8333));
+    const CNetAddr source("252.2.2.2");
+    BOOST_REQUIRE(addrman.Add(address, source));
+    BOOST_REQUIRE(addrman.Add(tried, source));
+    addrman.Good(tried);
+    BOOST_REQUIRE(addrman.Find(address) != nullptr);
+    addrman.Clear();
+    BOOST_CHECK_EQUAL(addrman.size(), 0);
+    BOOST_CHECK(addrman.Find(address) == nullptr);
+    BOOST_CHECK(addrman.Find(tried) == nullptr);
+    addrman.MakeDeterministic();
+    BOOST_REQUIRE(addrman.Add(address, source));
+    BOOST_REQUIRE_EQUAL(addrman.size(), 1);
+    BOOST_CHECK_EQUAL(addrman.Select().ToString(), address.ToString());
+    CDataStream serialized(SER_DISK, CLIENT_VERSION);
+    serialized << addrman;
+    CAddrManTest restored;
+    serialized >> restored;
+    BOOST_REQUIRE_EQUAL(restored.size(), 1);
+    BOOST_CHECK_EQUAL(restored.Select().ToString(), address.ToString());
+}
+
+BOOST_FIXTURE_TEST_CASE(addrman_corrupt_database_recovery, TestingSetup)
+{
+    const CAddress address(CService("250.1.1.1", 8333));
+    const CNetAddr source("252.2.2.2");
+    CDataStream payload(SER_DISK, CLIENT_VERSION);
+    payload << FLATDATA(Params().MessageStart());
+    payload << static_cast<unsigned char>(1) << static_cast<unsigned char>(32);
+    payload << uint256() << 1 << 0 << (ADDRMAN_NEW_BUCKET_COUNT ^ (1 << 30));
+    payload << CAddrInfo(address, source);
+    // The checksum is valid, but all bucket membership data is missing.
+    // Parsing has already populated the address maps when it reaches EOF.
+    payload << Hash(payload.begin(), payload.end());
+    {
+        CAutoFile file(fopen((GetDataDir() / "peers.dat").string().c_str(), "wb"), SER_DISK, CLIENT_VERSION);
+        BOOST_REQUIRE(!file.IsNull());
+        file << payload;
+    }
+    CAddrManTest recovered;
+    CAddrDB database;
+    BOOST_CHECK(!database.Read(recovered));
+    BOOST_REQUIRE_EQUAL(recovered.size(), 0);
+    BOOST_CHECK(!recovered.Select().IsValid());
+    recovered.MakeDeterministic();
+    BOOST_CHECK(recovered.Add(address, source));
+    BOOST_REQUIRE_EQUAL(recovered.size(), 1);
+    BOOST_CHECK_EQUAL(recovered.Select().ToString(), address.ToString());
+    BOOST_REQUIRE(database.Write(recovered));
+    CAddrManTest roundtrip;
+    BOOST_REQUIRE(database.Read(roundtrip));
+    BOOST_REQUIRE_EQUAL(roundtrip.size(), 1);
+    BOOST_CHECK_EQUAL(roundtrip.Select().ToString(), address.ToString());
+}
 
 BOOST_AUTO_TEST_CASE(addrman_simple)
 {
