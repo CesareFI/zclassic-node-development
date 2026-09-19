@@ -35,6 +35,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <limits>
 #include <sstream>
 
 #include <boost/algorithm/string/replace.hpp>
@@ -4211,9 +4212,25 @@ bool ReceivedBlockTransactions(const CBlock &block, CValidationState& state, CBl
     return true;
 }
 
+static bool ValidateBlockFilePosition(CValidationState& state, const CDiskBlockPos& pos,
+                                      unsigned int addSize, bool known)
+{
+    if (known) {
+        if (addSize > std::numeric_limits<unsigned int>::max() - pos.nPos)
+            return state.Error("block position overflow");
+        return true;
+    }
+    if (addSize >= MAX_BLOCKFILE_SIZE)
+        return state.Error("block record exceeds maximum block file size");
+    return true;
+}
+
 bool FindBlockPos(CValidationState &state, CDiskBlockPos &pos, unsigned int nAddSize, unsigned int nHeight, uint64_t nTime, bool fKnown = false)
 {
     LOCK(cs_LastBlockFile);
+
+    if (!ValidateBlockFilePosition(state, pos, nAddSize, fKnown))
+        return false;
 
     unsigned int nFile = fKnown ? pos.nFile : nLastBlockFile;
     if (vinfoBlockFile.size() <= nFile) {
@@ -4221,7 +4238,7 @@ bool FindBlockPos(CValidationState &state, CDiskBlockPos &pos, unsigned int nAdd
     }
 
     if (!fKnown) {
-        while (vinfoBlockFile[nFile].nSize + nAddSize >= MAX_BLOCKFILE_SIZE) {
+        while (vinfoBlockFile[nFile].nSize >= MAX_BLOCKFILE_SIZE - nAddSize) {
             nFile++;
             if (vinfoBlockFile.size() <= nFile) {
                 vinfoBlockFile.resize(nFile + 1);
@@ -4241,10 +4258,11 @@ bool FindBlockPos(CValidationState &state, CDiskBlockPos &pos, unsigned int nAdd
     }
 
     vinfoBlockFile[nFile].AddBlock(nHeight, nTime);
-    if (fKnown)
+    if (fKnown) {
         vinfoBlockFile[nFile].nSize = std::max(pos.nPos + nAddSize, vinfoBlockFile[nFile].nSize);
-    else
+    } else {
         vinfoBlockFile[nFile].nSize += nAddSize;
+    }
 
     if (!fKnown) {
         unsigned int nOldChunks = (pos.nPos + BLOCKFILE_CHUNK_SIZE - 1) / BLOCKFILE_CHUNK_SIZE;

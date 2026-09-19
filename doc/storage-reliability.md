@@ -66,3 +66,22 @@ warning set, and `git diff --check` passed.
 
 This changes write-error propagation only. Block and undo bytes, serialization,
 validation order, chain selection, and consensus behavior are unchanged.
+
+## Block position arithmetic (2026-09-20)
+
+`FindBlockPos()` previously added an incoming serialized record size to the
+current 32-bit file size before comparing with the 128 MiB block-file limit. A
+wrapped sum could bypass rollover. Reindex positions also added their offset and
+record size without checking the unsigned result. Input validation now rejects
+records at least as large as a whole block file and rejects reindex positions
+that cannot be represented. The rollover comparison uses subtraction after the
+size check, avoiding overflow while preserving the existing boundary behavior.
+
+Validation runs before file metadata, file handles, or block accounting are
+modified. Extracting it limits `FindBlockPos()` to McCabe complexity 16, one
+required branch above its prior score; the validation helper measures 4. The
+daemon and Boost test binary rebuilt successfully, and the focused main, coins,
+and database-wrapper groups passed. The complete Boost suite then passed all 386
+cases and 143,422,545 assertions. `git diff --check` passed. This changes
+malformed local position handling only; accepted block serialization and
+consensus validation are unchanged.
