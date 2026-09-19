@@ -80,7 +80,7 @@ class CBaseDataStream
 protected:
     typedef SerializeType vector_type;
     vector_type vch;
-    unsigned int nReadPos;
+    typename vector_type::size_type nReadPos;
 
     int nType;
     int nVersion;
@@ -282,13 +282,13 @@ public:
         }
 
         // Read from the beginning of the buffer
-        unsigned int nReadPosNext = nReadPos + nSize;
-        if (nReadPosNext >= vch.size())
+        // Check the remaining length before adding, so neither overflow nor
+        // narrowing can turn an oversized read into an in-bounds one.
+        if (nSize > size())
+            throw std::ios_base::failure("CBaseDataStream::read(): end of data");
+        const size_type nReadPosNext = nReadPos + nSize;
+        if (nReadPosNext == vch.size())
         {
-            if (nReadPosNext > vch.size())
-            {
-                throw std::ios_base::failure("CBaseDataStream::read(): end of data");
-            }
             memcpy(pch, &vch[nReadPos], nSize);
             nReadPos = 0;
             vch.clear();
@@ -304,11 +304,11 @@ public:
         if (nSize < 0) {
             throw std::ios_base::failure("CDataStream::ignore(): nSize negative");
         }
-        unsigned int nReadPosNext = nReadPos + nSize;
-        if (nReadPosNext >= vch.size())
+        if (static_cast<size_type>(nSize) > size())
+            throw std::ios_base::failure("CBaseDataStream::ignore(): end of data");
+        const size_type nReadPosNext = nReadPos + static_cast<size_type>(nSize);
+        if (nReadPosNext == vch.size())
         {
-            if (nReadPosNext > vch.size())
-                throw std::ios_base::failure("CBaseDataStream::ignore(): end of data");
             nReadPos = 0;
             vch.clear();
             return;

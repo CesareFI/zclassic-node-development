@@ -37,6 +37,60 @@ void check_ser_rep(T thing, std::vector<unsigned char> expected)
 
 BOOST_FIXTURE_TEST_SUITE(serialize_tests, BasicTestingSetup)
 
+BOOST_AUTO_TEST_CASE(datastream_read_bounds)
+{
+    CDataStream stream(SER_NETWORK, 0);
+    char out[4] = {};
+    stream.read(nullptr, 0);
+    BOOST_CHECK_THROW(stream.read(out, 1), std::ios_base::failure);
+    stream.write("abcd", 4);
+    stream.read(out, 1);
+    BOOST_CHECK_EQUAL(out[0], 'a');
+
+    std::vector<size_t> oversized{4, std::numeric_limits<size_t>::max()};
+    if (std::numeric_limits<size_t>::max() > std::numeric_limits<unsigned int>::max()) {
+        // These sizes previously narrowed to positions inside the buffer.
+        oversized.push_back(static_cast<size_t>(std::numeric_limits<unsigned int>::max()));
+        oversized.push_back(static_cast<size_t>(std::numeric_limits<unsigned int>::max()) + 1);
+    }
+    for (size_t size : oversized) {
+        BOOST_CHECK_THROW(stream.read(out, size), std::ios_base::failure);
+        BOOST_CHECK_EQUAL(stream.size(), 3);
+        BOOST_CHECK_EQUAL(stream[0], 'b');
+        BOOST_CHECK_EQUAL(out[0], 'a');
+    }
+    BOOST_CHECK_THROW(stream.read(nullptr, 1), std::ios_base::failure);
+    stream.read(nullptr, 0);
+    BOOST_CHECK_EQUAL(stream.size(), 3);
+    stream.read(out, 3);
+    BOOST_CHECK_EQUAL(std::string(out, 3), "bcd");
+    BOOST_CHECK(stream.empty());
+    stream.write("z", 1);
+    stream.read(out, 1);
+    BOOST_CHECK_EQUAL(out[0], 'z');
+    BOOST_CHECK(stream.empty());
+}
+
+BOOST_AUTO_TEST_CASE(datastream_ignore_bounds)
+{
+    CDataStream stream(SER_NETWORK, 0);
+    stream.ignore(0);
+    BOOST_CHECK_THROW(stream.ignore(1), std::ios_base::failure);
+    stream.write("abcd", 4);
+    stream.ignore(1);
+    for (int size : {-1, 4, std::numeric_limits<int>::max()}) {
+        BOOST_CHECK_THROW(stream.ignore(size), std::ios_base::failure);
+        BOOST_CHECK_EQUAL(stream.size(), 3);
+        BOOST_CHECK_EQUAL(stream[0], 'b');
+    }
+    stream.ignore(0);
+    BOOST_CHECK_EQUAL(stream.size(), 3);
+    stream.ignore(3);
+    BOOST_CHECK(stream.empty());
+    stream.write("z", 1);
+    BOOST_CHECK_EQUAL(stream[0], 'z');
+}
+
 class CSerializeMethodsTestSingle
 {
 protected:
