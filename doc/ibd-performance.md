@@ -532,3 +532,16 @@ failover fixture recorded one stalled-source disconnect and received the first
 useful header from the replacement after 63.22 seconds. The fixture used an
 isolated scratch datadir and an existing stopped local block capture. No timeout,
 peer preference, validation, or consensus policy changed.
+
+Block request assignment and staller marking are now a third focused scheduler
+helper. It preserves per-peer capacity, `FindNextBlocksToDownload()` ordering,
+in-flight bookkeeping, request logging, and the rule that a blocking peer's
+stall clock starts only when the current peer received no blocks. This reduces
+`SendMessages()` from McCabe complexity 59 to 51; the helper measures 9.
+
+The focused DoS, main, and netbase groups passed. The loopback reassignment
+fixture completed three abandoned 100-request batches with approximately
+300-second calculated deadlines, reassigned the work, and validated the expected
+100-block tip
+`00001071e9da677300cf65b92f954b00184f941e6b51e9e6d5927be0ac277271`.
+No request-window, timeout, validation, or consensus behavior changed.

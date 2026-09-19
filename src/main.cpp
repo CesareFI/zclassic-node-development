@@ -7333,6 +7333,36 @@ static void CheckHeaderSyncTimeout(CNode* node, CNodeState& state,
     node->fDisconnect = true;
 }
 
+static void RequestNextBlocks(CNode* node, CNodeState& state, bool fetch,
+                              int64_t now, const Consensus::Params& consensusParams,
+                              std::vector<CInv>& requests)
+{
+    if (node->fDisconnect || node->fClient ||
+        (!fetch && IsInitialBlockDownload()) ||
+        state.nBlocksInFlight >= MAX_BLOCKS_IN_TRANSIT_PER_PEER)
+        return;
+
+    std::vector<const CBlockIndex*> toDownload;
+    NodeId staller = -1;
+    FindNextBlocksToDownload(node->GetId(),
+        MAX_BLOCKS_IN_TRANSIT_PER_PEER - state.nBlocksInFlight,
+        toDownload, staller);
+    BOOST_FOREACH(const CBlockIndex* index, toDownload) {
+        requests.push_back(CInv(MSG_BLOCK, index->GetBlockHash()));
+        MarkBlockAsInFlight(node->GetId(), index->GetBlockHash(), consensusParams, index);
+        LogPrint("net", "Requesting block %s (%d) peer=%d\n",
+                 index->GetBlockHash().ToString(), index->nHeight, node->id);
+    }
+    if (state.nBlocksInFlight != 0 || staller == -1)
+        return;
+
+    CNodeState* stallerState = State(staller);
+    if (stallerState->nStallingSince == 0) {
+        stallerState->nStallingSince = now;
+        LogPrint("net", "Stall started peer=%d\n", staller);
+    }
+}
+
 bool SendMessages(CNode* pto, bool fSendTrickle)
 {
     const Consensus::Params& consensusParams = Params().GetConsensus();
@@ -7537,23 +7567,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         // Message: getdata (blocks)
         //
         vector<CInv> vGetData;
-        if (!pto->fDisconnect && !pto->fClient && (fFetch || !IsInitialBlockDownload()) && state.nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
-            vector<const CBlockIndex*> vToDownload;
-            NodeId staller = -1;
-            FindNextBlocksToDownload(pto->GetId(), MAX_BLOCKS_IN_TRANSIT_PER_PEER - state.nBlocksInFlight, vToDownload, staller);
-            BOOST_FOREACH(const CBlockIndex *pindex, vToDownload) {
-                vGetData.push_back(CInv(MSG_BLOCK, pindex->GetBlockHash()));
-                MarkBlockAsInFlight(pto->GetId(), pindex->GetBlockHash(), consensusParams, pindex);
-                LogPrint("net", "Requesting block %s (%d) peer=%d\n", pindex->GetBlockHash().ToString(),
-                    pindex->nHeight, pto->id);
-            }
-            if (state.nBlocksInFlight == 0 && staller != -1) {
-                if (State(staller)->nStallingSince == 0) {
-                    State(staller)->nStallingSince = nNow;
-                    LogPrint("net", "Stall started peer=%d\n", staller);
-                }
-            }
-        }
+        RequestNextBlocks(pto, state, fFetch, nNow, consensusParams, vGetData);
 
         //
         // Message: getdata (non-blocks)
