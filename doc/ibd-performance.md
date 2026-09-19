@@ -429,3 +429,51 @@ reassignment regression still pass. Python syntax checks, compiler-warning
 review, and `git diff --check` passed. The benchmark now separately counts header
 requests, coalesced requests, header response messages, and header/block payload
 bytes, so this overhead remains observable.
+
+The completed longer public-network comparison supports the bandwidth finding:
+
+| Approximately 20,000 blocks | Before | After |
+| --- | ---: | ---: |
+| Last sampled validated height | 20,012 | 20,013 |
+| Elapsed time | 581.63 s | 586.52 s |
+| CPU-seconds | 609.07 | 609.57 |
+| Total received | 577.15 MB | 138.35 MB |
+| Header payload | 486.40 MB | 51.43 MB |
+| Header requests | 2,072 | 218 |
+| Coalesced requests | 0 | 9 |
+
+Both captures contain the same validated block at height 20,000:
+`00000012fbfe5187fe81a2f34dd5052c2c19f008bf5e205074dd44fa9f77c05a`.
+Neither run logged block timeouts or sampled repeated in-flight heights. The
+candidate observed three connected peers versus two in the baseline; peer
+conditions and overlapping local tests were not controlled. Received bytes
+decreased by 76.0% in this run, but there was no elapsed-time improvement. Payload
+log totals exclude framing and data still buffered when sampling/shutdown occurs.
+
+## Captured JoinSplit density (2026-09-19)
+
+The preserved read-only RPC scan of heights 1–20,000 counted 59,058
+transactions and 18,855 JoinSplits. Of those JoinSplits, 13,306 occurred in
+blocks with multiple proofs, but only 1,022 occurred in transactions with
+multiple proofs. Blocks containing multiple shielded transactions accounted
+for 12,614 JoinSplits. This suggests that a future parallel-verification
+experiment would need to consider work across transactions; it is not evidence
+that such a change is safe or faster. No verification scheduling or consensus
+code was changed for this measurement.
+
+The existing Python RPC benchmark interface is reused by
+`qa/zcash/benchmark-shielded-density.py`:
+
+```sh
+python3 qa/zcash/benchmark-shielded-density.py \
+  --rpcport 18023 --cookie /path/to/scratch-node/.cookie \
+  --start-height 1 --end-height 20000
+```
+
+Use an isolated node containing the already-validated capture. The script
+prints aggregate counts only. The preserved histograms were checked against
+their block, transaction, and JoinSplit totals; a synthetic two-block RPC
+fixture independently checked the aggregation, and Python syntax validation
+passed. The public-network table above was rechecked against both retained
+benchmark summaries and their height-20,000 validation logs before committing.
+Raw logs, authentication data, and captured chain databases are not included.
