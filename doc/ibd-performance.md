@@ -519,3 +519,16 @@ Focused DoS, main, and netbase groups passed 23 cases and more than 46 million
 assertions, followed by all 387 Boost cases and 142,519,452 assertions.
 `git diff --check` passed. No scheduling constants, request windows, validation,
 or consensus behavior changed.
+
+The adjacent header-progress failover is also isolated from `SendMessages()`.
+It retains the one-minute no-progress threshold, sole-source protection, the
+requirement for another preferred peer with a completed connection, and the rule
+that outstanding block downloads prevent rotation. This second extraction
+reduces `SendMessages()` from McCabe complexity 73 to 59; the policy helper
+measures 12 and the alternative-peer scan measures 5.
+
+The focused DoS, main, and netbase groups passed again. A real-daemon loopback
+failover fixture recorded one stalled-source disconnect and received the first
+useful header from the replacement after 63.22 seconds. The fixture used an
+isolated scratch datadir and an existing stopped local block capture. No timeout,
+peer preference, validation, or consensus policy changed.

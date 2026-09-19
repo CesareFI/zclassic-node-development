@@ -7304,6 +7304,35 @@ static void CheckBlockDownloadTimeout(CNode* node, CNodeState& state, int64_t no
     }
 }
 
+static bool HasAlternativeHeaderSyncPeer(NodeId currentPeer)
+{
+    // A version message alone increments nPreferredDownload. Require a
+    // completed outbound handshake before giving up the current source.
+    for (const auto& peer : mapNodeState) {
+        if (peer.first != currentPeer && peer.second.fPreferredDownload &&
+            peer.second.fCurrentlyConnected)
+            return true;
+    }
+    return false;
+}
+
+static void CheckHeaderSyncTimeout(CNode* node, CNodeState& state,
+                                   const CBlockIndex* bestHeader)
+{
+    static const int64_t HEADERS_SYNC_PROGRESS_TIMEOUT = 60 * 1000000LL;
+    if (node->fDisconnect || fImporting || fReindex || !state.fSyncStarted ||
+        nSyncStarted != 1 || state.nBlocksInFlight != 0 ||
+        nPreferredDownload <= (state.fPreferredDownload ? 1 : 0) ||
+        bestHeader->GetBlockTime() > GetAdjustedTime() - 24 * 60 * 60 ||
+        state.nHeadersSyncProgressTime >= GetTimeMicros() - HEADERS_SYNC_PROGRESS_TIMEOUT)
+        return;
+    if (!HasAlternativeHeaderSyncPeer(node->GetId()))
+        return;
+
+    LogPrintf("Peer=%d is stalling header download, disconnecting to try another peer\n", node->id);
+    node->fDisconnect = true;
+}
+
 bool SendMessages(CNode* pto, bool fSendTrickle)
 {
     const Consensus::Params& consensusParams = Params().GetConsensus();
@@ -7420,23 +7449,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         // that slot. Try another preferred peer after a minute without progress.
         // Keep our sole source, and do not interrupt outstanding block downloads.
         // This is availability policy only: it neither bans nor changes validation.
-        static const int64_t HEADERS_SYNC_PROGRESS_TIMEOUT = 60 * 1000000LL;
-        if (!pto->fDisconnect && !fImporting && !fReindex &&
-            state.fSyncStarted && nSyncStarted == 1 && state.nBlocksInFlight == 0 &&
-            nPreferredDownload > (state.fPreferredDownload ? 1 : 0) &&
-            pindexBestHeader->GetBlockTime() <= GetAdjustedTime() - 24 * 60 * 60 &&
-            state.nHeadersSyncProgressTime < GetTimeMicros() - HEADERS_SYNC_PROGRESS_TIMEOUT) {
-            // A version message alone increments nPreferredDownload. Require
-            // a completed outbound handshake before giving up our current source.
-            for (const auto& peer : mapNodeState) {
-                if (peer.first != pto->GetId() && peer.second.fPreferredDownload &&
-                    peer.second.fCurrentlyConnected) {
-                    LogPrintf("Peer=%d is stalling header download, disconnecting to try another peer\n", pto->id);
-                    pto->fDisconnect = true;
-                    break;
-                }
-            }
-        }
+        CheckHeaderSyncTimeout(pto, state, pindexBestHeader);
         if (!state.fSyncStarted && !pto->fClient && !fImporting && !fReindex) {
             // Only actively request headers from a single peer, unless we're close to today.
             if ((nSyncStarted == 0 && fFetch) || pindexBestHeader->GetBlockTime() > GetAdjustedTime() - 24 * 60 * 60) {
