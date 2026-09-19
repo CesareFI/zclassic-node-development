@@ -545,3 +545,15 @@ fixture completed three abandoned 100-request batches with approximately
 100-block tip
 `00001071e9da677300cf65b92f954b00184f941e6b51e9e6d5927be0ac277271`.
 No request-window, timeout, validation, or consensus behavior changed.
+
+Initial header-source activation is now a fourth focused helper. It preserves
+the single-source rule while far behind, permits additional sources near current
+time, initializes the same progress pointer and timestamp, increments
+`nSyncStarted`, and requests from the same predecessor. `SendMessages()` drops
+from McCabe complexity 51 to 42; the helper measures 10.
+
+The focused DoS, main, and netbase groups passed. In loopback integration, a
+healthy source delivered the first header in 3.00 seconds with no stall
+disconnect, while the failover scenario disconnected one stalled source and
+delivered its first useful header in 63.22 seconds. Header eligibility, locator
+construction, timeout policy, validation, and consensus behavior are unchanged.

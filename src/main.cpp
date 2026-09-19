@@ -7363,6 +7363,26 @@ static void RequestNextBlocks(CNode* node, CNodeState& state, bool fetch,
     }
 }
 
+static void StartHeaderSync(CNode* node, CNodeState& state,
+                            CBlockIndex* bestHeader, bool fetch)
+{
+    if (state.fSyncStarted || node->fClient || fImporting || fReindex)
+        return;
+    const bool nearCurrentTime =
+        bestHeader->GetBlockTime() > GetAdjustedTime() - 24 * 60 * 60;
+    if ((nSyncStarted != 0 || !fetch) && !nearCurrentTime)
+        return;
+
+    state.fSyncStarted = true;
+    state.pindexHeadersSyncProgress = bestHeader;
+    state.nHeadersSyncProgressTime = GetTimeMicros();
+    nSyncStarted++;
+    CBlockIndex* start = bestHeader->pprev ? bestHeader->pprev : bestHeader;
+    if (RequestHeaders(node, start, uint256()))
+        LogPrint("net", "initial getheaders (%d) to peer=%d (startheight:%d)\n",
+                 start->nHeight, node->id, node->nStartingHeight);
+}
+
 bool SendMessages(CNode* pto, bool fSendTrickle)
 {
     const Consensus::Params& consensusParams = Params().GetConsensus();
@@ -7480,18 +7500,8 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         // Keep our sole source, and do not interrupt outstanding block downloads.
         // This is availability policy only: it neither bans nor changes validation.
         CheckHeaderSyncTimeout(pto, state, pindexBestHeader);
-        if (!state.fSyncStarted && !pto->fClient && !fImporting && !fReindex) {
-            // Only actively request headers from a single peer, unless we're close to today.
-            if ((nSyncStarted == 0 && fFetch) || pindexBestHeader->GetBlockTime() > GetAdjustedTime() - 24 * 60 * 60) {
-                state.fSyncStarted = true;
-                state.pindexHeadersSyncProgress = pindexBestHeader;
-                state.nHeadersSyncProgressTime = GetTimeMicros();
-                nSyncStarted++;
-                CBlockIndex *pindexStart = pindexBestHeader->pprev ? pindexBestHeader->pprev : pindexBestHeader;
-                if (RequestHeaders(pto, pindexStart, uint256()))
-                    LogPrint("net", "initial getheaders (%d) to peer=%d (startheight:%d)\n", pindexStart->nHeight, pto->id, pto->nStartingHeight);
-            }
-        }
+        // Only actively request headers from a single peer, unless we're close to today.
+        StartHeaderSync(pto, state, pindexBestHeader, fFetch);
 
         // Resend wallet transactions that haven't gotten in a block yet
         // Except during reindex, importing and IBD, when old wallet
