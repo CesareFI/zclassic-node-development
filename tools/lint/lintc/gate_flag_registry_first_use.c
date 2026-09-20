@@ -120,8 +120,11 @@ static int fru_open_check(const char *path, int line, const char *name,
             break;
         }
     }
+    int read_failed = ferror(f) != 0;
     free(l);
     fclose(f);
+    if (read_failed)
+        return -1;
     if (!hit) {
         snprintf(reason, rcap, "line past end (%d lines)", lineno);
         return 1;

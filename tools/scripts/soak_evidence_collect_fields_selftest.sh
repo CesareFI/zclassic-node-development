@@ -25,14 +25,14 @@ export ZCL_SOAK_SECURITY_CMD="printf '{\"security_review_required\":null}\\n{\"s
 export ZCL_SOAK_SHOW_CMD="printf 'NRestarts=bad\\nNRestarts=7\\nActiveEnterTimestamp=\\nActiveEnterTimestamp=Fri 2026-09-18 12:00:00 UTC\\nMainPID=x\\nMainPID=4242\\n'"
 export ZCL_SOAK_RSS_CMD="printf 'VmRSS: 8192 kB VmRSS: bad kB\\n'"
 export ZCL_SOAK_NOW=1789732800
-export ZCL_SOAK_FIELD_TOOL_LOG="$fixture/tools"
-: > "$ZCL_SOAK_FIELD_TOOL_LOG"
+export SELFTEST_SOAK_FIELD_TOOL_LOG="$fixture/tools"
+: > "$SELFTEST_SOAK_FIELD_TOOL_LOG"
 
 # Count only the parser processes whose implementation this regression
 # constrains. Delegating to the real tools keeps the complete collector live.
-sed() { echo sed >> "$ZCL_SOAK_FIELD_TOOL_LOG"; command sed "$@"; }
-head() { echo head >> "$ZCL_SOAK_FIELD_TOOL_LOG"; command head "$@"; }
-grep() { echo grep >> "$ZCL_SOAK_FIELD_TOOL_LOG"; command grep "$@"; }
+sed() { echo sed >> "$SELFTEST_SOAK_FIELD_TOOL_LOG"; command sed "$@"; }
+head() { echo head >> "$SELFTEST_SOAK_FIELD_TOOL_LOG"; command head "$@"; }
+grep() { echo grep >> "$SELFTEST_SOAK_FIELD_TOOL_LOG"; command grep "$@"; }
 export -f sed head grep
 
 bash "$subject" collect > "$fixture/out"
@@ -50,7 +50,7 @@ while IFS= read -r tool; do
         head) head_calls=$((head_calls + 1)) ;;
         grep) grep_calls=$((grep_calls + 1)) ;;
     esac
-done < "$ZCL_SOAK_FIELD_TOOL_LOG"
+done < "$SELFTEST_SOAK_FIELD_TOOL_LOG"
 total=$((sed_calls + head_calls + grep_calls))
 printf 'service sample field-parser processes=%s (sed=%s head=%s grep=%s; prior=15)\n' \
     "$total" "$sed_calls" "$head_calls" "$grep_calls"
@@ -59,7 +59,7 @@ if [ "$baseline" -eq 0 ] && [ "$total" -gt 0 ]; then
 fi
 
 # Missing and malformed service fields remain JSON null, never fabricated 0.
-: > "$ZCL_SOAK_FIELD_TOOL_LOG"
+: > "$SELFTEST_SOAK_FIELD_TOOL_LOG"
 export ZCL_SOAK_SHOW_CMD="printf 'NRestarts=bad\\nActiveEnterTimestamp=\\nMainPID=x\\n'"
 bash "$subject" collect > "$fixture/missing"
 line="$(tail -n 1 "$fixture/missing")"
