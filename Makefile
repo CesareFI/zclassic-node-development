@@ -366,6 +366,7 @@ ZCL_BUILD_QUERY_GOALS := print-node-c23-srcs help doctor doctor-build timings ag
 # Exact names preserve bootstrap for mixed, default and unknown goals.
 ZCL_SYNC_BENCHMARK_STANDALONE_GOALS := bench_fresh_sync build/bin/bench_fresh_sync \
 	bench-fresh-sync-selftest bench-fresh-sync-height-selftest \
+	bench-fresh-sync-startup-interrupt-selftest \
 	bench-sync-bootstrap-selftest sync-benchmark-receipt-lock-selftest \
 	fold-profile-selftest fold-profile-summary-selftest stopwatch-overlap-selftest \
 	crypto-perf-evaluator-selftest
@@ -9650,6 +9651,11 @@ bench_fresh_sync bench-fresh-sync-selftest: bench-fresh-sync-http-error-selftest
 bench-fresh-sync-curl-config-selftest:
 	@bash tools/scripts/bench_fresh_sync_curl_config_selftest.sh
 bench_fresh_sync: bench-fresh-sync-curl-config-selftest
+
+.PHONY: bench-fresh-sync-startup-interrupt-selftest
+bench-fresh-sync-startup-interrupt-selftest:
+	@bash tools/scripts/bench_fresh_sync_startup_interrupt_selftest.sh
+bench_fresh_sync: bench-fresh-sync-startup-interrupt-selftest
 
 .PHONY: bench_fresh_sync
 bench_fresh_sync: $(BIN_DIR)/bench_fresh_sync bench-fresh-sync-output-selftest
