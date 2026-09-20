@@ -53,11 +53,33 @@ ZCL_EVIDENCE_TIMEOUT_SEC="${ZCL_EVIDENCE_TIMEOUT_SEC:-10}"
 # string body. Also strips raw newlines/tabs/CRs, which would otherwise
 # produce an unparseable line in a JSONL ledger.
 evidence_json_escape() {
-    printf '%s' "${1:-}" | tr '\n\r\t' '   ' | sed 's/\\/\\\\/g; s/"/\\"/g'
+    # These short observer fields are emitted repeatedly during IBD. Keep the
+    # same byte transformations without starting two text tools per string.
+    local s="${1:-}"
+    # Bash replacement repeatedly copies dense escaped strings. Keep large
+    # diagnostic fields on the streaming path so they cannot dominate a poll.
+    if [ "${#s}" -gt 4096 ]; then
+        local escaped
+        escaped=$(printf '%s' "$s" | tr '\n\r\t' '   ' |
+            sed 's/\\/\\\\/g; s/"/\\"/g') || return
+        printf '%s' "$escaped"
+        return 0
+    fi
+    s=${s//$'\n'/ }
+    s=${s//$'\r'/ }
+    s=${s//$'\t'/ }
+    s=${s//\\/\\\\}
+    s=${s//\"/\\\"}
+    printf '%s' "$s"
 }
 
 # evidence_jstr <s>: a complete JSON string literal, "" when empty.
-evidence_jstr() { printf '"%s"' "$(evidence_json_escape "${1:-}")"; }
+evidence_jstr() {
+    # Stream the literal without starting a shell for each observed string.
+    printf '"'
+    evidence_json_escape "${1:-}"
+    printf '"'
+}
 
 # evidence_jnum <v>: a JSON number when v is a bare (optionally negative)
 # integer, JSON null otherwise. Never fabricates a 0 — "we did not measure
@@ -85,12 +107,26 @@ evidence_jbool() {
 
 # ── JSON extraction (read side) ────────────────────────────────────────
 
+# Stop sed after the first matching line, retaining its greedy match within
+# that line. A here-string lets it stop without SIGPIPE on a large response;
+# sed|head can return failure under the collectors' pipefail after finding a
+# value. Fallback reads need one external process instead of two.
 # evidence_json_int <json> <key>: first integer value for "key". "" when
 # absent or non-integer.
 evidence_json_int() {
-    printf '%s' "${1:-}" |
-        sed -n "s/.*\"$2\"[[:space:]]*:[[:space:]]*\(-\{0,1\}[0-9][0-9]*\).*/\1/p" |
-        head -n1
+    # Compact polling counters need no external parser. Keep integer text
+    # exact (including wide counters), the last valid match on this line,
+    # and the legacy sed/BRE path for large, multiline or regex-key input.
+    local json="${1:-}"
+    if [[ ${#json} -le 4096 && $json != *$'\n'* && $2 != *[!a-zA-Z0-9_]* ]]; then
+        local pattern='.*"'"$2"'"[[:space:]]*:[[:space:]]*(-?[0-9]+)'
+        if [[ $json =~ $pattern ]]; then
+            printf '%s\n' "${BASH_REMATCH[1]}"
+        fi
+        return 0
+    fi
+    sed -n -e "s/.*\"$2\"[[:space:]]*:[[:space:]]*\(-\{0,1\}[0-9][0-9]*\).*/\1/p" \
+        -e 't matched' -e b -e ':matched' -e q <<< "${1:-}"
 }
 
 # evidence_json_str <json> <key>: first string value for "key". "" when
@@ -98,16 +134,35 @@ evidence_json_int() {
 # read through this is a node-emitted identifier (onion address, blocker
 # id), none of which can contain one.
 evidence_json_str() {
-    printf '%s' "${1:-}" |
-        sed -n "s/.*\"$2\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" |
-        head -n1
+    # Short polling fields need no parser process. Keep the last valid match
+    # on this line, including empty strings and the existing escape policy.
+    # Large/multiline input and regex keys retain the sed/BRE reader below.
+    local json="${1:-}"
+    if [[ ${#json} -le 4096 && $json != *$'\n'* && $2 != *[!a-zA-Z0-9_]* ]]; then
+        local pattern='.*"'"$2"'"[[:space:]]*:[[:space:]]*"([^"]*)"'
+        if [[ $json =~ $pattern ]]; then
+            printf '%s\n' "${BASH_REMATCH[1]}"
+        fi
+        return 0
+    fi
+    sed -n -e "s/.*\"$2\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" \
+        -e 't matched' -e b -e ':matched' -e q <<< "${1:-}"
 }
 
 # evidence_json_bool <json> <key>: "true"/"false", "" when absent.
 evidence_json_bool() {
-    printf '%s' "${1:-}" |
-        sed -n "s/.*\"$2\"[[:space:]]*:[[:space:]]*\(true\|false\).*/\1/p" |
-        head -n1
+    # Compact RPC fields dominate polling. Bound the Bash regex to short,
+    # single-line input; retain sed's streaming path for diagnostic bodies.
+    # The greedy prefix preserves the last valid match on that line.
+    if [[ ${#1} -le 4096 && $1 != *$'\n'* ]]; then
+        local pattern='.*"'"$2"'"[[:space:]]*:[[:space:]]*(true|false)'
+        if [[ $1 =~ $pattern ]]; then
+            printf '%s\n' "${BASH_REMATCH[1]}"
+        fi
+        return 0
+    fi
+    sed -n -e "s/.*\"$2\"[[:space:]]*:[[:space:]]*\(true\|false\).*/\1/p" \
+        -e 't matched' -e b -e ':matched' -e q <<< "${1:-}"
 }
 
 # ── peers ──────────────────────────────────────────────────────────────
@@ -119,7 +174,10 @@ evidence_json_bool() {
 # Prints a bare integer; 0 on empty input, which for this reader is the
 # truthful answer only when the RPC succeeded — callers gate on that.
 evidence_peer_count_from_json() {
-    grep -o '"addr"[[:space:]]*:' 2>/dev/null | wc -l | tr -d ' '
+    # Count all matches in one pass, including multiple peers on one line.
+    # Unlike grep, an empty list succeeds under the collectors' pipefail.
+    awk '{ count += gsub(/"addr"[[:space:]]*:/, "") }
+         END { print count + 0 }'
 }
 
 # ── process memory ─────────────────────────────────────────────────────
@@ -131,9 +189,19 @@ evidence_rss_kb() {
     local pid="${1:-}"
     case "$pid" in '' | 0 | *[!0-9]*) printf ''; return 0 ;; esac
     [ -r "/proc/$pid/status" ] || { printf ''; return 0; }
-    grep VmRSS "/proc/$pid/status" 2>/dev/null |
-        sed -n 's/.*VmRSS:[[:space:]]*\([0-9][0-9]*\)[[:space:]]*kB.*/\1/p' |
-        head -n1
+    # This is a kernel status record, not a general text search. Avoid three
+    # text-tool processes per sample; a missing field (e.g. a kernel thread)
+    # or a process exiting before open remains an empty successful read.
+    local key value unit rest
+    {
+        while IFS=$' \t' read -r key value unit rest; do
+            [ "$key" = VmRSS: ] || continue
+            case "$value" in '' | *[!0-9]*) return 0 ;; esac
+            [ "$unit" = kB ] && printf '%s\n' "$value"
+            return 0
+        done < "/proc/$pid/status"
+    } 2>/dev/null || true
+    return 0
 }
 
 # ── disk ───────────────────────────────────────────────────────────────
@@ -144,9 +212,14 @@ evidence_rss_kb() {
 evidence_dir_bytes() {
     local d="${1:-}"
     [ -n "$d" ] && [ -d "$d" ] || { printf ''; return 0; }
-    local out
-    out="$(timeout "$ZCL_EVIDENCE_TIMEOUT_SEC" du -sb -- "$d" 2>/dev/null |
-        awk 'NR==1{print $1}')" || true
+    local out rest
+    # A failed traversal can still print a partial total. Never publish it as
+    # measured bytes, and avoid a parser process for this single size field.
+    if ! out="$(timeout "$ZCL_EVIDENCE_TIMEOUT_SEC" du -sb -- "$d" 2>/dev/null)"; then
+        return 0
+    fi
+    out=${out%%$'\n'*}
+    IFS=$' \t' read -r out rest <<< "$out"
     case "${out:-}" in '' | *[!0-9]*) printf '' ;; *) printf '%s' "$out" ;; esac
 }
 
@@ -174,7 +247,15 @@ evidence_systemd_show() {
 # round trip instead of N — at a 60 s cadence over several units the
 # difference is the whole added cost of the sample.
 evidence_systemd_field() {
-    printf '%s\n' "${1:-}" | sed -n "s/^$2=\(.*\)$/\1/p" | head -n1
+    # Prop is a literal systemd property name. Keep the first matching line,
+    # including an empty value, without two text-tool processes per field.
+    local line
+    while IFS= read -r line; do
+        case "$line" in
+            "$2="*) printf '%s\n' "${line#*=}"; return 0 ;;
+        esac
+    done <<< "${1:-}"
+    return 0
 }
 
 # evidence_systemd_cat <unit>: the unit file PLUS every drop-in, exactly as

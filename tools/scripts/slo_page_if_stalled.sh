@@ -242,17 +242,31 @@ evaluate_ledger() {
             }
         }
         END {
-            # chronological order = append order, but sort defensively by ts
-            # (insertion sort is fine at this n).
-            for (i = 2; i <= nc; i++) {
-                tv=cts[i]; rv=creach[i]; sv=cserved[i]; ov=coracle[i]; gv=cgap[i]
-                j = i - 1
-                while (j >= 1 && cts[j] > tv) {
-                    cts[j+1]=cts[j]; creach[j+1]=creach[j]; cserved[j+1]=cserved[j]
-                    coracle[j+1]=coracle[j]; cgap[j+1]=cgap[j]
-                    j--
+            # Stable bottom-up merge sort bounds reordered retained histories
+            # to O(n log n). Skip already ordered runs so chronological input
+            # stays linear. Tied timestamps retain their original append order.
+            for (width = 1; width < nc; width *= 2) {
+                for (lo = 1; lo + width <= nc; lo += 2 * width) {
+                    mid = lo + width - 1
+                    hi = lo + 2 * width - 1
+                    if (hi > nc) hi = nc
+                    if (cts[mid] <= cts[mid+1]) continue
+                    left = lo; right = mid + 1
+                    for (k = lo; k <= hi; k++) {
+                        if (left <= mid && (right > hi || cts[left] <= cts[right]))
+                            src = left++
+                        else
+                            src = right++
+                        tmp_ts[k] = cts[src]; tmp_reach[k] = creach[src]
+                        tmp_served[k] = cserved[src]; tmp_oracle[k] = coracle[src]
+                        tmp_gap[k] = cgap[src]
+                    }
+                    for (k = lo; k <= hi; k++) {
+                        cts[k] = tmp_ts[k]; creach[k] = tmp_reach[k]
+                        cserved[k] = tmp_served[k]; coracle[k] = tmp_oracle[k]
+                        cgap[k] = tmp_gap[k]
+                    }
                 }
-                cts[j+1]=tv; creach[j+1]=rv; cserved[j+1]=sv; coracle[j+1]=ov; cgap[j+1]=gv
             }
 
             last_served="null"; last_oracle="null"; last_gap="null"
@@ -765,6 +779,7 @@ cmd_selftest() {
     grep -q '"served_height":10' "$p" || { cat "$p" >&2; st_fail "case=confirmed-recent-advance served_height should reflect the current flat value (10)"; }
     echo "selftest: ok case=confirmed-recent-advance (aged out)"
 
+    bash "$SCRIPT_DIR/slo_page_order_selftest.sh"
     echo "selftest: PASS"
 }
 

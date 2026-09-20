@@ -82,6 +82,7 @@ ISO_CLEANED=0
 ISO_PARAMS_DIR=""
 ISO_NODE_BIN="${ISO_NODE_BIN:-./build/bin/zclassic23}"
 ISO_RPC_BIN="${ISO_RPC_BIN:-./build/bin/zcl-rpc}"
+ISO_JSONQ_BIN="${ISO_JSONQ_BIN:-./build/bin/jsonq}"
 
 # iso_die: a fatal isolation-setup problem (missing tooling, port collision,
 # an unsafe datadir path, ...). Full detail always goes to stderr (captured
@@ -163,6 +164,7 @@ iso_init() {
     command -v mktemp >/dev/null 2>&1 || iso_die "mktemp not found"
     [ -x "$ISO_NODE_BIN" ] || iso_die "$ISO_NODE_BIN not built — run make first"
     [ -x "$ISO_RPC_BIN" ]  || iso_die "$ISO_RPC_BIN not built — run make zcl-rpc"
+    [ -x "$ISO_JSONQ_BIN" ] || iso_die "$ISO_JSONQ_BIN not built — run make jsonq"
 
     # 1) Derive + validate the 39xxx port quad FIRST (no datadir yet).
     local base="${ISO_PORT_BASE:-39050}"
@@ -318,6 +320,19 @@ iso_rpc() {
     ZCL_DATADIR="$ISO_DD" ZCL_RPCPORT="$ISO_RPCPORT" "$ISO_RPC_BIN" "$@" 2>/dev/null || true
 }
 
+# Require a complete successful envelope and an actual nonnegative integer.
+# The old `tr -dc 0-9-` readiness probe turned a warm-up error code such as
+# -28 (and even a numeric request id) into a plausible nonempty height.
+iso_rpc_nonnegative_result() {
+    local reply error result
+    reply="$(iso_rpc "$1")" || return 1
+    error="$(printf '%s' "$reply" | "$ISO_JSONQ_BIN" raw error 2>/dev/null)" || return 1
+    [ "$error" = null ] || return 1
+    result="$(printf '%s' "$reply" | "$ISO_JSONQ_BIN" raw result 2>/dev/null)" || return 1
+    case "$result" in ''|*[!0-9]*) return 1 ;; esac
+    printf '%s\n' "$result"
+}
+
 # Poll the isolated RPC until getblockcount answers, or timeout. $1=secs.
 iso_wait_rpc_ready() {
     local timeout="${1:-60}" deadline
@@ -329,7 +344,7 @@ iso_wait_rpc_ready() {
         fi
         if [ -f "$ISO_DD/.cookie" ]; then
             local t
-            t="$(iso_rpc getblockcount | tr -dc '0-9-')"
+            t="$(iso_rpc_nonnegative_result getblockcount)" || t=""
             [ -n "$t" ] && return 0
         fi
         sleep 0.5

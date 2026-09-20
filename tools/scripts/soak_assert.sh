@@ -15,6 +15,7 @@
 #
 # Usage:
 #   tools/scripts/soak_assert.sh [duration_secs] [poll_secs]
+#   bash tools/scripts/soak_assert_fields_selftest.sh [--bench]
 #
 # Defaults: 86400 s (24 h) duration, 60 s poll cadence.
 
@@ -40,17 +41,26 @@ echo "soak: unit=$UNIT min_peers=$MIN_PEERS lag_breach=$LAG_BREACH_BLOCKS"
 echo "soak: starting at $(date -u --iso-8601=seconds), duration ${DURATION_S}s, poll ${POLL_S}s"
 echo "soak: restart_count baseline=$restart_baseline"
 
+json_scalar() {
+    # Fixed flat telemetry fields: preserve the first line-local match and
+    # exact integer text without starting three external parsers per read.
+    # grep never matched across newlines; sed stripped only ordinary spaces.
+    local space=$'[[:blank:]\r\v\f]' pattern value
+    pattern="\"$2\"${space}*:${space}*($3)"
+    if [[ "$1" =~ $pattern ]]; then
+        value=${BASH_REMATCH[0]#*:}
+        printf '%s\n' "${value#"${value%%[! ]*}"}"
+    fi
+}
 json_num() {
-    printf '%s' "$1" | grep -oE "\"$2\"[[:space:]]*:[[:space:]]*-?[0-9]+" |
-        head -1 | sed -E 's/.*:[ ]*//' || true
+    json_scalar "$1" "$2" '-?[0-9]+'
 }
 json_str() {
     printf '%s' "$1" | grep -oE "\"$2\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" |
         head -1 | sed -E 's/.*:[ ]*"//; s/"$//' || true
 }
 json_bool() {
-    printf '%s' "$1" | grep -oE "\"$2\"[[:space:]]*:[[:space:]]*(true|false)" |
-        head -1 | sed -E 's/.*:[ ]*//' || true
+    json_scalar "$1" "$2" 'true|false'
 }
 
 while [ "$(date +%s)" -lt "$end_ts" ]; do

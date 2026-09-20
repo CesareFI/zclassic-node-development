@@ -42,9 +42,9 @@ Full relay + validation. Every block verified independently.</div>
 <div class='lbl'>Pending</div>
 <div class='val'>{{{mempool}}} transactions</div>
 <div class='lbl'>UTXO Set</div>
-<div class='val'>{{{utxo_count}}} outputs</div>
+<div class='val'>{{{utxo_count}}}</div>
 <div class='lbl'>Supply</div>
-<div class='val'>{{{supply}}} ZCL</div>
+<div class='val'>{{{supply}}}</div>
 </div>
 
 <h3>Quick Actions</h3>

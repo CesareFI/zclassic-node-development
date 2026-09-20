@@ -134,9 +134,17 @@ const struct telemetry_field *telemetry_field_lookup(const char *subsystem,
 {
     if (!subsystem || !path)
         return NULL;
+    const char *previous_subsystem = NULL;
+    bool matches = false;
     for (size_t i = 0; i < FIELD_COUNT; i++) {
-        if (strcmp(g_fields[i].subsystem, subsystem) == 0 &&
-            strcmp(g_fields[i].path, path) == 0)
+        /* Adjacent rows commonly share a subsystem literal. Reuse only an
+         * identical pointer's comparison, within this lookup; distinct string
+         * storage or interleaved groups simply take the normal comparison. */
+        if (g_fields[i].subsystem != previous_subsystem) {
+            previous_subsystem = g_fields[i].subsystem;
+            matches = strcmp(previous_subsystem, subsystem) == 0;
+        }
+        if (matches && strcmp(g_fields[i].path, path) == 0)
             return &g_fields[i];
     }
     return NULL;

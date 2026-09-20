@@ -186,11 +186,19 @@ a_rpc() { tn_rpc "$TN_DD_A" "$A_RPC" "$@"; }
 b_rpc() { tn_rpc "$TN_DD_B" "$B_RPC" "$@"; }
 
 tn_result() {
-    local dd="$1" rp="$2" out error; shift 2
-    out="$(ZCL_DATADIR="$dd" ZCL_RPCPORT="$rp" "$RPC_BIN" "$@" 2>/dev/null)" || return 1
-    error="$(printf '%s' "$out" | "$JSONQ_BIN" raw error 2>/dev/null)" || return 1
+    local dd="$1" rp="$2" out error remaining; shift 2
+    local -a rpc_command=("$RPC_BIN")
+    # Pollers dynamically scope their absolute deadline across both height
+    # and hash reads. A late height reply must not grant a fresh hash budget.
+    if [ -n "${TN_RPC_DEADLINE:-}" ]; then
+        remaining=$((TN_RPC_DEADLINE - $(date +%s)))
+        [ "$remaining" -gt 0 ] || return 1
+        rpc_command=(timeout --kill-after=1 "$remaining" "$RPC_BIN")
+    fi
+    out="$(ZCL_DATADIR="$dd" ZCL_RPCPORT="$rp" "${rpc_command[@]}" "$@" 2>/dev/null)" || return 1
+    error="$("$JSONQ_BIN" raw error <<<"$out" 2>/dev/null)" || return 1
     [ "$error" = null ] || return 1
-    printf '%s' "$out" | "$JSONQ_BIN" raw result 2>/dev/null
+    "$JSONQ_BIN" raw result <<<"$out" 2>/dev/null
 }
 tn_blockcount() {
     local out
@@ -225,6 +233,7 @@ tn_spawn() {
 # Poll against an absolute deadline shared with the subsequent tip check.
 tn_wait_rpc() {
     local dd="$1" rp="$2" pid="$3" deadline="$4" t
+    local TN_RPC_DEADLINE="$4"
     while [ "$(date +%s)" -lt "$deadline" ]; do
         if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
             echo "two-node-peer-tip: node (pid $pid) exited during RPC warmup (see $(tn_node_log "$dd"))" >&2
@@ -234,6 +243,7 @@ tn_wait_rpc() {
             t="$(tn_blockcount "$dd" "$rp")" || t=''
             [ -n "$t" ] && [ "$(date +%s)" -lt "$deadline" ] && return 0
         fi
+        [ "$(date +%s)" -lt "$deadline" ] || break
         sleep 0.5
     done
     return 1
@@ -243,6 +253,7 @@ tn_wait_rpc() {
 # Echoes the final observed height; returns 0 on match, 1 on timeout.
 tn_wait_height() {
     local dd="$1" rp="$2" pid="$3" target="$4" deadline="$5" expected="$6" h hash
+    local TN_RPC_DEADLINE="$5"
     h="?"
     while [ "$(date +%s)" -lt "$deadline" ]; do
         if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
@@ -257,6 +268,7 @@ tn_wait_height() {
                 return 0
             fi
         fi
+        [ "$(date +%s)" -lt "$deadline" ] || break
         sleep 1
     done
     echo "$h"
@@ -267,6 +279,7 @@ tn_wait_height() {
 # Sourcing exposes the same pollers to local refusal/deadline fixtures.
 [ "${BASH_SOURCE[0]}" = "$0" ] || return 0
 command -v mktemp >/dev/null 2>&1 || tn_die "mktemp not found"
+command -v timeout >/dev/null 2>&1 || tn_die "timeout not found (required for bounded RPC polling)"
 [ -x "$NODE_BIN" ] || tn_die "$NODE_BIN not built — run make first"
 [ -x "$RPC_BIN" ]  || tn_die "$RPC_BIN not built — run make zcl-rpc"
 [ -x "$JSONQ_BIN" ] || tn_die "$JSONQ_BIN not built — run make jsonq"

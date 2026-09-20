@@ -198,22 +198,23 @@ done
 [ -x "$BINARY" ] || verdict_fail "binary not executable: $BINARY"
 [ -d "$SRC_DATADIR" ] || verdict_fail "source datadir missing: $SRC_DATADIR"
 
-# ── Disk-space sanity (soft) ─────────────────────────────────────────────────
-AVAIL_KB=$(df -Pk "$HOME" 2>/dev/null | awk 'NR==2 {print $4}')
-SRC_KB=$(du -sk "$SRC_DATADIR" 2>/dev/null | awk '{print $1}')
-if [ -n "${AVAIL_KB:-}" ] && [ -n "${SRC_KB:-}" ]; then
-    NEED_KB=$((SRC_KB * 2))
-    if [ "$AVAIL_KB" -lt "$NEED_KB" ]; then
-        verdict_fail "insufficient disk: need ~${NEED_KB}KB, have ${AVAIL_KB}KB free under $HOME"
-    fi
-fi
-
 mkdir -p "$(dirname "$WORK_DATADIR")" 2>/dev/null
 
 # ── Step 1: idempotent copy (source is NEVER modified) ──────────────────────
 if [ -d "$WORK_DATADIR" ]; then
     log "work datadir already present at $WORK_DATADIR — resuming (no re-copy)"
 else
+    # Copy-space sanity belongs to a new copy. A resume neither allocates a
+    # second datadir nor needs to walk every source block file with du.
+    # Regression: bash tools/scripts/anchor_resume_preflight_selftest.sh
+    AVAIL_KB=$(df -Pk "$HOME" 2>/dev/null | awk 'NR==2 {print $4}')
+    SRC_KB=$(du -sk "$SRC_DATADIR" 2>/dev/null | awk '{print $1}')
+    if [ -n "${AVAIL_KB:-}" ] && [ -n "${SRC_KB:-}" ]; then
+        NEED_KB=$((SRC_KB * 2))
+        if [ "$AVAIL_KB" -lt "$NEED_KB" ]; then
+            verdict_fail "insufficient disk: need ~${NEED_KB}KB, have ${AVAIL_KB}KB free under $HOME"
+        fi
+    fi
     rm -rf "${WORK_DATADIR}".copying.* 2>/dev/null
     TMP_WORK="${WORK_DATADIR}.copying.$$"
     log "copying $SRC_DATADIR -> $TMP_WORK (one-time; source stays read-only)"

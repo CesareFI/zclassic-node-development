@@ -147,6 +147,7 @@ export LC_ALL=C
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ "${1:-}" = "--selftest" ]; then
+    bash "$SCRIPT_DIR/tip_agreement_parser_selftest.sh" || exit 1
     exec bash "$SCRIPT_DIR/test_tip_agreement_evidence.sh" --only judge
 fi
 
@@ -259,19 +260,17 @@ fi
 # Fields are pulled with match()/substr rather than a JSON parser — every
 # value read here is a bare integer or a short identifier the prober wrote,
 # and the ledger is one flat object per line by construction.
+# Slice the already-matched value directly; do not rescan it with sub().
 SUMMARY="$(awk -v now="$NOW" -v winsecs="$((WINDOW_HOURS * 3600))" '
-function num(line, key,   m, s) {
+function num(line, key,   prefix) {
     if (!match(line, "\"" key "\":-?[0-9]+")) return "";
-    s = substr(line, RSTART, RLENGTH);
-    sub("\"" key "\":", "", s);
-    return s;
+    prefix = length(key) + 3; # opening quote, closing quote, colon
+    return substr(line, RSTART + prefix, RLENGTH - prefix);
 }
-function str(line, key,   s, p) {
+function str(line, key,   prefix) {
     if (!match(line, "\"" key "\":\"[^\"]*\"")) return "";
-    s = substr(line, RSTART, RLENGTH);
-    sub("\"" key "\":\"", "", s);
-    sub("\"$", "", s);
-    return s;
+    prefix = length(key) + 4; # numeric prefix plus the value opening quote
+    return substr(line, RSTART + prefix, RLENGTH - prefix - 1);
 }
 BEGIN { total=0; ag=0; dis=0; cna=0; mal=0; minp=-1; minctl=-1; newest=-1;
         parseable=0; contested=0; unresolved=0; clean=0; spanlo=-1; spanhi=-1 }

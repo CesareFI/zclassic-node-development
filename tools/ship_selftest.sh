@@ -194,6 +194,9 @@ fi
 
 # ── 3. the /proc parsers ────────────────────────────────────────────────────
 printf '\nship-selftest: 3. /proc parsers — the slow-disk signal must be legible\n'
+bash "$ROOT/tools/scripts/ship_proc_parser_selftest.sh" &&
+    pass "proc parser compatibility and process budget" ||
+    fail "proc parser compatibility or process budget"
 # proc(5) after the "pid (comm) " strip: utime $12, stime $13, starttime $20,
 # delayacct_blkio_ticks $40.
 STAT_A="1 (z23 node) D 1 1 1 0 -1 0 0 0 0 0 11 22 0 0 20 0 9 0 4242 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 777 0 0"

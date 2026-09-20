@@ -198,8 +198,8 @@
 # reading that decides whether a slow box gets rolled back.
 ship_cpu_ticks_from_text() {
     printf '%s\n' "${1:-}" |
-        sed 's/^[0-9][0-9]* (.*) //' |
-        awk 'NF >= 13 && !seen { printf "%.0f\n", $12 + $13; seen = 1 }
+        awk '{ sub(/^[0-9][0-9]* \(.*\) /, "") }
+             NF >= 13 && !seen { printf "%.0f\n", $12 + $13; seen = 1 }
              END { if (!seen) print 0 }'
 }
 
@@ -208,8 +208,8 @@ ship_cpu_ticks_from_text() {
 # bottleneck and CPU is flat. 0 on kernels without CONFIG_TASK_DELAY_ACCT.
 ship_blkio_ticks_from_text() {
     printf '%s\n' "${1:-}" |
-        sed 's/^[0-9][0-9]* (.*) //' |
-        awk 'NF >= 40 && !seen { printf "%.0f\n", $40; seen = 1 }
+        awk '{ sub(/^[0-9][0-9]* \(.*\) /, "") }
+             NF >= 40 && !seen { printf "%.0f\n", $40; seen = 1 }
              END { if (!seen) print 0 }'
 }
 
@@ -218,8 +218,8 @@ ship_blkio_ticks_from_text() {
 # the same pid would otherwise read as a stable process.
 ship_start_ticks_from_text() {
     printf '%s\n' "${1:-}" |
-        sed 's/^[0-9][0-9]* (.*) //' |
-        awk 'NF >= 20 && !seen { printf "%.0f\n", $20; seen = 1 }
+        awk '{ sub(/^[0-9][0-9]* \(.*\) /, "") }
+             NF >= 20 && !seen { printf "%.0f\n", $20; seen = 1 }
              END { if (!seen) print 0 }'
 }
 

@@ -147,20 +147,80 @@ jnum() { if [ -n "${1:-}" ]; then printf '%s' "$1"; else printf 'null'; fi; }
 # on any failure (unreachable, auth error, non-numeric) — the caller
 # records null, never a fake 0.
 rpc_height() {
-    local out
+    local out line
     out="$(bash -c "$1" 2>/dev/null || true)"
-    printf '%s' "$out" | sed -n 's/.*"result":\([0-9][0-9]*\).*/\1/p' | head -n1
+    while IFS= read -r line; do
+        # Match sed's historic greedy prefix: the last valid result scalar on
+        # the first matching line wins, while a later malformed occurrence
+        # does not hide an earlier valid one.
+        if [[ "$line" =~ .*\"result\":([0-9]+) ]]; then
+            printf '%s' "${BASH_REMATCH[1]}"
+            return
+        fi
+    done <<< "$out"
 }
 
 # rpc_security_review_required <cmd>: print true|false only when the target
 # emits the exact operator-snapshot gate. Missing/invalid output is empty and
 # therefore window-ineligible; an old target can never inherit a green soak.
 rpc_security_review_required() {
-    local out
+    local out line
     out="$(bash -c "$1" 2>/dev/null || true)"
-    printf '%s' "$out" |
-        grep -oE '"security_review_required"[[:space:]]*:[[:space:]]*(true|false)' |
-        head -n1 | sed -E 's/.*:[[:space:]]*//' || true
+    while IFS= read -r line; do
+        if [[ "$line" =~ \"security_review_required\"[[:space:]]*:[[:space:]]*(true|false) ]]; then
+            printf '%s' "${BASH_REMATCH[1]}"
+            return
+        fi
+    done <<< "$out"
+}
+
+# rss_line_kb <raw-status-output>: print the first line's final valid VmRSS
+# scalar, matching the former greedy sed expression without a parser process.
+rss_line_kb() {
+    local input="${1:-}" line
+    while IFS= read -r line; do
+        if [[ "$line" =~ .*VmRSS:[[:space:]]*([0-9]+)[[:space:]]*kB ]]; then
+            printf '%s' "${BASH_REMATCH[1]}"
+            return
+        fi
+    done <<< "$input"
+}
+
+# soak_systemd_sample_fields <systemctl-show-output>: populate the three
+# service fields collected in every sample. Parse the already-fetched output
+# once, without starting a sed/head pair for each property. Numeric fields
+# retain the old first-valid-line contract; empty or malformed values remain
+# unknown rather than becoming zero.
+soak_systemd_sample_fields() {
+    local show="${1:-}" line value
+    nrestarts=""
+    aet_str=""
+    mainpid=""
+    while IFS= read -r line; do
+        case "$line" in
+            NRestarts=*)
+                value="${line#NRestarts=}"
+                if [ -z "$nrestarts" ]; then
+                    case "$value" in
+                        ''|*[!0-9]*) ;;
+                        *) nrestarts="$value" ;;
+                    esac
+                fi
+                ;;
+            ActiveEnterTimestamp=?*)
+                [ -n "$aet_str" ] || aet_str="${line#ActiveEnterTimestamp=}"
+                ;;
+            MainPID=*)
+                value="${line#MainPID=}"
+                if [ -z "$mainpid" ]; then
+                    case "$value" in
+                        ''|*[!0-9]*) ;;
+                        *) mainpid="$value" ;;
+                    esac
+                fi
+                ;;
+        esac
+    done <<< "$show"
 }
 
 # ── collect ────────────────────────────────────────────────────────
@@ -202,9 +262,7 @@ cmd_collect() {
     # — re-read it every sample, never cache.
     local show_out nrestarts aet_str mainpid aet_epoch=""
     show_out="$(bash -c "$show_cmd" 2>/dev/null || true)"
-    nrestarts="$(printf '%s\n' "$show_out" | sed -n 's/^NRestarts=\([0-9][0-9]*\)$/\1/p' | head -n1)"
-    aet_str="$(printf '%s\n' "$show_out" | sed -n 's/^ActiveEnterTimestamp=\(..*\)$/\1/p' | head -n1)"
-    mainpid="$(printf '%s\n' "$show_out" | sed -n 's/^MainPID=\([0-9][0-9]*\)$/\1/p' | head -n1)"
+    soak_systemd_sample_fields "$show_out"
     if [ -n "$aet_str" ]; then
         aet_epoch="$(date -d "$aet_str" +%s 2>/dev/null || true)"
     fi
@@ -217,7 +275,7 @@ cmd_collect() {
     local rss_line="" rss_kb=""
     if [ -n "${ZCL_SOAK_RSS_CMD:-}" ]; then
         rss_line="$(bash -c "$ZCL_SOAK_RSS_CMD" 2>/dev/null || true)"
-        rss_kb="$(printf '%s' "$rss_line" | sed -n 's/.*VmRSS:[[:space:]]*\([0-9][0-9]*\)[[:space:]]*kB.*/\1/p' | head -n1)"
+        rss_kb="$(rss_line_kb "$rss_line")"
     else
         rss_kb="$(evidence_rss_kb "$mainpid")"
     fi
@@ -749,6 +807,11 @@ cmd_selftest() {
         "$f/evidence.jsonl" \
         || { cat "$f/evidence.jsonl" >&2; st_fail "case=collect-review accrued"; }
     echo "selftest: ok case=collect-review"
+
+    # Keep the service-field parser's process budget under the registered
+    # hermetic target. The child invokes collect only, so this cannot recurse.
+    bash "$SCRIPT_DIR/soak_evidence_collect_fields_selftest.sh" "$SELF" \
+        || st_fail "case=collect-fields parser regression"
 
     echo "selftest: PASS"
 }

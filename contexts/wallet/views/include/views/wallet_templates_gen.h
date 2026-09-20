@@ -154,14 +154,14 @@ static const char TMPL_NODE_PAGE[] =
     "sion</div>\n<div class='val' style='color:#34d399'>{{{version}}}</div>\n</div>\n\n{{{tor_section}"
     "}}\n\n<h3>Connected Peers</h3>\n{{{peer_table}}}\n\n<h3>Mempool</h3>\n<div class='detail-grid'>\n"
     "<div class='lbl'>Pending</div>\n<div class='val'>{{{mempool}}} transactions</div>\n<div class='lb"
-    "l'>UTXO Set</div>\n<div class='val'>{{{utxo_count}}} outputs</div>\n<div class='lbl'>Supply</div>"
-    "\n<div class='val'>{{{supply}}} ZCL</div>\n</div>\n\n<h3>Quick Actions</h3>\n<div style='display:"
-    "grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0'>\n<a href='/explorer' class='btn-seconda"
-    "ry'\n style='text-align:center;padding:12px;font-size:14px'>Block Explorer</a>\n<a href='/wallet/"
-    "coins' class='btn-secondary'\n style='text-align:center;padding:12px;font-size:14px'>Coin Audit</"
-    "a>\n<a href='/explorer/tokens' class='btn-secondary'\n style='text-align:center;padding:12px;font"
-    "-size:14px'>ZSLP Tokens</a>\n<a href='/explorer/stats' class='btn-secondary'\n style='text-align:"
-    "center;padding:12px;font-size:14px'>Network Stats</a>\n</div>\n";
+    "l'>UTXO Set</div>\n<div class='val'>{{{utxo_count}}}</div>\n<div class='lbl'>Supply</div>\n<div c"
+    "lass='val'>{{{supply}}}</div>\n</div>\n\n<h3>Quick Actions</h3>\n<div style='display:grid;grid-te"
+    "mplate-columns:1fr 1fr;gap:8px;margin:8px 0'>\n<a href='/explorer' class='btn-secondary'\n style="
+    "'text-align:center;padding:12px;font-size:14px'>Block Explorer</a>\n<a href='/wallet/coins' class"
+    "='btn-secondary'\n style='text-align:center;padding:12px;font-size:14px'>Coin Audit</a>\n<a href="
+    "'/explorer/tokens' class='btn-secondary'\n style='text-align:center;padding:12px;font-size:14px'>"
+    "ZSLP Tokens</a>\n<a href='/explorer/stats' class='btn-secondary'\n style='text-align:center;paddi"
+    "ng:12px;font-size:14px'>Network Stats</a>\n</div>\n";
 
 static const char TMPL_NODE_PEER_ROW[] =
     "<tr>\n<td class='hash' style='font-size:13px'>{{{addr}}}</td>\n<td><span class='pill {{{dir_class"

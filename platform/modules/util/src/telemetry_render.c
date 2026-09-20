@@ -393,26 +393,26 @@ static bool eval_domain(const struct telemetry_domain_schema *s,
 {
     memset(out, 0, sizeof *out);
 
-    struct json_value doc, vals;
-    json_init(&doc);
+    struct json_value vals;
     json_init(&vals);
-    json_set_object(&doc);
     if (!build_values(s, snap, TLV_FULL, NULL, true, &vals, NULL)) {
         json_free(&vals);
-        json_free(&doc);
         LOG_FAIL("telemetry_render", "domain %s: could not build value plane",
                  s->domain);
     }
     /* The ontology paths are TL_PATH = "values.<group>.<key>", so the document
      * the evaluator resolves against must be rooted one level above the
-     * groups. Ratio operands (TL_REF) resolve as siblings inside it. */
-    bool pushed = json_push_kv(&doc, "values", &vals);
-    json_free(&vals);
-    if (!pushed) {
-        json_free(&doc);
-        LOG_FAIL("telemetry_render", "domain %s: out of memory building the "
-                 "evaluation document", s->domain);
-    }
+     * groups. Ratio operands (TL_REF) resolve as siblings inside it.
+     * The evaluator only reads this document, so borrow the value plane
+     * instead of deep-copying every group, key and string on each poll.
+     * This stack root owns nothing: free only vals after the last evaluation.
+     * Findings copy scalars and never retain pointers into either object. */
+    char values_key[] = "values";
+    char *keys[] = {values_key};
+    const struct json_value doc = {
+        .type = JSON_OBJ, .keys = keys, .children = &vals,
+        .num_children = 1, .children_cap = 1,
+    };
 
     for (size_t i = 0; i < s->leaf_count; i++) {
         const struct telemetry_leaf *lf = &s->leaves[i];
@@ -443,7 +443,7 @@ static bool eval_domain(const struct telemetry_domain_schema *s,
         if (h != TELEMETRY_HEALTH_OK)
             record_finding(out, lf, f, h, val);
     }
-    json_free(&doc);
+    json_free(&vals);
     return true;
 }
 

@@ -181,18 +181,24 @@ log_has() {
 }
 
 observe_stages() {
+    # These event flags are latched for this probe's lifetime. Once witnessed,
+    # a milestone needs no further log searches; keep polling missing events
+    # and the RPC counters below, including across log rotation.
     # Client dial: accept the boot-time line for backward-compatible ledgers;
     # the monotonic dial_started counter below is authoritative for the
     # descriptor-gated RPC path.
-    if log_has "${ISO_PEER_DD:-}/node.log" "Connecting to onion addnode"; then
+    if [ "$DIAL_ATTEMPTED" != true ] &&
+       log_has "${ISO_PEER_DD:-}/node.log" "Connecting to onion addnode"; then
         DIAL_ATTEMPTED=true
     fi
     # Exact client/service milestones from the maintained Tor fork. Queuing a
     # dynhost stream is only intent; it is not INTRODUCE1 or rendezvous proof.
-    if log_has "${ISO_PEER_DD:-}/tor.log" "INTRODUCE1 sent"; then
+    if [ "$INTRODUCE1_SEEN" != true ] &&
+       log_has "${ISO_PEER_DD:-}/tor.log" "INTRODUCE1 sent"; then
         INTRODUCE1_SEEN=true
     fi
-    if log_has "${ISO_DD:-}/tor.log" "RENDEZVOUS1 sent"; then
+    if [ "$RENDEZVOUS1_SEEN" != true ] &&
+       log_has "${ISO_DD:-}/tor.log" "RENDEZVOUS1 sent"; then
         RENDEZVOUS1_SEEN=true
     fi
     if [ "$INTRODUCE1_SEEN" = true ] && [ "$RENDEZVOUS1_SEEN" = true ]; then
@@ -202,12 +208,20 @@ observe_stages() {
     # public counter is the application-side equivalent and survives stdio
     # buffering or log rotation. Query both: either is exact evidence that
     # the raw stream reached CONNECTED.
-    if log_has "${ISO_PEER_DD:-}/node.log" \
+    if [ "$CIRCUIT_READY" != true ] && {
+       log_has "${ISO_PEER_DD:-}/node.log" \
         "onion stage=circuit_ready|onion circuit established" ||
-       log_has "${ISO_PEER_DD:-}/tor.log" "RENDEZVOUS2 received"; then
+       log_has "${ISO_PEER_DD:-}/tor.log" "RENDEZVOUS2 received";
+    }; then
         CIRCUIT_READY=true
     fi
-    if [ -n "${ISO_PEER_DD:-}" ] && [ -f "${ISO_PEER_DD}/.cookie" ]; then
+    # These RPC milestones also latch for this probe's lifetime. Once all
+    # four are witnessed, another onionstatus and five JSON readers cannot
+    # add evidence. Missing log milestones and getconnectioncount still poll.
+    if [ -n "${ISO_PEER_DD:-}" ] && [ -f "${ISO_PEER_DD}/.cookie" ] && {
+       [ "$CLIENT_TOR_READY" != true ] || [ "$DIAL_ATTEMPTED" != true ] ||
+       [ "$CIRCUIT_READY" != true ] || [ "$P2P_FRAMING_SEEN" != true ];
+    }; then
         local status tor_ready dial circuit bytes_to bytes_from
         status=$(iso_peer_rpc onionstatus)
         tor_ready=$(printf '%s' "$status" | "$ZCL_JSONQ" get \
@@ -242,7 +256,7 @@ observe_stages() {
     # Service half: require a successful HSDir upload or the application
     # marker emitted only after that success. Hostname creation, activation,
     # and callback entry are deliberately insufficient.
-    if descriptor_publication_observed; then
+    if [ "$DESCRIPTOR_UPLOADED" != true ] && descriptor_publication_observed; then
         DESCRIPTOR_UPLOADED=true
     fi
 }
@@ -429,6 +443,12 @@ if [ "$SELFTEST" = 1 ]; then
         fi
     }
     echo "onion-pair-watch: --selftest driving named_verdict + append_probe"
+    if ! bash "$SCRIPT_DIR/onion_pair_log_selftest.sh"; then
+        st_fail=1
+    fi
+    if ! bash "$SCRIPT_DIR/onion_pair_rpc_selftest.sh"; then
+        st_fail=1
+    fi
 
     case ${ISO_LIVE_PORTS:-} in
         *8033*) echo "  ok: sourced isolated_node_env.sh (ISO_LIVE_PORTS set)" ;;

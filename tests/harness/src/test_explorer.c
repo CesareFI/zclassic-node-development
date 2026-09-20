@@ -12,6 +12,7 @@
 #include "views/explorer_factoids_internal.h"
 #include "views/explorer_factoids_view.h"
 #include "views/explorer_dashboard_view.h"
+#include "views/explorer_main_view.h"
 #include "views/site_css.h"
 #include "views/explorer_pages_loading_view.h"
 #include "views/explorer_pages_view.h"
@@ -70,6 +71,25 @@ int test_explorer(void)
         size_t n = explorer_handle_request("GET", "/foobar", NULL, 0,
                                             resp, sizeof(resp));
         bool ok = (n == 0);
+        if (ok) printf("OK\n");
+        else { printf("FAIL\n"); failures++; }
+    }
+
+    printf("explorer: wallet polling is bounded and visibility-aware... ");
+    {
+        uint8_t out[65536];
+        size_t n = explorer_view_wallet_page(out, sizeof(out) - 1);
+        out[n < sizeof(out) ? n : sizeof(out) - 1] = '\0';
+        bool ok = n > 0 && n < sizeof(out) &&
+             strstr((char *)out,
+                    "if(document.hidden||updating)return") != NULL &&
+             strstr((char *)out,
+                    ".finally(function(){updating=false})") != NULL &&
+             strstr((char *)out,
+                    "addEventListener('visibilitychange'") != NULL &&
+             strstr((char *)out,
+                    "if(!document.hidden)update()") != NULL &&
+             strstr((char *)out, "setInterval(update,3000)") != NULL;
         if (ok) printf("OK\n");
         else { printf("FAIL\n"); failures++; }
     }

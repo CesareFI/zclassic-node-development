@@ -139,6 +139,33 @@ note_fail() {
     return 0
 }
 
+# Inspect the API once. Preserve the compact field markers, first matching
+# line / last value on that line, and numeric text used by the old readers.
+# Keep scanning after readiness: a later wait marker still fails the check.
+read_api_observation() {
+    awk '
+        {
+            if (!schema) schema = index($0, "\"schema\":\"zcl.hodl_wave.v1\"") > 0
+            if (!status) status = index($0, "\"status\":\"ok\"") > 0
+            if (!blocker) blocker = index($0, "\"blocker\":\"none\"") > 0
+            if (!fresh) fresh = index($0, "\"fresh\":true") > 0
+            if (!waiting) waiting = tolower($0) ~ /refresh in a minute|not processed|please retry|try again|waiting|temporarily unavailable/
+            if (!have_height && match($0, /.*"served_height":[0-9][0-9]*/)) {
+                height = substr($0, 1, RLENGTH)
+                sub(/.*"served_height":/, "", height)
+                have_height = 1
+            }
+            if (!have_percent && match($0, /.*"older_than_1y":\{"value":[0-9][0-9.]*,"percent":[0-9][0-9.]*\},"skipped_rows"/)) {
+                percent = substr($0, 1, RLENGTH)
+                sub(/.*"percent":/, "", percent)
+                sub(/\},"skipped_rows"$/, "", percent)
+                have_percent = 1
+            }
+        }
+        END { printf "%d|%d|%d|%d|%d|%s|%s\n", schema, status, blocker, fresh, waiting, height, percent }
+    ' "$1"
+}
+
 # ── the check ──────────────────────────────────────────────────────────
 
 cmd_check() {
@@ -157,6 +184,7 @@ cmd_check() {
     local api_ok="false" html_ok="false"
     local r_api r_html
     local status_api="" status_html="" lat_api="" lat_html=""
+    local height="" percent="" fields schema status blocker fresh waiting
 
     r_api="$(fetch "$base/api/v1/hodl" "$api")" ||
         note_fail "fetch_api" "fetch failed: $base/api/v1/hodl"
@@ -175,15 +203,17 @@ cmd_check() {
 
     if [ -s "$api" ]; then
         api_ok="true"
-        grep -q '"schema":"zcl.hodl_wave.v1"' "$api" ||
+        fields="$(read_api_observation "$api")" || fields=''
+        IFS='|' read -r schema status blocker fresh waiting height percent <<< "$fields"
+        [ "$schema" = 1 ] ||
             { api_ok="false"; note_fail "api_schema" "HODL API schema marker missing"; }
-        grep -q '"status":"ok"' "$api" ||
+        [ "$status" = 1 ] ||
             { api_ok="false"; note_fail "api_status" "HODL API status is not ok"; }
-        grep -q '"blocker":"none"' "$api" ||
+        [ "$blocker" = 1 ] ||
             { api_ok="false"; note_fail "api_blocker" "HODL API reports a blocker"; }
-        grep -q '"fresh":true' "$api" ||
+        [ "$fresh" = 1 ] ||
             { api_ok="false"; note_fail "api_stale" "HODL API is not fresh"; }
-        if grep -Eiq 'refresh in a minute|not processed|please retry|try again|waiting|temporarily unavailable' "$api"; then
+        if [ "$waiting" = 1 ]; then
             api_ok="false"; note_fail "api_wait_marker" "HODL API contains a wait/retry marker"
         fi
     fi
@@ -193,16 +223,6 @@ cmd_check() {
         if grep -Eiq 'refresh in a minute|not processed|please retry|try again|waiting|temporarily unavailable' "$html"; then
             html_ok="false"; note_fail "html_wait_marker" "HODL page contains a wait/retry marker"
         fi
-    fi
-
-    # `|| true` is load-bearing, not defensive noise: when the fetch failed
-    # there is no file, sed exits non-zero, and `set -e -o pipefail` would
-    # abort the run one line before the ledger append — which is precisely
-    # the old bug (an outage leaving no trace) reintroduced in a new place.
-    local height="" percent=""
-    if [ -s "$api" ]; then
-        height="$(sed -n 's/.*"served_height":\([0-9][0-9]*\).*/\1/p' "$api" 2>/dev/null | head -n1 || true)"
-        percent="$(sed -n 's/.*"older_than_1y":{"value":[0-9][0-9.]*,"percent":\([0-9][0-9.]*\)},"skipped_rows".*/\1/p' "$api" 2>/dev/null | head -n1 || true)"
     fi
 
     local key; key="$(streak_key)"
@@ -340,6 +360,7 @@ cmd_selftest() {
         || { tail -n1 "$f" >&2; st_fail "case=per-base-streak a second endpoint must not inherit the first's streak"; }
     echo "selftest: ok case=per-base-streak"
 
+    bash "$SCRIPT_DIR/public_explorer_observer_selftest.sh" "$SELF"
     echo "selftest: PASS"
 }
 

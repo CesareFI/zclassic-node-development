@@ -505,7 +505,9 @@ static bool tls_prepare(struct sync_snapshot *snap,
                                "engine/services/src/sync_telemetry_fill.c");
         return false;
     }
-    if (!telemetry_evaluate(s, snap, verdict)) {
+    /* Summary gets its health from the renderer, which evaluates the complete
+     * snapshot itself. Only the stage projections need a separate verdict. */
+    if (verdict && !telemetry_evaluate(s, snap, verdict)) {
         zcl_command_reply_fail(reply, ZCL_COMMAND_STATUS_FAILED,
                                ZCL_COMMAND_EXIT_INTERNAL, "EVALUATE_FAILED",
                                "execute", false, false,
@@ -564,9 +566,8 @@ void zcl_native_handle_telemetry_sync_summary(
 
     struct sync_snapshot snap;
     const struct telemetry_domain_schema *s = NULL;
-    struct telemetry_domain_verdict verdict;
     struct tls_stage_set set;
-    if (!tls_prepare(&snap, &s, &verdict, &set, reply))
+    if (!tls_prepare(&snap, &s, NULL, &set, reply))
         return;
 
     bool unrecognized = false;

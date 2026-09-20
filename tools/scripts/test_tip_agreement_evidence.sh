@@ -30,6 +30,7 @@
 #   test_tip_agreement_evidence.sh                 # everything
 #   test_tip_agreement_evidence.sh --only recorder
 #   test_tip_agreement_evidence.sh --only judge
+#   test_tip_agreement_evidence.sh --only observer [path/to/older/probe.sh]
 #
 # Ends with "selftest: PASS" on success (the token every sibling harness in
 # tools/scripts uses and the Makefile gates on) and exits non-zero on any
@@ -46,9 +47,10 @@ JUDGE="$SCRIPT_DIR/tip_agreement_judge.sh"
 
 ONLY="all"
 case "${1:-}" in
-    --only) ONLY="${2:?--only needs recorder|judge}" ;;
+    --only) ONLY="${2:?--only needs recorder|judge|observer}"
+            PROBE="${3:-$PROBE}" ;;
     '') ;;
-    *) echo "usage: test_tip_agreement_evidence.sh [--only recorder|judge]" >&2; exit 2 ;;
+    *) echo "usage: test_tip_agreement_evidence.sh [--only recorder|judge|observer]" >&2; exit 2 ;;
 esac
 
 FAILED=0
@@ -641,10 +643,54 @@ judge_cases() {
         "$(ledger_of "$d")" NO_EVIDENCE 1
 }
 
+# Exercise the recorder's maximum admitted cluster count, as seen while our
+# node is catching up. Count real parser processes; wall time is informational.
+observer_case() {
+    local rows='' i h hash n d="$TMP/observer" L calls
+    for ((i=0; i<12; i++)); do
+        h=$((HEIGHT - 9 + i))
+        hash="$HASH_OURS"
+        [ "$i" -lt 8 ] || hash="$HASH_THEM"
+        n=2
+        [ "$i" -ne 0 ] || n=3
+        rows="$rows,[$h,\"$hash\",$n]"
+    done
+    # A larger matching cluster wins below our tip. Of the four rivals,
+    # two are above our tip and two below it; only the latter count.
+    sql_stub "$TMP/observer-sql.sh" "[${rows#,}]" 12 false
+    mkdir -p "$TMP/bin"
+    {
+        printf '#!/usr/bin/env bash\n'
+        printf 'printf "cut\\n" >> %q\n' "$TMP/cut-calls"
+        printf 'exec %q "$@"\n' "$(command -v cut)"
+    } > "$TMP/bin/cut"
+    chmod +x "$TMP/bin/cut"
+    : > "$TMP/cut-calls"
+    run_probe "$d" "$TMP/observer-sql.sh" \
+        "printf '{\"result\":\"$HASH_OURS\"}'" "$NOW" \
+        "PATH=$TMP/bin:$PATH" || bad 'observer fixture failed to append'
+    L="$(ledger_of "$d")"
+    if grep -q "\"height\":$((HEIGHT - 9))," "$L" &&
+       grep -q '"modal_remote_peers":3,"modal_remote_groups":2,' "$L" &&
+       grep -q '"disagreeing_peers":4,"contested_peers":4,"rival_heights_unresolved":0,"heights_above_tip":2,' "$L" &&
+       grep -Fq "\"disagreeing_hashes\":[{\"height\":$((HEIGHT - 1)),\"hash\":\"$HASH_THEM\",\"peers\":2},{\"height\":$HEIGHT,\"hash\":\"$HASH_THEM\",\"peers\":2}]" "$L" &&
+       grep -q '"clusters_seen":12,' "$L" &&
+       grep -q '"outcome":"agrees"' "$L"; then
+        ok '12-cluster sync observation preserves winner, rivals and above-tip evidence'
+    else
+        cat "$L" >&2
+        bad '12-cluster sync observation changed'
+    fi
+    calls=$(wc -l < "$TMP/cut-calls")
+    printf 'observer cut processes per sample: %s (baseline: 76)\n' "$calls"
+    [ "$calls" -le 4 ] || bad 'cluster fields spawned per-field cut processes'
+}
+
 case "$ONLY" in
     recorder) recorder_cases ;;
     judge)    judge_cases ;;
-    all)      recorder_cases; judge_cases ;;
+    observer) observer_case ;;
+    all)      recorder_cases; judge_cases; observer_case ;;
     *) echo "selftest: FAIL unknown --only '$ONLY'" >&2; exit 2 ;;
 esac
 

@@ -472,9 +472,11 @@ iso_wait_peer_connected() {    local timeout="${1:-60}" deadline n
 iso_rpc_nonnegative_result() {
     local reply error result
     reply="$(iso_rpc "$1")" || return 1
-    error="$(printf '%s' "$reply" | "$ISO_JSONQ_BIN" raw error 2>/dev/null)" || return 1
+    # Feed the captured reply directly: a printf pipeline adds a producer
+    # process to each field read in every startup/peer polling sample.
+    error="$("$ISO_JSONQ_BIN" raw error 2>/dev/null <<<"$reply")" || return 1
     [ "$error" = null ] || return 1
-    result="$(printf '%s' "$reply" | "$ISO_JSONQ_BIN" raw result 2>/dev/null)" || return 1
+    result="$("$ISO_JSONQ_BIN" raw result 2>/dev/null <<<"$reply")" || return 1
     case "$result" in ''|*[!0-9]*) return 1 ;; esac
     printf '%s\n' "$result"
 }

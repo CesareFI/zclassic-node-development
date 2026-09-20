@@ -133,6 +133,7 @@
 # Usage:
 #   node_slo_probe.sh [collect]     # default action: one probe-and-append cycle
 #   node_slo_probe.sh --selftest    # hermetic; fixture RPC commands, no nodes
+#   node_slo_probe.sh --bench-fields # local tuple parsing cost, no nodes
 #
 # Env (test/operator injection seams):
 #   ZCL_SLO_LEDGER_DIR      ledger dir (default ~/.local/state/zclassic23-slo)
@@ -334,6 +335,26 @@ jstr() { evidence_jstr "${1:-}"; }
 # jbool <value>: JSON true/false, or null when the value was not measured.
 jbool() { evidence_jbool "${1:-}"; }
 
+# Both heights from one pass. Keep the former sed readers' last integer match
+# on the first matching line for each key; missing fields stay empty. Treat
+# counters as text so awk cannot round them. This is not JSON validation.
+rpc_heights() {
+    printf '%s' "$1" | awk '
+        {
+            if (!have_blocks && match($0, /.*"blocks":[[:space:]]*[0-9]+/)) {
+                blocks = substr($0, RSTART, RLENGTH)
+                sub(/^.*"blocks":[[:space:]]*/, "", blocks)
+                have_blocks = 1
+            }
+            if (!have_headers && match($0, /.*"headers":[[:space:]]*[0-9]+/)) {
+                headers = substr($0, RSTART, RLENGTH)
+                sub(/^.*"headers":[[:space:]]*/, "", headers)
+                have_headers = 1
+            }
+        }
+        END { printf "%s\037%s\n", blocks, headers }'
+}
+
 # rpc_probe <default-cmd> <override-var-name>: run the (possibly overridden)
 # command, print "<served>\x1f<header>\x1f<latency_ms>\x1f<raw-tail>". Never
 # raises — a failing/timing-out command still yields a line with empty
@@ -342,13 +363,14 @@ jbool() { evidence_jbool "${1:-}"; }
 rpc_probe() {
     local default_cmd="$1" override_var="$2" cmd
     cmd="${!override_var:-$default_cmd}"
-    local t0 t1 out served header latency_ms
+    local t0 t1 out served header latency_ms heights
     t0="$(date +%s%N)"
     out="$(bash -c "$cmd" 2>&1 || true)"
     t1="$(date +%s%N)"
     latency_ms=$(( (t1 - t0) / 1000000 ))
-    served="$(printf '%s' "$out" | sed -n 's/.*"blocks":[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -n1)"
-    header="$(printf '%s' "$out" | sed -n 's/.*"headers":[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -n1)"
+    heights="$(rpc_heights "$out")"
+    served="${heights%%$'\x1f'*}"
+    header="${heights#*$'\x1f'}"
     local raw_tail=""
     if [ -z "$served" ]; then
         raw_tail="$(printf '%s' "$out" | tr '\n' ' ' | cut -c1-200)"
@@ -357,7 +379,34 @@ rpc_probe() {
     printf '%s\x1f%s\x1f%s\x1f%s' "$served" "$header" "$latency_ms" "$raw_tail"
 }
 
-field() { printf '%s' "$1" | cut -d $'\x1f' -f"$2"; }
+# field <tuple> <positive literal column>: cut's per-line field semantics,
+# using only shell builtins. A healthy two-instance sample reads 33 fields;
+# avoid a pipeline and external cut for each read while the node is syncing.
+field() {
+    local rest="$1" column="$2" line value i
+    while [ -n "$rest" ]; do
+        if [[ "$rest" == *$'\n'* ]]; then
+            line="${rest%%$'\n'*}"
+            rest="${rest#*$'\n'}"
+        else
+            line="$rest"
+            rest=""
+        fi
+        value="$line"
+        # Like cut without -s, a line with no delimiter is emitted unchanged.
+        if [[ "$line" == *$'\x1f'* ]]; then
+            for ((i = 1; i < column; i++)); do
+                if [[ "$value" != *$'\x1f'* ]]; then
+                    value=""
+                    break
+                fi
+                value="${value#*$'\x1f'}"
+            done
+            value="${value%%$'\x1f'*}"
+        fi
+        printf '%s\n' "$value"
+    done
+}
 
 # rotate_ledger_if_needed: logrotate-style, 2 kept generations, run BEFORE
 # this cycle's lines are appended so a rotation never splits one run's
@@ -636,6 +685,49 @@ cmd_collect() {
 
 st_fail() { echo "selftest: FAIL $*" >&2; exit 1; }
 
+# Compare the collector's tuple reader with its original cut semantics. Empty
+# columns mean unmeasured, so shifting them would corrupt the evidence ledger.
+cmd_field_selftest() {
+    local tuple column expected actual
+    local -a tuples=(
+        '' 'no delimiter' $'\n' $'\n\n' $'\x1f' $'\x1f\x1f'
+        $'3200000\x1f3200001\x1f12\x1f'
+        $'\x1f\x1f8000\x1fRPC unavailable'
+        $'0\x1f1700000000\x1factive\x1f1234567\x1f18467158947'
+        $'false\x1f\x1f0\x1f\x1ftrue'
+        $' a \\ b\x1f\tquoted "text"\r\x1f-1\x1f18446744073709551615'
+        $'first\x1fsecond\nthird\x1ffourth\n'
+        $'first\x1fsecond\n\nno delimiter'
+    )
+    for tuple in "${tuples[@]}"; do
+        for column in 1 2 3 4 5 6; do
+            expected="$(printf '%s' "$tuple" | cut -d $'\x1f' -f"$column")"
+            actual="$(field "$tuple" "$column")"
+            [ "$actual" = "$expected" ] ||
+                st_fail "tuple field $column differs from cut"
+        done
+    done
+    # A process-count guard is deterministic; timing is reported separately.
+    actual="$(PATH=/nonexistent field $'\x1f\x1f8000\x1fRPC unavailable' 3)" ||
+        st_fail 'tuple reader requires external tools'
+    [ "$actual" = 8000 ] || st_fail 'tuple reader lost empty columns'
+    echo 'selftest: ok case=tuple-fields (78 comparisons; no external tools)'
+}
+
+# Include command substitution, as every real call site does. Report only
+# local parsing cost, never RPC latency or an end-to-end IBD speedup.
+cmd_bench_fields() {
+    local i column value
+    local tuple=$'0\x1f1700000000\x1factive\x1f1234567\x1f18467158947'
+    local TIMEFORMAT='5000 tuple fields: %3R seconds wall, %3U user, %3S system'
+    time for ((i = 0; i < 1000; i++)); do
+        for column in 1 2 3 4 5; do
+            value="$(field "$tuple" "$column")"
+            [ -n "$value" ] || st_fail 'benchmark lost a tuple field'
+        done
+    done
+}
+
 # The instance table is the ONE place that says which nodes exist on this
 # host. Downstream readers must ASK for it rather than infer it from ledger
 # history: a retired lane's rows stay in the retained ledger forever, so an
@@ -650,6 +742,7 @@ cmd_list_instances() {
 }
 
 cmd_selftest() {
+    cmd_field_selftest
     ST_TMP="$(mktemp -d /tmp/zcl-node-slo-probe-selftest.XXXXXX)"
     trap 'rm -rf "$ST_TMP"' EXIT
 
@@ -889,9 +982,10 @@ STUB
 case "${1:-collect}" in
     collect)    shift || true; cmd_collect "$@" ;;
     --selftest) shift; cmd_selftest "$@" ;;
+    --bench-fields) cmd_bench_fields ;;
     --list-instances) shift; cmd_list_instances "$@" ;;
     *)
-        echo "usage: node_slo_probe.sh [collect] | --selftest | --list-instances" >&2
+        echo "usage: node_slo_probe.sh [collect] | --selftest | --bench-fields | --list-instances" >&2
         exit 2
         ;;
 esac

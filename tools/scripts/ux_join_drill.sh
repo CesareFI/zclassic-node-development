@@ -45,6 +45,7 @@
 #                               line is recorded (default 120; circuit budget)
 #
 # No Python, no jq: nested JSON via jsonq. No `| grep -q` under pipefail.
+# Peer observer regression: bash tools/scripts/ux_join_peer_scan_selftest.sh
 
 set -euo pipefail
 umask 077
@@ -314,9 +315,11 @@ while :; do
     i=0
     while [ -n "$count" ] && [ "$i" -lt "$count" ]; do
         paddr=$(printf '%s' "$peers" | jsonq_get "[$i].addr")
-        pver=$(printf '%s' "$peers" | jsonq_get "[$i].version")
         case "$paddr" in
             *"$PEER_ONION"*)
+                # Only the named peer can complete this clock. Avoid another
+                # full-response parse for every unrelated peer during IBD.
+                pver=$(printf '%s' "$peers" | jsonq_get "[$i].version")
                 case $pver in
                     ''|0|null) ;;
                     *)

@@ -43,7 +43,11 @@ skip() {
 }
 
 if command -v systemctl >/dev/null 2>&1; then
-    active_mint="$(systemctl --user list-units --type=service --state=active --no-legend '*mint*' 2>/dev/null || true)"
+    # An unavailable user manager is not evidence that no mint is folding.
+    # Preserve the skip/no-sentinel contract when the observation fails.
+    if ! active_mint="$(systemctl --user list-units --type=service --state=active --no-legend '*mint*' 2>/dev/null)"; then
+        skip "mint_query_failed"
+    fi
     if [ -n "$active_mint" ]; then
         skip "mint_unit_active: $(printf '%s' "$active_mint" | awk '{print $1}' | paste -sd, -)"
     fi

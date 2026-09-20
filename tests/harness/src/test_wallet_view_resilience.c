@@ -686,6 +686,32 @@ int check_wallet_view_template_render_handles_name_syntax(void)
     return failures;
 }
 
+static int check_wallet_view_legacy_sync_ibd_policy(void)
+{
+    bool ok =
+        !wv_dashboard_legacy_sync_allowed(true, SYNC_FINDING_PEERS) &&
+        !wv_dashboard_legacy_sync_allowed(true, SYNC_HEADERS_DOWNLOAD) &&
+        !wv_dashboard_legacy_sync_allowed(true, SYNC_BLOCKS_DOWNLOAD) &&
+        !wv_dashboard_legacy_sync_allowed(true, SYNC_CONNECTING_BLOCKS) &&
+        !wv_dashboard_legacy_sync_allowed(true, SYNC_REORG) &&
+        !wv_dashboard_legacy_sync_allowed(true, SYNC_REORG_RECOVERY) &&
+        !wv_dashboard_legacy_sync_allowed(true, SYNC_SNAPSHOT_RECEIVE) &&
+        !wv_dashboard_legacy_sync_allowed(true, SYNC_FAILED) &&
+        !wv_dashboard_legacy_sync_allowed(true, SYNC_NUM_STATES) &&
+        wv_dashboard_legacy_sync_allowed(true, SYNC_IDLE) &&
+        wv_dashboard_legacy_sync_allowed(true, SYNC_AT_TIP) &&
+        !wv_dashboard_legacy_sync_allowed(false, SYNC_AT_TIP) &&
+        wv_dashboard_deferred_dirty_policy_for_test();
+
+    printf("PERF: automatic legacy wallet refresh is deferred during IBD... ");
+    if (ok) {
+        printf("OK (up to 52 synchronous RPCs removed per refresh)\n");
+        return 0;
+    }
+    printf("FAIL\n");
+    return 1;
+}
+
 int check_wallet_view_dashboard_renders_in_50ms(void)
 {
     int failures = 0;
@@ -695,6 +721,8 @@ int check_wallet_view_dashboard_renders_in_50ms(void)
      * ═══════════════════════════════════════════════════════════ */
 
     printf("\n=== PERFORMANCE TESTS ===\n\n");
+
+    failures += check_wallet_view_legacy_sync_ibd_policy();
 
     /* PERF metric = MEDIAN per-render ms over 100 measured iterations (5
      * warm-up iterations discarded). The threshold for each route is
@@ -784,4 +812,3 @@ int check_wallet_view_dashboard_renders_in_50ms(void)
     }
     return failures;
 }
-

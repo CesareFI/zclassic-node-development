@@ -4,10 +4,19 @@
 #include "controllers/wallet_view_internal.h"
 #include "controllers/wallet_controller.h"
 #include "views/wallet_view_dashboard_view.h"
-#include "sync/sync_state.h"
 #include "util/log_macros.h"
 
 /* ── Dashboard (/wallet) ────────────────────────────────────── */
+
+bool wv_dashboard_legacy_sync_allowed(bool enabled, enum sync_state state)
+{
+    /* The legacy mirror performs two list RPCs and may follow them with up to
+     * 50 sequential gettransaction RPCs. Running that work in the WebKit
+     * request path while headers/blocks are moving stalls the GUI and adds
+     * competing work to IBD. IDLE and AT_TIP retain the existing freshness
+     * behavior; explicit send/shield refreshes are intentionally unaffected. */
+    return enabled && (state == SYNC_IDLE || state == SYNC_AT_TIP);
+}
 
 size_t serve_dashboard(uint8_t *r, size_t max) {
     sqlite3 *db = wv_open_db();
@@ -22,10 +31,10 @@ size_t serve_dashboard(uint8_t *r, size_t max) {
     int tip = wv_effective_tip(db);
     sqlite3_close(db);
 
-    /* Sync wallet from zclassicd before displaying balance.
-     * This ensures the dashboard never shows stale data.
-     * Only sync when explicitly enabled (live mode, not tests). */
-    if (g_sync_enabled)
+    /* Refresh the legacy mirror before displaying balance only when the node
+     * is not actively synchronizing.  During IBD the last mirrored balance is
+     * deliberately shown until the retained dirty flag can catch up at tip. */
+    if (wv_dashboard_legacy_sync_allowed(g_sync_enabled, sync_get_state()))
         wv_sync_wallet_from_zclassicd();
 
     db = wv_open_db();
@@ -317,11 +326,47 @@ static struct {
     int t_utxos, z_notes;
 } pulse_cache;
 
+static bool wv_pulse_refresh_needed(int height, bool legacy_sync_deferred)
+{
+    return height != pulse_cache.height || pulse_cache.height == 0 ||
+           (g_balance_dirty && !legacy_sync_deferred);
+}
+
+static void wv_pulse_mark_clean(bool legacy_sync_deferred)
+{
+    if (!legacy_sync_deferred)
+        g_balance_dirty = 0;
+}
+
+#ifdef ZCL_TESTING
+bool wv_dashboard_deferred_dirty_policy_for_test(void)
+{
+    int saved_height = pulse_cache.height;
+    int saved_dirty = g_balance_dirty;
+
+    pulse_cache.height = 100;
+    g_balance_dirty = 1;
+    bool ok = !wv_pulse_refresh_needed(100, true);
+    wv_pulse_mark_clean(true);
+    ok = ok && g_balance_dirty == 1;
+    ok = ok && wv_pulse_refresh_needed(100, false);
+    wv_pulse_mark_clean(false);
+    ok = ok && g_balance_dirty == 0;
+
+    pulse_cache.height = saved_height;
+    g_balance_dirty = saved_dirty;
+    return ok;
+}
+#endif
+
 size_t serve_pulse(uint8_t *r, size_t max) {
     sqlite3 *db = wv_open_db();
     int height = 0, peers = 0, mempool = 0;
     int64_t balance = 0, shielded = 0, speed_bal = 0;
     int t_utxos = 0, z_notes = 0;
+    bool legacy_sync_allowed =
+        wv_dashboard_legacy_sync_allowed(g_sync_enabled, sync_get_state());
+    bool legacy_sync_deferred = g_sync_enabled && !legacy_sync_allowed;
 
     /* Check if a pending shield operation completed */
     if (g_shield_opid[0]) {
@@ -335,7 +380,7 @@ size_t serve_pulse(uint8_t *r, size_t max) {
         peers = wv_query_int(db,  "SELECT count(*) FROM peers");
         mempool = wv_query_int(db, "SELECT count(*) FROM mempool_entries");
 
-        if (g_balance_dirty) {
+        if (g_balance_dirty && legacy_sync_allowed) {
             /* Wallet changed — sync from zclassicd then recompute */
             sqlite3_close(db);
             wv_sync_wallet_from_zclassicd();
@@ -343,9 +388,8 @@ size_t serve_pulse(uint8_t *r, size_t max) {
             if (!db) return 0;
         }
 
-        if (height != pulse_cache.height || pulse_cache.height == 0 ||
-            g_balance_dirty) {
-            g_balance_dirty = 0;
+        if (wv_pulse_refresh_needed(height, legacy_sync_deferred)) {
+            wv_pulse_mark_clean(legacy_sync_deferred);
             /* Recompute balances */
             balance = wv_query_ground_truth_balance(db, &t_utxos);
             shielded = wv_query_shielded_balance(db, &z_notes);

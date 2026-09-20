@@ -9,6 +9,7 @@
 # argv[1] is a bundle file, or a directory containing debug-bundle-*.json
 # (newest by mtime wins). Read-only; never touches the datadir otherwise.
 # Exit 0 on success, 1 on a malformed/unreadable bundle, 2 on usage.
+# Regression: bash tools/scripts/debug_bundle_triage_selftest.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -35,9 +36,34 @@ pick_bundle() {
     [ -f "$p" ] && printf '%s\n' "$p"
 }
 
-jqg() { printf '%s' "$DOC" | "$JSONQ" get "$1" 2>/dev/null || true; }
-jqh() { printf '%s' "$DOC" | "$JSONQ" has "$1" >/dev/null 2>&1; }
-jqc() { printf '%s' "$DOC" | "$JSONQ" count "$1" 2>/dev/null || echo 0; }
+SECTIONS_READY=0
+jq_query() {
+    local cmd="$1" path="$2" input prefix=""
+    if [ "$SECTIONS_READY" = 1 ]; then
+        case "$path" in
+            build|build.*) input="$BUILD_DOC"; prefix=build ;;
+            subsystems.reducer_frontier|subsystems.reducer_frontier.*)
+                input="$FRONTIER_DOC"; prefix=subsystems.reducer_frontier ;;
+            subsystems.blocker|subsystems.blocker.*)
+                input="$BLOCKER_DOC"; prefix=subsystems.blocker ;;
+            subsystems.sovereignty|subsystems.sovereignty.*)
+                input="$SOVEREIGNTY_DOC"; prefix=subsystems.sovereignty ;;
+            supervisor_stalls|supervisor_stalls.*)
+                input="$SUPERVISOR_DOC"; prefix=supervisor_stalls ;;
+        esac
+    fi
+    if [ -n "$prefix" ]; then
+        # Empty means absent, whereas the JSON text "null" is a present value.
+        [ -n "$input" ] || return 1
+        path="${path#"$prefix"}"
+    else
+        input="$DOC"
+    fi
+    printf '%s' "$input" | "$JSONQ" "$cmd" "$path"
+}
+jqg() { jq_query get "$1" 2>/dev/null || true; }
+jqh() { jq_query has "$1" >/dev/null 2>&1; }
+jqc() { jq_query count "$1" 2>/dev/null || echo 0; }
 
 PATH_IN="$1"
 BUNDLE="$(pick_bundle "$PATH_IN")"
@@ -47,6 +73,15 @@ DOC="$(cat "$BUNDLE")"
 fmt="$(jqg format)"
 [ "$fmt" = "$BUNDLE_FORMAT" ] || die "$BUNDLE: format is ${fmt:-missing}, expected $BUNDLE_FORMAT"
 jqh subsystems || die "$BUNDLE: missing object key 'subsystems'"
+
+# Validate the original document above, then retain exact JSON fragments from
+# that same snapshot. Large unrelated dumpers need not be parsed per field.
+BUILD_DOC="$(jq_query raw build 2>/dev/null || true)"
+FRONTIER_DOC="$(jq_query raw subsystems.reducer_frontier 2>/dev/null || true)"
+BLOCKER_DOC="$(jq_query raw subsystems.blocker 2>/dev/null || true)"
+SOVEREIGNTY_DOC="$(jq_query raw subsystems.sovereignty 2>/dev/null || true)"
+SUPERVISOR_DOC="$(jq_query raw supervisor_stalls 2>/dev/null || true)"
+SECTIONS_READY=1
 
 short() {
     local s="${1:-}"

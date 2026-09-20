@@ -16,6 +16,36 @@ fixture_reply=''
 fixture_rpc_rc=0
 iso_rpc() { printf '%s\n' "$fixture_reply"; return "$fixture_rpc_rc"; }
 fail() { printf 'isolated-readiness selftest: FAIL: %s\n' "$*" >&2; exit 1; }
+case "${1:-}" in
+    --benchmark)
+        # Observer cost only: real JSON parser, fixed local RPC response,
+        # no node, network, polling sleeps, or end-to-end IBD claim.
+        fixture_reply='{"result":3196929,"error":null,"id":1}'
+        TIMEFORMAT='isolated-readiness benchmark: samples=1000 wall=%3R user=%3U sys=%3S'
+        time for ((sample=0; sample<1000; sample++)); do
+            observed=$(iso_rpc_nonnegative_result getblockcount) || fail 'benchmark read failed'
+            [ "$observed" = 3196929 ] || fail 'benchmark height changed'
+        done
+        exit 0 ;;
+    '') ;;
+    *) fail 'usage: isolated_node_env_selftest.sh [--benchmark]' ;;
+esac
+# Keep the polling observer's process reduction from silently regressing.
+# The fixture RPC and final result each print once; field reads need no
+# additional producer. Scope the instrumentation to this one observation.
+(
+    fixture_reply='{"result":3196929,"error":null,"id":1}'
+    printf() {
+        builtin printf 'call\n' >> "$fixture/printf-observations"
+        builtin printf "$@"
+    }
+    observed=$(iso_rpc_nonnegative_result getblockcount) || fail 'instrumented read failed'
+    unset -f printf
+    [ "$observed" = 3196929 ] || fail 'instrumented height changed'
+    producers=0
+    while IFS= read -r producer; do producers=$((producers + 1)); done < "$fixture/printf-observations"
+    [ "$producers" -eq 2 ] || fail "expected RPC/result writes only, observed $producers printf calls"
+)
 for fixture_reply in \
     '{"result":null,"error":{"code":-28,"message":"warming up"},"id":123}' \
     '{"result":0,"error":{"code":-28},"id":1}' \
@@ -33,6 +63,16 @@ for fixture_reply in \
         fail "invalid response accepted: $fixture_reply"
     fi
 done
+fixture_reply=$'{\n  "error": null,\n  "result": 3196929,\n  "id": 1\n}'
+[ "$(iso_rpc_nonnegative_result getblockcount)" = 3196929 ] || fail 'multiline response refused'
+# Exercise stdin larger than a pipe buffer as well as tiny polling replies.
+printf -v padding '%131072s' ''
+fixture_reply='{"result":3196929,"padding":"'"$padding"'","error":null}'
+[ "$(iso_rpc_nonnegative_result getblockcount)" = 3196929 ] || fail 'large response refused'
+fixture_reply=${fixture_reply%\}}
+if iso_rpc_nonnegative_result getblockcount >/dev/null; then
+    fail 'truncated large response accepted'
+fi
 fixture_reply='{"result":0,"error":null,"id":1}'
 [ "$(iso_rpc_nonnegative_result getblockcount)" = 0 ] || fail 'height zero refused'
 iso_wait_rpc_ready 1 || fail 'successful height zero did not become ready'

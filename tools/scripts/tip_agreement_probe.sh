@@ -406,22 +406,28 @@ sql_fail_reason() {
 
 # sql_rows: stdin envelope -> one line per row, fields separated by \x1f,
 # quotes stripped. Handles the flat scalar rows this file asks for only.
-# The closing `awk NF` is not decoration: it drops blank lines AND
-# guarantees a terminating newline, so a `while read` consumer cannot
+# The row formatter drops blank lines AND guarantees a terminating newline,
+# so a `while read` consumer cannot
 # silently lose the final row — which is exactly how the address-group
 # column first came out one short.
 sql_rows() {
     sed -n 's/.*"rows":\[\(.*\)\],"row_count".*/\1/p' |
-        sed 's/\],\[/\n/g' |
-        sed 's/^\[//; s/\]$//' |
-        sed 's/","/\x1f/g; s/,"/\x1f/g; s/",/\x1f/g; s/,/\x1f/g; s/"//g' |
-        awk 'NF'
+        awk '{
+            # Format all rows in one process instead of three more sed passes.
+            n = split($0, rows, /\],\[/)
+            for (i = 1; i <= n; i++) {
+                $0 = rows[i]
+                sub(/^\[/, "")
+                sub(/\]$/, "")
+                gsub(/,/, "\037")
+                gsub(/"/, "")
+                if (NF) print
+            }
+        }'
 }
 
 SEP=$'\x1f'
 f1() { printf '%s' "$1" | cut -d "$SEP" -f1; }
-f2() { printf '%s' "$1" | cut -d "$SEP" -f2; }
-f3() { printf '%s' "$1" | cut -d "$SEP" -f3; }
 
 # our_hash_at <height>: our own block hash at <height>, lowercased, or "" if
 # the node would not answer. "" means UNKNOWN and every caller treats it as
@@ -538,11 +544,12 @@ FROM peer_chain_observations WHERE observed_at >= $t0 AND tip_hash <> ''$EXCLUDE
     # (d) the control. The winner is the largest qualifying cluster; ties
     # break to the higher height. A cluster below the floor is NOT a
     # winner even if our hash matches it — one peer never decides.
-    local best_h="" best_t="" best_n=0 line
-    while IFS= read -r line; do
-        [ -n "$line" ] || continue
-        local h t n
-        h="$(f1 "$line")"; t="$(f2 "$line")"; n="$(f3 "$line")"
+    local best_h="" best_t="" best_n=0 h t n extra
+    # sql_rows already separates these scalar columns with a non-whitespace
+    # delimiter. Read them together without three cut processes per cluster.
+    # The extra slot keeps trailing columns out of the witness count.
+    while IFS="$SEP" read -r h t n extra; do
+        [ -n "$h$t$n" ] || continue
         case "$h$n" in '' | *[!0-9]*) continue ;; esac
         [ -n "$t" ] || continue
         [ "$n" -ge "$MIN_DISTINCT_PEERS" ] || continue
@@ -652,10 +659,8 @@ AND lower(tip_hash) = '$modal_hash'$EXCLUDE_SQL LIMIT 24")"
     done < <(printf '%s\n' "$rows" |
              awk -F"$SEP" 'NF && $1 ~ /^[0-9]+$/ {print $1}' | sort -rn -u)
 
-    while IFS= read -r line; do
-        [ -n "$line" ] || continue
-        local h t n
-        h="$(f1 "$line")"; t="$(f2 "$line")"; n="$(f3 "$line")"
+    while IFS="$SEP" read -r h t n extra; do
+        [ -n "$h$t$n" ] || continue
         case "$h$n" in '' | *[!0-9]*) continue ;; esac
         [ -n "$t" ] || continue
         t="$(printf '%s' "$t" | tr 'A-F' 'a-f')"

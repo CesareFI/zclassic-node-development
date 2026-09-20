@@ -112,7 +112,9 @@ size_t explorer_view_wallet_page(uint8_t *r, size_t max)
         "setTimeout(function(){document.getElementById('copied').textContent=''},2000)})}"
         "function doSend(){document.getElementById('sendmsg').textContent="
         "'Sending requires the node to be running with RPC enabled'}"
-        "function update(){fetch('/api/wallet').then(r=>r.json()).then(function(d){"
+        "var updating=false;"
+        "function update(){if(document.hidden||updating)return;updating=true;"
+        "fetch('/api/wallet').then(r=>r.json()).then(function(d){"
         "var total=d.transparent+d.shielded;"
         "document.getElementById('bal').textContent=fmt(total,3)+' ZCL';"
         "document.getElementById('bal').title=fmt(total,8)+' ZCL (exact)';"
@@ -135,7 +137,10 @@ size_t explorer_view_wallet_page(uint8_t *r, size_t max)
         "h+='<div class=\"detail\">Block '+tx.height+' \\u00b7 confirmed</div></div>'});"
         "document.getElementById('txlist').innerHTML=h"
         "}).catch(function(){document.getElementById('sync').textContent='\\u25cf Offline';"
-        "document.getElementById('sync').className='sync warn'})}"
+        "document.getElementById('sync').className='sync warn'})"
+        ".finally(function(){updating=false})}"
+        "document.addEventListener('visibilitychange',function(){"
+        "if(!document.hidden)update()});"
         "update();setInterval(update,3000)");
     APPEND(off, r, max,
         "</script></body></html>");

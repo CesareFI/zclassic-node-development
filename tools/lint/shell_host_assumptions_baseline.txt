@@ -85,8 +85,9 @@ stat	tools/scripts/build_bench.sh	3
 stat	tools/scripts/build_drift_probe.sh	1
 stat	tools/scripts/check_reproducible_build.sh	3
 stat	tools/scripts/ci_install_gate.sh	1
-stat	tools/scripts/cold_start_test.sh	4
-stat	tools/scripts/cold_start_to_tip_probe.sh	5
+stat	tools/scripts/cold_start_test.sh	3
+stat	tools/scripts/cold_start_to_tip_probe.sh	3
+stat	tools/scripts/stopwatch_json_lib.sh	1
 stat	tools/scripts/node_reproduce.sh	1
 stat	tools/scripts/node_slo_probe.sh	1
 stat	tools/scripts/produce_anchor_snapshot.sh	1
@@ -101,4 +102,4 @@ stat	tools/scripts/timings.sh	1
 stat	tools/scripts/tip_agreement_probe.sh	1
 stat	tools/scripts/zcash_params.sh	1
 stat	tools/scripts/zcl-logrotate.sh	1
-stat	tools/seed_anchor_snapshot.sh	3
+stat	tools/seed_anchor_snapshot.sh	1

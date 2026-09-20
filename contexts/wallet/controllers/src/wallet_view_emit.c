@@ -333,8 +333,8 @@ void wv_emit_footer(uint8_t *buf, size_t max, size_t *off) {
         "if(p)p.textContent=d.peers+' peers';"
         "if(m)m.textContent=d.mempool+' tx';"
         "if(window._dashUpdate)window._dashUpdate(d);"
-        "}).catch(function(){});}"
-        "up();setInterval(up,5000);"
+        "}).catch(function(){}).then(function(){setTimeout(up,5000)});}"
+        "up();"
         "})();"
         "</script>"
         "</body></html>");

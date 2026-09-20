@@ -111,15 +111,15 @@ json_bool_field() {
 }
 
 json_first_bool_field() {
-    local body="$1" key="$2" token
-    token="$(printf '%s\n' "$body" \
-        | grep -o "\"${key}\"[[:space:]]*:[[:space:]]*\\(true\\|false\\)" 2>/dev/null \
-        | head -1 || true)"
-    case "$token" in
-        *true) printf 1 ;;
-        *false) printf 0 ;;
-        *) printf null ;;
-    esac
+    local line pattern="\"$2\"[[:space:]]*:[[:space:]]*(true|false)"
+    # Match the first boolean on the first matching line, as grep did.
+    while IFS= read -r line; do
+        if [[ $line =~ $pattern ]]; then
+            case "${BASH_REMATCH[1]}" in true) printf 1 ;; false) printf 0 ;; esac
+            return 0
+        fi
+    done <<< "$1"
+    printf null
 }
 
 lane_health_selftest() {
@@ -159,7 +159,7 @@ lane_health_selftest() {
 
 if [ "${ZCL_LANE_HEALTH_SELFTEST:-0}" = "1" ]; then
     lane_health_selftest
-    exit $?
+    exec bash "$SCRIPT_DIR/lane_health_bool_selftest.sh"
 fi
 
 highest_snapshot() {

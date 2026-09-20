@@ -270,24 +270,27 @@ static void fill_apply(struct sync_snapshot *s)
 /* ── rate: derived from the ladder's own step timings ────────────────── */
 static void fill_rate(struct sync_snapshot *s)
 {
+    /* The preceding fills already sampled every rung. Derive from those
+     * values so rates and the bottleneck describe the published sample even
+     * while stages advance, without eight more atomic counter reads. */
     const struct sync_tl_rung rungs[] = {
-        { "header_admit",     header_admit_stage_step_us_ewma() },
-        { "validate_headers", validate_headers_stage_step_us_ewma() },
-        { "body_fetch",       body_fetch_stage_step_us_ewma() },
-        { "body_persist",     body_persist_stage_step_us_ewma() },
-        { "utxo_apply",       utxo_apply_stage_step_us_ewma() },
-        { "tip_finalize",     tip_finalize_stage_step_us_ewma() },
+        { "header_admit",     s->header_admit_step_us_ewma },
+        { "validate_headers", s->validate_headers_step_us_ewma },
+        { "body_fetch",       s->body_fetch_step_us_ewma },
+        { "body_persist",     s->body_persist_step_us_ewma },
+        { "utxo_apply",       s->utxo_apply_step_us_ewma },
+        { "tip_finalize",     s->tip_finalize_step_us_ewma },
     };
 
     int64_t bps = 0;
-    if (step_us_to_bps_x1000(tip_finalize_stage_step_us_ewma(), &bps))
+    if (step_us_to_bps_x1000(s->tip_finalize_step_us_ewma, &bps))
         TELEMETRY_SET_I64(s, tip_finalize_blocks_per_sec_x1000, bps,
                           TELEMETRY_SRC_DERIVED);
     else
         TELEMETRY_UNAVAILABLE_LEAF(s, tip_finalize_blocks_per_sec_x1000,
                                    "stage_never_stepped");
 
-    if (step_us_to_bps_x1000(utxo_apply_stage_step_us_ewma(), &bps))
+    if (step_us_to_bps_x1000(s->utxo_apply_step_us_ewma, &bps))
         TELEMETRY_SET_I64(s, utxo_apply_blocks_per_sec_x1000, bps,
                           TELEMETRY_SRC_DERIVED);
     else

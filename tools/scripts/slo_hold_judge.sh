@@ -155,13 +155,30 @@ judge() {
                 printf "slo-hold: instance=%s window_hours=%d VERDICT=NOT_PROVEN reason=no_samples\n", inst, wh
                 exit 3
             }
-            # sort by ts (defensive insertion sort; append order is ~chrono).
-            for (i = 2; i <= n; i++) {
-                tv = ts[i]; rv = reach[i]; sv = served[i]; gv = gapo[i]; j = i - 1
-                while (j >= 1 && ts[j] > tv) {
-                    ts[j+1]=ts[j]; reach[j+1]=reach[j]; served[j+1]=served[j]; gapo[j+1]=gapo[j]; j--
+            # Stable bottom-up merge sort: reordered histories must not make
+            # the observer quadratic. Already ordered adjacent runs need no
+            # copying; ordinary chronological ledgers still take linear work.
+            # Equal timestamps keep append order, including conflicting rows.
+            for (width = 1; width < n; width *= 2) {
+                for (lo = 1; lo + width <= n; lo += 2 * width) {
+                    mid = lo + width - 1
+                    hi = lo + 2 * width - 1
+                    if (hi > n) hi = n
+                    if (ts[mid] <= ts[mid+1]) continue
+                    left = lo; right = mid + 1
+                    for (k = lo; k <= hi; k++) {
+                        if (left <= mid && (right > hi || ts[left] <= ts[right]))
+                            src = left++
+                        else
+                            src = right++
+                        tmp_ts[k] = ts[src]; tmp_reach[k] = reach[src]
+                        tmp_served[k] = served[src]; tmp_gapo[k] = gapo[src]
+                    }
+                    for (k = lo; k <= hi; k++) {
+                        ts[k] = tmp_ts[k]; reach[k] = tmp_reach[k]
+                        served[k] = tmp_served[k]; gapo[k] = tmp_gapo[k]
+                    }
                 }
-                ts[j+1]=tv; reach[j+1]=rv; served[j+1]=sv; gapo[j+1]=gv
             }
 
             last = ts[n]
@@ -449,6 +466,7 @@ cmd_selftest() {
         || { cat "$d/hold-ledger.jsonl" >&2; st_fail "case=record-notproven wrong ledger line"; }
     echo "selftest: ok case=record-mode"
 
+    bash "$SCRIPT_DIR/slo_hold_order_selftest.sh"
     echo "selftest: PASS"
 }
 

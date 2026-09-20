@@ -8,6 +8,22 @@
  *  I don't trust anyone. I AM the network." */
 
 #include "test/spec_helpers.h"
+#include "sync/sync_state.h"
+
+static bool enter_idle_for_ibd_render(void)
+{
+    enum sync_state state = sync_get_state();
+    if (state == SYNC_REORG) {
+        if (!sync_set_state(SYNC_REORG_RECOVERY,
+                            "wallet node IBD render test"))
+            return false;
+        state = SYNC_REORG_RECOVERY;
+    }
+    if (state != SYNC_IDLE &&
+        !sync_set_state(SYNC_IDLE, "wallet node IBD render test"))
+        return false;
+    return true;
+}
 
 int spec_wallet_node(void)
 {
@@ -55,6 +71,25 @@ int spec_wallet_node(void)
                 EXPECT(has("Address"));
             THEN("empty state is friendly, not scary")
                 EXPECT(has("Connecting to network"));
+            PASS();
+        }
+    }
+
+    FEATURE("IBD keeps the command center responsive") {
+        STORY("whole-UTXO presentation aggregates wait until sync is quiet") {
+            GIVEN("the node is downloading headers")
+                bool state_ok = enter_idle_for_ibd_render();
+                state_ok = state_ok && sync_set_state(
+                    SYNC_HEADERS_DOWNLOAD, "wallet node IBD render test");
+            WHEN("the command center renders")
+                GET("/wallet/node");
+            THEN("expensive changing totals are explicitly deferred")
+                EXPECT(state_ok);
+                EXPECT(has("UTXO Set"));
+                EXPECT(has("Deferred"));
+            THEN("the shared sync state is restored")
+                EXPECT(sync_set_state(SYNC_IDLE,
+                                      "wallet node IBD render test cleanup"));
             PASS();
         }
     }

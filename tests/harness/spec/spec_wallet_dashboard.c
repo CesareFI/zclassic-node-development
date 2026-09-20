@@ -57,8 +57,10 @@ int spec_wallet_dashboard(void)
         STORY("dashboard updates without manual refresh") {
             GIVEN("dashboard loads")
                 GET("/wallet");
-            THEN("live polling is active")
-                EXPECT(has("setInterval"));
+            THEN("the next pulse waits for the current pulse to finish")
+                EXPECT(has("then(function(){setTimeout(up,5000)})"));
+            THEN("a slow pulse cannot create overlapping requests")
+                EXPECT(!has("setInterval(up,5000)"));
             THEN("pulse endpoint is configured")
                 EXPECT(has("api/wallet/pulse"));
             PASS();

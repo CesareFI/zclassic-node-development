@@ -278,9 +278,9 @@ Z23_FLAG("ZCL_C3_BUDGET_SECS", "env_build", "600", "-",
 Z23_FLAG("ZCL_C3_BUNDLE_SNAPSHOT", "env_build", "-", "-",
           "undocumented; first use tools/scripts/cold_start_test.sh:83")
 Z23_FLAG("ZCL_C3_CONSENSUS_BUNDLE", "env_build", "-", "-",
-          "undocumented; first use tools/scripts/cold_start_to_tip_probe.sh:484")
+          "undocumented; first use tools/scripts/cold_start_to_tip_probe.sh:573")
 Z23_FLAG("ZCL_C3_FILE_PEER", "env_build", "-", "-",
-          "undocumented; first use tools/scripts/cold_start_to_tip_probe.sh:453")
+          "undocumented; first use tools/scripts/cold_start_to_tip_probe.sh:536")
 Z23_FLAG("ZCL_C3_HISTORY_DIR", "env_build", "-", "-",
           "undocumented; first use tools/scripts/c3_stopwatch_run_and_record.sh:142")
 Z23_FLAG("ZCL_C3_MAX_BOOTS", "env_build", "12", "-",
@@ -435,7 +435,7 @@ Z23_FLAG("ZCL_CS_MAX_BOOTS", "env_build", "12", "-",
 Z23_FLAG("ZCL_CS_NODE_BIN", "env_build", "-", "-",
           "undocumented; first use tools/scripts/c3_stopwatch_triple_run.sh:71")
 Z23_FLAG("ZCL_CS_PARAMS_DIR", "env_build", "-", "-",
-          "undocumented; first use tools/scripts/cold_start_to_tip_stopwatch.sh:2752")
+          "undocumented; first use tools/scripts/cold_start_to_tip_stopwatch.sh:2784")
 Z23_FLAG("ZCL_CS_PEER", "env_build", "-", "-",
           "undocumented; first use tools/scripts/cold_start_to_tip_stopwatch.sh:123")
 Z23_FLAG("ZCL_CS_PEER_DATADIR", "env_build", "-", "-",
@@ -443,7 +443,7 @@ Z23_FLAG("ZCL_CS_PEER_DATADIR", "env_build", "-", "-",
 Z23_FLAG("ZCL_CS_PEER_RPCPORT", "env_build", "39071", "-",
           "undocumented; first use tools/scripts/c3_stopwatch_run_and_record.sh:150")
 Z23_FLAG("ZCL_CS_ROOT", "env_build", "-", "-",
-          "undocumented; first use tools/scripts/cold_start_to_tip_stopwatch.sh:2743")
+          "undocumented; first use tools/scripts/cold_start_to_tip_stopwatch.sh:2775")
 Z23_FLAG("ZCL_CS_RUN_ID", "env_build", "-", "-",
           "undocumented; first use tools/scripts/cold_start_to_tip_stopwatch.sh:239")
 Z23_FLAG("ZCL_CS_SAMPLE_SECS", "env_build", "10", "-",
@@ -1622,9 +1622,9 @@ Z23_FLAG("ZCL_PARITY_CANON_RPCPORT", "env_build", "-", "-",
 Z23_FLAG("ZCL_PARITY_EXCLUDE_HOSTS", "env_build", "-", "-",
           "first use tools/scripts/tip_agreement_probe.sh:291; documented at docs/HANDOFF.md:78: peers collapse to one host key. ZCL_PARITY_EXCLUDE_HOSTS can only make")
 Z23_FLAG("ZCL_PARITY_HASH_CMD", "env_build", "-", "-",
-          "undocumented; first use tools/scripts/tip_agreement_probe.sh:431")
+          "undocumented; first use tools/scripts/tip_agreement_probe.sh:437")
 Z23_FLAG("ZCL_PARITY_HEIGHT", "env_build", "-", "-",
-          "undocumented; first use tools/scripts/test_tip_agreement_evidence.sh:382")
+          "undocumented; first use tools/scripts/test_tip_agreement_evidence.sh:384")
 Z23_FLAG("ZCL_PARITY_JUDGE_NOW", "env_build", "-", "-",
           "undocumented; first use tools/scripts/tip_agreement_judge.sh:234")
 Z23_FLAG("ZCL_PARITY_LEDGER_DIR", "env_build", "-", "-",
@@ -1634,7 +1634,7 @@ Z23_FLAG("ZCL_PARITY_MIN_DISTINCT_PEERS", "env_build", "2", "-",
 Z23_FLAG("ZCL_PARITY_NODE_BIN", "env_build", "-", "-",
           "undocumented; first use tools/scripts/tip_agreement_probe.sh:333")
 Z23_FLAG("ZCL_PARITY_NOW", "env_build", "-", "-",
-          "undocumented; first use tools/scripts/tip_agreement_probe.sh:475")
+          "undocumented; first use tools/scripts/tip_agreement_probe.sh:481")
 Z23_FLAG("ZCL_PARITY_ORACLE", "env_runtime", "-", "-",
           "first use engine/composition/src/boot_utxo_parity.c:46; documented at docs/MVP.md:30: | 8 | **Consensus parity with zclassicd** | Continuous diff service: 0 mismatches over ...")
 Z23_FLAG("ZCL_PARITY_ROTATE_BYTES", "env_build", "52428800", "-",
@@ -1644,11 +1644,11 @@ Z23_FLAG("ZCL_PARITY_RPC_BIN", "env_build", "-", "-",
 Z23_FLAG("ZCL_PARITY_RPC_TIMEOUT_SEC", "env_build", "8", "-",
           "undocumented; first use tools/scripts/tip_agreement_probe.sh:252")
 Z23_FLAG("ZCL_PARITY_SQL", "env_build", "-", "-",
-          "undocumented; first use tools/scripts/test_tip_agreement_evidence.sh:93")
+          "undocumented; first use tools/scripts/test_tip_agreement_evidence.sh:95")
 Z23_FLAG("ZCL_PARITY_SQL_CMD", "env_build", "-", "-",
           "undocumented; first use tools/scripts/tip_agreement_probe.sh:364")
 Z23_FLAG("ZCL_PARITY_STATE_CMD", "env_build", "-", "-",
-          "undocumented; first use tools/scripts/tip_agreement_probe.sh:489")
+          "undocumented; first use tools/scripts/tip_agreement_probe.sh:495")
 Z23_FLAG("ZCL_PARITY_WINDOW_SECS", "env_build", "900", "-",
           "undocumented; first use tools/scripts/tip_agreement_probe.sh:250")
 Z23_FLAG("ZCL_PAS_BINARY", "env_build", "-", "-",
@@ -1680,7 +1680,7 @@ Z23_FLAG("ZCL_PEERLESS_OK", "env_runtime", "-", "-",
 Z23_FLAG("ZCL_PEER_SCORE_DECAY_PER_MIN", "env_test", "-", "-",
           "undocumented; first use tests/harness/src/test_peer_scoring.c:851")
 Z23_FLAG("ZCL_PEER_TIP_TMP", "env_build", "-", "-",
-          "undocumented; first use tools/scripts/two_node_peer_tip.sh:286")
+          "undocumented; first use tools/scripts/two_node_peer_tip.sh:299")
 Z23_FLAG("ZCL_PERF_REPORT_UNDER_TEST", "env_build", "-", "-",
           "undocumented; first use tools/dev/zcode_async_proof_perf_report_selftest.sh:6")
 Z23_FLAG("ZCL_PERSONA_DEF", "env_build", "-", "-",
@@ -1704,13 +1704,13 @@ Z23_FLAG("ZCL_PP_CUTTER", "env_build", "-", "-",
 Z23_FLAG("ZCL_PP_FRONT_DOOR_C", "env_build", "-", "-",
           "undocumented; first use tools/lint/check_published_platforms.sh:57")
 Z23_FLAG("ZCL_PP_HOST", "env_build", "-", "-",
-          "undocumented; first use tools/scripts/cold_start_to_tip_stopwatch.sh:1551")
+          "undocumented; first use tools/scripts/cold_start_to_tip_stopwatch.sh:1578")
 Z23_FLAG("ZCL_PP_INSTALL_PS1", "env_build", "-", "-",
           "undocumented; first use tools/lint/check_published_platforms.sh:56")
 Z23_FLAG("ZCL_PP_INSTALL_SH", "env_build", "-", "-",
           "undocumented; first use tools/lint/check_published_platforms.sh:55")
 Z23_FLAG("ZCL_PP_PORT", "env_build", "-", "-",
-          "undocumented; first use tools/scripts/cold_start_to_tip_stopwatch.sh:1551")
+          "undocumented; first use tools/scripts/cold_start_to_tip_stopwatch.sh:1578")
 Z23_FLAG("ZCL_PPREV_REPAIR_MAX_READS", "env_runtime", "-", "-",
           "undocumented; first use engine/services/src/block_index_integrity.c:213")
 Z23_FLAG("ZCL_PRI_SEED", "env_test", "-", "-",
@@ -2102,39 +2102,39 @@ Z23_FLAG("ZCL_SIMNET_NIGHTLY_FUZZ_SWEEP", "env_build", "0", "-",
 Z23_FLAG("ZCL_SIMNET_PERF", "env_test", "-", "-",
           "undocumented; first use tests/harness/src/test_simnet_fuzz.c:448")
 Z23_FLAG("ZCL_SLO_BLIND_STREAK", "env_build", "10", "-",
-          "undocumented; first use tools/scripts/node_slo_probe.sh:200")
+          "undocumented; first use tools/scripts/node_slo_probe.sh:201")
 Z23_FLAG("ZCL_SLO_BUCKET_SEC", "env_build", "900", "-",
           "undocumented; first use tools/scripts/slo_hold_judge.sh:96")
 Z23_FLAG("ZCL_SLO_CADENCE_SEC", "env_build", "60", "-",
           "undocumented; first use tools/scripts/slo_hold_judge.sh:94")
 Z23_FLAG("ZCL_SLO_CANON_DATADIR", "env_build", "-", "-",
-          "undocumented; first use tools/scripts/node_slo_probe.sh:218")
-Z23_FLAG("ZCL_SLO_CANON_RPCPORT", "env_build", "-", "-",
           "undocumented; first use tools/scripts/node_slo_probe.sh:219")
+Z23_FLAG("ZCL_SLO_CANON_RPCPORT", "env_build", "-", "-",
+          "undocumented; first use tools/scripts/node_slo_probe.sh:220")
 Z23_FLAG("ZCL_SLO_COVERAGE_PCT", "env_build", "90", "-",
           "undocumented; first use tools/scripts/slo_hold_judge.sh:93")
 Z23_FLAG("ZCL_SLO_DU_CMD", "env_build", "-", "-",
-          "undocumented; first use tools/scripts/node_slo_probe.sh:421")
+          "undocumented; first use tools/scripts/node_slo_probe.sh:449")
 Z23_FLAG("ZCL_SLO_GAP_BUDGET", "env_build", "3", "-",
           "undocumented; first use tools/scripts/slo_hold_judge.sh:497")
 Z23_FLAG("ZCL_SLO_HOST_TIMEOUT_SEC", "env_build", "5", "-",
-          "undocumented; first use tools/scripts/node_slo_probe.sh:212")
+          "undocumented; first use tools/scripts/node_slo_probe.sh:213")
 Z23_FLAG("ZCL_SLO_INSTANCE", "env_build", "canonical", "-",
           "undocumented; first use tools/scripts/slo_hold_judge.sh:495")
 Z23_FLAG("ZCL_SLO_LEDGER_DIR", "env_build", "-", "-",
-          "first use tools/scripts/node_slo_probe.sh:195; documented at docs/CAPABILITY_INVENTORY.jsonl:1255: {'record':'capability','header':'engine/services/include/services/slo_ledger_summary.h'...")
+          "first use tools/scripts/node_slo_probe.sh:196; documented at docs/CAPABILITY_INVENTORY.jsonl:1255: {'record':'capability','header':'engine/services/include/services/slo_ledger_summary.h'...")
 Z23_FLAG("ZCL_SLO_MAX_AGE_SEC", "env_build", "300", "-",
           "undocumented; first use tools/scripts/slo_hold_judge.sh:95")
 Z23_FLAG("ZCL_SLO_MAX_UNREACH_SEC", "env_build", "600", "-",
           "undocumented; first use tools/scripts/slo_hold_judge.sh:92")
 Z23_FLAG("ZCL_SLO_NODE_BIN", "env_build", "-", "-",
-          "undocumented; first use tools/scripts/node_slo_probe.sh:309")
+          "undocumented; first use tools/scripts/node_slo_probe.sh:310")
 Z23_FLAG("ZCL_SLO_NOW", "env_build", "-", "-",
           "undocumented; first use tools/scripts/slo_hold_judge.sh:465")
 Z23_FLAG("ZCL_SLO_ORACLE_DATADIR", "env_build", "-", "-",
-          "undocumented; first use tools/scripts/node_slo_probe.sh:242")
-Z23_FLAG("ZCL_SLO_ORACLE_RPCPORT", "env_build", "-", "-",
           "undocumented; first use tools/scripts/node_slo_probe.sh:243")
+Z23_FLAG("ZCL_SLO_ORACLE_RPCPORT", "env_build", "-", "-",
+          "undocumented; first use tools/scripts/node_slo_probe.sh:244")
 Z23_FLAG("ZCL_SLO_PAGE_ADVANCE_MIN_TRAILING", "env_build", "2", "-",
           "undocumented; first use tools/scripts/slo_page_if_stalled.sh:140")
 Z23_FLAG("ZCL_SLO_PAGE_ADVANCE_SEC", "env_build", "7200", "-",
@@ -2160,17 +2160,17 @@ Z23_FLAG("ZCL_SLO_PAGE_WALL", "env_build", "1", "-",
 Z23_FLAG("ZCL_SLO_REACH_PCT", "env_build", "99.5", "-",
           "undocumented; first use tools/scripts/slo_hold_judge.sh:91")
 Z23_FLAG("ZCL_SLO_ROTATE_BYTES", "env_build", "52428800", "-",
-          "undocumented; first use tools/scripts/node_slo_probe.sh:199")
+          "undocumented; first use tools/scripts/node_slo_probe.sh:200")
 Z23_FLAG("ZCL_SLO_RPC_BIN", "env_build", "-", "-",
-          "undocumented; first use tools/scripts/node_slo_probe.sh:290")
+          "undocumented; first use tools/scripts/node_slo_probe.sh:291")
 Z23_FLAG("ZCL_SLO_RPC_TIMEOUT_SEC", "env_build", "8", "-",
-          "undocumented; first use tools/scripts/node_slo_probe.sh:198")
+          "undocumented; first use tools/scripts/node_slo_probe.sh:199")
 Z23_FLAG("ZCL_SLO_RSS_CMD", "env_build", "-", "-",
-          "undocumented; first use tools/scripts/node_slo_probe.sh:414")
+          "undocumented; first use tools/scripts/node_slo_probe.sh:442")
 Z23_FLAG("ZCL_SLO_SHOW_CMD", "env_build", "-", "-",
-          "undocumented; first use tools/scripts/node_slo_probe.sh:399")
+          "undocumented; first use tools/scripts/node_slo_probe.sh:427")
 Z23_FLAG("ZCL_SLO_STATE_TIMEOUT_SEC", "env_build", "5", "-",
-          "undocumented; first use tools/scripts/node_slo_probe.sh:201")
+          "undocumented; first use tools/scripts/node_slo_probe.sh:202")
 Z23_FLAG("ZCL_SLO_WINDOW_HOURS", "env_build", "72", "-",
           "undocumented; first use tools/scripts/slo_hold_judge.sh:496")
 Z23_FLAG("ZCL_SOAK_EVIDENCE_DIR", "env_build", "-", "-",
@@ -2256,7 +2256,7 @@ Z23_FLAG("ZCL_STOPWATCH_CHECKPOINT_HEIGHT", "env_build", "3056758", "-",
 Z23_FLAG("ZCL_STOPWATCH_JUDGE_ARGS", "make_var", "-", "-",
           "undocumented; first use Makefile:8546")
 Z23_FLAG("ZCL_STOPWATCH_JUDGE_NOW", "env_build", "-", "-",
-          "undocumented; first use tools/scripts/stopwatch_evidence_judge.sh:489")
+          "undocumented; first use tools/scripts/stopwatch_evidence_judge.sh:561")
 Z23_FLAG("ZCL_STOPWATCH_ORACLE_LAG_BUDGET", "env_build", "2000", "-",
           "undocumented; first use tools/scripts/stopwatch_evidence_judge.sh:136")
 Z23_FLAG("ZCL_STOPWATCH_ORACLE_MAX_AGE_SECS", "env_build", "3600", "-",

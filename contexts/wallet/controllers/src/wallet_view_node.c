@@ -9,8 +9,43 @@
 
 /* ── Node / Command Center (/wallet/node) ───────────────────── */
 
+static bool node_view_ibd_active(enum sync_state state)
+{
+    return state == SYNC_FINDING_PEERS ||
+           state == SYNC_HEADERS_DOWNLOAD ||
+           state == SYNC_BLOCKS_DOWNLOAD ||
+           state == SYNC_CONNECTING_BLOCKS ||
+           state == SYNC_SNAPSHOT_RECEIVE;
+}
+
+static void node_view_read_utxo_stats(sqlite3 *db, bool ibd_active,
+                                      int *utxo_count, int64_t *supply)
+{
+    if (!db || ibd_active)
+        return;
+    *utxo_count = wv_query_int(db, "SELECT count(*) FROM utxos");
+    *supply = wv_query_int64(db,
+        "SELECT COALESCE(SUM(value),0) FROM utxos");
+}
+
+static void node_view_format_utxo_stats(bool ibd_active, int utxo_count,
+                                        int64_t supply, char *utxo,
+                                        size_t utxo_size, char *supply_text,
+                                        size_t supply_size)
+{
+    if (ibd_active) {
+        snprintf(utxo, utxo_size, "Deferred");
+        snprintf(supply_text, supply_size, "Deferred");
+        return;
+    }
+    snprintf(utxo, utxo_size, "%d outputs", utxo_count);
+    snprintf(supply_text, supply_size, "%.2f ZCL", (double)supply / 1e8);
+}
+
 size_t serve_node(uint8_t *r, size_t max) {
     sqlite3 *db = wv_open_db();
+    enum sync_state sync_state = sync_get_state();
+    bool ibd_active = node_view_ibd_active(sync_state);
 
     int tip = 0, peers = 0, mempool = 0, utxo_count = 0;
     int64_t supply = 0;
@@ -18,13 +53,14 @@ size_t serve_node(uint8_t *r, size_t max) {
         tip = wv_effective_tip(db);
         peers = wv_query_int(db, "SELECT count(*) FROM peers");
         mempool = wv_query_int(db, "SELECT count(*) FROM mempool_entries");
-        utxo_count = wv_query_int(db, "SELECT count(*) FROM utxos");
-        supply = wv_query_int64(db,
-            "SELECT COALESCE(SUM(value),0) FROM utxos");
     }
+    /* These presentation-only aggregates are O(UTXO). During IBD the table
+     * is still changing, their transient result is not useful, and a page
+     * render must not compete with chain advancement. */
+    node_view_read_utxo_stats(db, ibd_active, &utxo_count, &supply);
 
-    const char *sync_raw = sync_state_name(sync_get_state());
-    bool synced = (sync_get_state() == SYNC_AT_TIP);
+    const char *sync_raw = sync_state_name(sync_state);
+    bool synced = (sync_state == SYNC_AT_TIP);
     const char *sync_label = synced ? "Synced" :
         (strstr(sync_raw, "idle") ? "Ready" : "Syncing...");
     const char *sync_class = synced ? "pill-synced" :
@@ -34,11 +70,12 @@ size_t serve_node(uint8_t *r, size_t max) {
     if (format_with_commas(height_s, sizeof(height_s), tip) == 0)
         snprintf(height_s, sizeof(height_s), "%d", tip);
 
-    char peers_s[16], mempool_s[16], utxo_s[16], supply_s[32];
+    char peers_s[16], mempool_s[16], utxo_s[32], supply_s[32];
     snprintf(peers_s, sizeof(peers_s), "%d", peers);
     snprintf(mempool_s, sizeof(mempool_s), "%d", mempool);
-    snprintf(utxo_s, sizeof(utxo_s), "%d", utxo_count);
-    snprintf(supply_s, sizeof(supply_s), "%.2f", (double)supply / 1e8);
+    node_view_format_utxo_stats(ibd_active, utxo_count, supply,
+                                utxo_s, sizeof(utxo_s),
+                                supply_s, sizeof(supply_s));
 
     /* Difficulty from latest block */
     char diff_s[32] = "\xe2\x80\x94";

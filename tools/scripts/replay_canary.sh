@@ -369,17 +369,28 @@ pass() {
     exit 0
 }
 
-# ── JSON field extraction (no python — grep/sed only) ──────────────
+# ── JSON field extraction for known RPC fields ────────────────────
 # Pulls "key":<number-or-"string"> out of a flat-ish JSON blob. Returns
 # empty on a miss so the caller can detect rpc_unreachable / missing field
 # (never silently treat a missing field as 0/pass).
 json_num() {  # $1=json $2=key
-    printf '%s' "$1" | grep -o "\"$2\"[[:space:]]*:[[:space:]]*-\?[0-9]\+" \
-        | head -1 | grep -o -- '-\?[0-9]\+$' || true
+    # Poll without launching three external parsers for each integer. Keep
+    # grep's line-local whitespace and first-integer policy; wide counters
+    # stay text, and a miss still returns an empty value with success status.
+    local space=$'[[:blank:]\r\v\f]'
+    local pattern="\"$2\"${space}*:${space}*(-?[0-9]+)"
+    if [[ "$1" =~ $pattern ]]; then
+        printf '%s\n' "${BASH_REMATCH[1]}"
+    fi
 }
 json_str() {  # $1=json $2=key
-    printf '%s' "$1" | grep -o "\"$2\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
-        | head -1 | sed 's/.*:[[:space:]]*"\([^"]*\)"/\1/' || true
+    # Preserve the first line-local quoted field, without three external
+    # parsers per observation. Like the old reader, keep escapes as text.
+    local space=$'[[:blank:]\r\v\f]' newline=$'\n'
+    local pattern="\"$2\"${space}*:${space}*\"([^\"${newline}]*)\""
+    if [[ "$1" =~ $pattern ]]; then
+        printf '%s\n' "${BASH_REMATCH[1]}"
+    fi
 }
 # total_amount tolerance: zclassic23 emits it QUOTED ("10364137.94674881")
 # but zclassicd emits it UNQUOTED as a JSON number (10395235.80748115).
@@ -389,8 +400,13 @@ json_amount() {  # $1=json $2=key
     local v
     v="$(json_str "$1" "$2")"
     if [ -n "$v" ]; then printf '%s' "$v"; return 0; fi
-    printf '%s' "$1" | grep -o "\"$2\"[[:space:]]*:[[:space:]]*[0-9.]\+" \
-        | head -1 | sed 's/.*:[[:space:]]*\([0-9.]*\)/\1/' || true
+    # Legacy supply observations need no external parsers. Preserve the
+    # first line-local digit/dot token and its exact fixed-point text.
+    local space=$'[[:blank:]\r\v\f]'
+    local pattern="\"$2\"${space}*:${space}*([0-9.]+)"
+    if [[ "$1" =~ $pattern ]]; then
+        printf '%s\n' "${BASH_REMATCH[1]}"
+    fi
 }
 
 # TCP liveness of one 127.0.0.1 port. The C8 genesis replay cannot start
