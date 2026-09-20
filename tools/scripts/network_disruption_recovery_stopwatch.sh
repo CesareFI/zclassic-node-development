@@ -124,6 +124,7 @@ ARTIFACT_ROOT="${ZCL_ND_ARTIFACT_ROOT:-$REPO_ROOT/build/c3-netdisrupt-stopwatch}
 ARTIFACT_DIR="$ARTIFACT_ROOT/$RUN_ID"
 
 start=0
+recovery_finished_ts=0
 cut_started_ts=0
 first_hstar=""
 max_hstar="-1"
@@ -139,11 +140,20 @@ busy_streak_start=0
 # stopwatch_json_lib.sh (sourced above) — same contract as
 # cold_start_to_tip_stopwatch.sh's helpers of the same name.
 
+# This poll only needs presence, not grep's matched text. Keep the check in
+# Bash and retain grep's line-local whitespace and true-prefix semantics.
+network_tip_readable() {
+    local pattern=$'"network_tip_read_ok"[[:blank:]\r\v\f]*:[[:blank:]\r\v\f]*true'
+    [[ "$1" =~ $pattern ]]
+}
+
 # --selftest: hermetic classification self-check for is_busy_response() /
 # the "hstar" field detector rpc_frontier() uses — canned JSON fixtures,
 # no binary/network/upstream-pid touched. Exits before any real infra setup.
 if [ "$SELFTEST" = "1" ]; then
-    st_fail=0
+    bash "$REPO_ROOT/tools/scripts/netdisrupt_bundle_budget_selftest.sh" || exit 1
+    bash "$REPO_ROOT/tools/scripts/netdisrupt_tip_readability_selftest.sh" || exit 1
+    st_fail=0; bash "$REPO_ROOT/tools/scripts/stopwatch_frontier_read_selftest.sh" || st_fail=1
     st_check() {  # desc, expect_rc, actual_rc
         if [ "$3" = "$2" ]; then
             echo "  ok: $1"
@@ -185,14 +195,16 @@ capture_failure_bundle() {
     FRONTIER_BUSY_AT_CAPTURE="false"
     local got_frontier=0 got_blocker=0 got_logs=0
     if [ -x "${NODE_BIN:-}" ] && [ -n "${CLIENT_RPCPORT:-}" ] && [ -n "${CLIENT_DATADIR:-}" ]; then
-        "$NODE_BIN" -rpcport="$CLIENT_RPCPORT" -datadir="$CLIENT_DATADIR" dumpstate reducer_frontier \
+        # Failure diagnostics must not hang the completed benchmark. Bound each
+        # CLI process, including a forced-kill grace for TERM-resistant clients.
+        timeout --kill-after=1 20 "$NODE_BIN" -rpcport="$CLIENT_RPCPORT" -datadir="$CLIENT_DATADIR" dumpstate reducer_frontier \
             >"$ARTIFACT_DIR/frontier.json" 2>/dev/null && [ -s "$ARTIFACT_DIR/frontier.json" ] && got_frontier=1
         if [ "$got_frontier" = 1 ] && is_busy_response "$(cat "$ARTIFACT_DIR/frontier.json" 2>/dev/null)"; then
             FRONTIER_BUSY_AT_CAPTURE="true"
         fi
-        "$NODE_BIN" -rpcport="$CLIENT_RPCPORT" -datadir="$CLIENT_DATADIR" dumpstate blocker \
+        timeout --kill-after=1 20 "$NODE_BIN" -rpcport="$CLIENT_RPCPORT" -datadir="$CLIENT_DATADIR" dumpstate blocker \
             >"$ARTIFACT_DIR/blocker.json" 2>/dev/null && [ -s "$ARTIFACT_DIR/blocker.json" ] && got_blocker=1
-        "$NODE_BIN" -rpcport="$CLIENT_RPCPORT" -datadir="$CLIENT_DATADIR" ops logs \
+        timeout --kill-after=1 20 "$NODE_BIN" -rpcport="$CLIENT_RPCPORT" -datadir="$CLIENT_DATADIR" ops logs \
             --pattern='.' --since_secs=3600 --max_lines=500 --level=all \
             >"$ARTIFACT_DIR/ops.log.tail.txt" 2>/dev/null && [ -s "$ARTIFACT_DIR/ops.log.tail.txt" ] && got_logs=1
     fi
@@ -223,7 +235,15 @@ write_artifact() {
     verdict="$1"; rc="$2"; reason="${3:-}"
     captured_at="$(date +%s)"
     elapsed=0
-    [ "${start:-0}" -gt 0 ] && elapsed=$((captured_at - start))
+    if [ "${start:-0}" -gt 0 ]; then
+        # A completed observation owns the verdict's duration; artifact and
+        # diagnostic work must not turn an in-budget result into a late one.
+        if [ "$recovery_finished_ts" -gt 0 ]; then
+            elapsed=$((recovery_finished_ts - start))
+        else
+            elapsed=$((captured_at - start))
+        fi
+    fi
     mkdir -p "$ARTIFACT_DIR" 2>/dev/null || return 0
     snapshot_upstream_state
     BUNDLE_CAPTURE_FAILED="false"
@@ -321,7 +341,7 @@ rpc_frontier() {
     local out="" backoff
     for backoff in 1 1 2 3 5 0; do
         out="$(rpc dumpstate reducer_frontier)"
-        if printf '%s' "$out" | grep -q '"hstar"'; then
+        if [[ "$out" == *'"hstar"'* ]]; then # No pipe/SIGPIPE on a large response.
             FRONTIER_LAST_BUSY=0
             printf '%s' "$out"
             return 0
@@ -367,7 +387,7 @@ echo "netdisrupt-stopwatch: bin=$NODE_BIN client_rpc=$CLIENT_RPCPORT client_data
 pre_fj="$(rpc_frontier)"
 pre_hs="$(jget "$pre_fj" hstar)";        [ -z "$pre_hs" ] && pre_hs="-1"
 pre_nt="$(jget "$pre_fj" network_tip)";  [ -z "$pre_nt" ] && pre_nt="-1"
-pre_nt_ok="$(printf '%s' "$pre_fj" | grep -oE '"network_tip_read_ok"[[:space:]]*:[[:space:]]*true')"
+pre_nt_ok=''; if network_tip_readable "$pre_fj"; then pre_nt_ok=yes; fi
 
 if [ -z "$pre_nt_ok" ] || [ "$pre_hs" = "-1" ] || ! [ "$pre_nt" -gt 0 ] 2>/dev/null; then
     skip "client RPC not reachable / reducer_frontier unreadable before cut (hstar=$pre_hs network_tip=$pre_nt)"
@@ -378,8 +398,7 @@ fi
 echo "netdisrupt-stopwatch: client confirmed AT TIP before cut (hstar=$pre_hs network_tip=$pre_nt)"
 
 # ── 2. cut the upstream: SIGSTOP, sleep cut-secs, SIGCONT ──────────────
-start=$(date +%s)
-cut_started_ts=$start
+cut_started_ts=$(date +%s)
 if ! kill -STOP "$UPSTREAM_PID" 2>/dev/null; then
     upstream_liveness_state="stop_signal_failed"
     die "could not SIGSTOP upstream pid $UPSTREAM_PID"
@@ -387,7 +406,12 @@ fi
 echo "netdisrupt-stopwatch: upstream pid=$UPSTREAM_PID STOPped at t=0 — sleeping ${CUT_SECS}s"
 sleep "$CUT_SECS"
 if kill -0 "$UPSTREAM_PID" 2>/dev/null; then
-    kill -CONT "$UPSTREAM_PID" 2>/dev/null || true
+    if ! kill -CONT "$UPSTREAM_PID" 2>/dev/null; then
+        die "could not SIGCONT upstream pid $UPSTREAM_PID"
+    fi
+    # The deliberate outage is not recovery work. Give the client the full
+    # stated budget only once its upstream has been resumed successfully.
+    start=$(date +%s)
 else
     upstream_liveness_state="died_while_stopped"
 fi
@@ -411,10 +435,13 @@ while :; do
 
     fj="$(rpc_frontier)"
     bj="$(rpc dumpstate blocker)"
+    # Include RPC/retry latency in the sample's time. A frontier first read
+    # after the deadline cannot prove recovery within the budget.
+    now=$(date +%s); elapsed=$((now - start))
 
     hs="$(jget "$fj" hstar)";              [ -z "$hs" ] && hs="-1"
     nt="$(jget "$fj" network_tip)";        [ -z "$nt" ] && nt="-1"
-    nt_ok="$(printf '%s' "$fj" | grep -oE '"network_tip_read_ok"[[:space:]]*:[[:space:]]*true')"
+    nt_ok=''; if network_tip_readable "$fj"; then nt_ok=yes; fi
     bc="$(jget "$bj" active_count)";       [ -z "$bc" ] && bc="0"
     bids="$(printf '%s' "$bj" | tr -d '\n' |
             grep -oE '"id"[[:space:]]*:[[:space:]]*"[^"]*"' |
@@ -455,7 +482,7 @@ while :; do
     [ "$nt" != "-1" ] && last_network_tip="$nt"
     last_blocker_ids="$bids"; last_blocker_count="$bc"
 
-    if [ -n "$nt_ok" ] && [ "$nt" -gt 0 ] 2>/dev/null && [ "$hs" != "-1" ] && [ "$hs" -ge "$nt" ] 2>/dev/null; then
+    if [ "$elapsed" -le "$BUDGET" ] && [ -n "$nt_ok" ] && [ "$nt" -gt 0 ] 2>/dev/null && [ "$hs" != "-1" ] && [ "$hs" -ge "$nt" ] 2>/dev/null; then
         reached=1
         break
     fi
@@ -464,7 +491,7 @@ while :; do
     sleep "$SAMPLE_SECS"
 done
 
-now=$(date +%s); elapsed=$((now - start))
+recovery_finished_ts=$now
 
 if [ "$reached" = 1 ]; then
     echo "WALL_CLOCK_SECONDS=$elapsed"

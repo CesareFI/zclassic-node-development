@@ -223,10 +223,15 @@ parse_tip() {
     resp=$1
     case "$resp" in
         *\"result\"*)
-            printf '%s\n' "$resp" | sed -n 's/.*"result"[[:space:]]*:[[:space:]]*\(-\{0,1\}[0-9][0-9]*\).*/\1/p' | head -1 ;;
+            tip_filter='s/.*"result"[[:space:]]*:[[:space:]]*\(-\{0,1\}[0-9][0-9]*\).*/\1/p' ;;
         *)
-            printf '%s\n' "$resp" | sed -n 's/^[[:space:]]*\(-\{0,1\}[0-9][0-9]*\)[[:space:]]*$/\1/p' | head -1 ;;
+            tip_filter='s/^[[:space:]]*\(-\{0,1\}[0-9][0-9]*\)[[:space:]]*$/\1/p' ;;
     esac
+    # Reuse the copy profiler's single-process reader: print and quit on the
+    # first matching line. Avoid a second process for every tail-fold sample
+    # while preserving the existing scalar grammar and exact height text.
+    printf '%s\n' "$resp" |
+        sed -n -e "$tip_filter" -e 't done' -e b -e ':done' -e q
 }
 
 # ── NEGATIVE case: a one-byte-tampered bundle MUST fail closed ───────────────

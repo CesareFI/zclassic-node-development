@@ -36,6 +36,12 @@ DATADIR="${ZCL_DATADIR:-$HOME/.zclassic-c23}"
 SRC="${ZCL_ANCHOR_SNAPSHOT_SRC:-/tmp/anchor-ram.snapshot}"
 DST="$DATADIR/utxo-anchor.snapshot"
 
+# GNU and BSD stat spell size differently. Unknown size must still copy;
+# it must never become evidence that an existing snapshot can be reused.
+file_size() {
+    stat -c %s -- "$1" 2>/dev/null || stat -f %z -- "$1" 2>/dev/null
+}
+
 if [ ! -d "$DATADIR" ]; then
     echo "[seed-anchor-snapshot] datadir $DATADIR absent — skip (fresh install mints in-fold)"
     exit 0
@@ -50,8 +56,8 @@ fi
 # verifies on boot regardless; size match is enough to avoid a needless 100 MB
 # recopy. A wrong-but-same-size file is still rejected by the node's verify.)
 if [ -f "$DST" ]; then
-    src_sz=$(stat -c %s "$SRC" 2>/dev/null || echo 0)
-    dst_sz=$(stat -c %s "$DST" 2>/dev/null || echo 0)
+    src_sz=$(file_size "$SRC" || echo 0)
+    dst_sz=$(file_size "$DST" || echo 0)
     if [ "$src_sz" = "$dst_sz" ] && [ "$src_sz" != "0" ]; then
         echo "[seed-anchor-snapshot] $DST already present (size $dst_sz) — not re-copying"
         exit 0
@@ -71,6 +77,6 @@ if ! mv -f "$TMP" "$DST"; then
     rm -f "$TMP"
     exit 0
 fi
-sz=$(stat -c %s "$DST" 2>/dev/null || echo "?")
+sz=$(file_size "$DST" || echo "?")
 echo "[seed-anchor-snapshot] staged $SRC -> $DST (size $sz). The node SHA3-verifies it vs the compiled checkpoint on boot before any trust."
 exit 0

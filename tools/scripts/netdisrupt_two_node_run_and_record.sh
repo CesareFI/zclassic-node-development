@@ -47,6 +47,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 DRILL="$SCRIPT_DIR/netdisrupt_two_node_drill.sh"
 
+if [ "${1:-}" = "--selftest" ]; then
+    exec bash "$SCRIPT_DIR/netdisrupt_drill_output_selftest.sh"
+fi
+
 NODE_BIN="${ZCL_ND2_NODE_BIN:-$REPO_ROOT/build/bin/zclassic23}"
 CUT_SECS="${ZCL_ND2_CUT_SECS:-30}"
 BUDGET="${ZCL_ND2_BUDGET_SECS:-120}"
@@ -58,6 +62,31 @@ mkdir -p "$HISTORY_DIR"
 json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g; s/\r/\\r/g' | tr '\n' ' '; }
 json_string() { printf '"%s"' "$(json_escape "$1")"; }
 json_num_or_null() { case "${1:-}" in ''|*[!0-9-]*) printf 'null' ;; *) printf '%s' "$1" ;; esac; }
+
+parse_drill_output() {
+    local parsed rest
+    # Keep the last match for each field, as the original independent scans
+    # did. A single pass avoids copying long drill transcripts into six
+    # external parser processes after every recovery benchmark.
+    parsed=$(awk '
+        /^WALL_CLOCK_SECONDS=[0-9]+$/ {
+            wall = $0; sub(/^WALL_CLOCK_SECONDS=/, "", wall)
+        }
+        /^netdisrupt-two-node: artifact=/ {
+            artifact = $0; sub(/^netdisrupt-two-node: artifact=/, "", artifact)
+        }
+        match($0, /.*B[{]dd=[^ ]* p2p=[0-9]* rpc=[0-9]*[}]/) {
+            port = substr($0, 1, RLENGTH)
+            sub(/.*B[{]dd=[^ ]* p2p=[0-9]* rpc=/, "", port)
+            sub(/[}].*/, "", port)
+        }
+        END { printf "%s\n%s\n%s\n", wall, artifact, (port == "" ? "0" : port) }
+    ' <<< "$1") || return 1
+    wall_clock=${parsed%%$'\n'*}
+    rest=${parsed#*$'\n'}
+    artifact_dir=${rest%%$'\n'*}
+    follower_rpc=${rest#*$'\n'}
+}
 
 build_commit="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || true)"
 [ -z "$build_commit" ] && build_commit="unknown"
@@ -79,10 +108,10 @@ case "$rc" in
     4) verdict="stalled-named" ;;
 esac
 
-wall_clock="$(printf '%s\n' "$out" | sed -n 's/^WALL_CLOCK_SECONDS=\([0-9][0-9]*\)$/\1/p' | tail -1)"
-artifact_dir="$(printf '%s\n' "$out" | sed -n 's/^netdisrupt-two-node: artifact=\(.*\)$/\1/p' | tail -1)"
-follower_rpc="$(printf '%s\n' "$out" | sed -n 's/.*B{dd=[^ ]* p2p=[0-9]* rpc=\([0-9]*\)}.*/\1/p' | tail -1)"
-[ -z "$follower_rpc" ] && follower_rpc="0"
+parse_drill_output "$out" || {
+    echo "netdisrupt-two-node-run: FAIL could not parse drill output" >&2
+    exit 1
+}
 peer_desc="127.0.0.1:${follower_rpc}"
 
 ts="$(date +%s)"

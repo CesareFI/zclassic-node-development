@@ -257,8 +257,16 @@ NODE_ISO_ARGS="-fsport=$FSPORT -httpsport=$HTTPSPORT $BOOT_PEER_ARGS -nolegacyim
 rpc() { HOME="$ISO_HOME" ZCL_DATADIR="$COPY_DIR" ZCL_RPCPORT="$RPCPORT" "$RPC_BIN" "$@" 2>/dev/null || true; }
 tip() {
     resp="$(rpc getblockcount)"
+    # Stop after the first matching line without another process per poll.
     printf '%s\n' "$resp" |
-        sed -n 's/.*"result"[[:space:]]*:[[:space:]]*\(-\{0,1\}[0-9][0-9]*\).*/\1/p' | head -1
+        sed -n '
+            s/.*"result"[[:space:]]*:[[:space:]]*\(-\{0,1\}[0-9][0-9]*\).*/\1/
+            t found
+            b
+            :found
+            p
+            q
+        '
 }
 
 # ── step 0: auto-detect the copy's own body tip (the O(delta) climb target)

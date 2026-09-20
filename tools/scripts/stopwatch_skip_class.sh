@@ -103,6 +103,10 @@ stopwatch_no_pass_all_benign() {
             benign=1
             continue
         fi
+        # A non-benign row rules out the exemption until the next pass.
+        # Still inspect every verdict: truncating history could hide a fault,
+        # and returning early could miss a pass that resets the streak.
+        [ "$benign" = 0 ] && continue
         any=1
         if [ "$v" != "skip" ]; then
             benign=0
@@ -168,15 +172,20 @@ EOF
 # stopwatch_skip_row_field <json_line> <key> — the string value of "key", or
 # empty. Same one-line/flat-object assumption the judge's fld_str() makes.
 stopwatch_skip_row_field() {
-    printf '%s' "$1" | grep -oE "\"$2\":\"[^\"]*\"" | head -n1 |
-        sed -E "s/\"$2\":\"([^\"]*)\"/\1/"
+    # Callers use literal identifier keys. Keep the first compact string
+    # match and grep's line-local quote boundary, without three parser
+    # processes for every row in a potentially long stopwatch history.
+    local pattern='"'"$2"'":"([^"'$'\n'']*)"'
+    if [[ $1 =~ $pattern ]]; then
+        printf '%s' "${BASH_REMATCH[1]}"
+    fi
 }
 
 # stopwatch_skip_row_has <json_line> <key> — rc 0 when the FIELD exists at
 # all (even as an empty string). "absent" and "present but empty" must read
 # differently: absent means the row predates the field.
 stopwatch_skip_row_has() {
-    printf '%s' "$1" | grep -q "\"$2\":"
+    [[ $1 == *\""$2"\":* ]]
 }
 
 # stopwatch_skip_streaks <ledger> — recompute the trailing streaks from the
@@ -228,6 +237,7 @@ stopwatch_skip_streaks() {
 if [ "${BASH_SOURCE[0]}" = "$0" ] && [ "${1:-}" = "--selftest" ]; then
     set -uo pipefail
     export LC_ALL=C
+    bash "$_SW_SKIP_DIR/stopwatch_skip_parser_selftest.sh" || exit 1
     _st_fail=0
     _st_tmp="$(mktemp -d "${TMPDIR:-/tmp}/stopwatch-skip-class-selftest.XXXXXX")" || {
         echo "selftest: FAIL could not mktemp" >&2; exit 1; }
@@ -351,6 +361,34 @@ if [ "${BASH_SOURCE[0]}" = "$0" ] && [ "${1:-}" = "--selftest" ]; then
     done
     _st_check "a failure before 200 benign skips remains non-benign" \
         "$(stopwatch_no_pass_all_benign "$_st_led4")" "0"
+    # Classification is the expensive part of a growing history. Once a
+    # failure has ruled out the exemption, later skips cannot restore it.
+    # Count classifier calls, not elapsed time, so this gate is load-independent.
+    _st_calls="$_st_tmp/classifications"
+    : >"$_st_calls"
+    _st_check "a known non-benign streak needs no further classification" \
+        "$(
+            stopwatch_skip_classify() {
+                printf 'called\n' >>"$_st_calls"
+                printf 'not_configured 0\n'
+            }
+            stopwatch_no_pass_all_benign "$_st_led4"
+        )" "0"
+    _st_check "no classifier calls after an early failure" \
+        "$(wc -l <"$_st_calls" | tr -d ' ')" "0"
+    printf '{"verdict":"pass"}\n{"verdict":"skip","skip_reason":"no valid --client-rpc / ZCL_ND_CLIENT_RPCPORT given","artifact_dir":"/fixture"}\n' \
+        >>"$_st_led4"
+    : >"$_st_calls"
+    _st_check "a later pass restores classification for the new streak" \
+        "$(
+            stopwatch_skip_classify() {
+                printf 'called\n' >>"$_st_calls"
+                printf 'not_configured 0\n'
+            }
+            stopwatch_no_pass_all_benign "$_st_led4"
+        )" "1"
+    _st_check "only the skip after the pass is classified" \
+        "$(wc -l <"$_st_calls" | tr -d ' ')" "1"
     # A pass ends the streak, so there is nothing left to excuse.
     printf '{"ts":8000,"verdict":"pass","exit_code":0,"artifact_dir":"/a/p"}\n' \
         >>"$_st_led3"
@@ -361,6 +399,19 @@ if [ "${BASH_SOURCE[0]}" = "$0" ] && [ "${1:-}" = "--selftest" ]; then
 
     if [ "$_st_fail" = 0 ]; then
         echo "selftest: PASS"
+        # Optional reproducible report-cost benchmark, never a timing gate.
+        # Run: bash tools/scripts/stopwatch_skip_class.sh --selftest --bench
+        if [ "${2:-}" = "--bench" ]; then
+            _st_bench="$_st_tmp/benchmark.jsonl"
+            printf '{"verdict":"fail"}\n' >"$_st_bench"
+            for ((_st_i = 0; _st_i < 1000; _st_i++)); do
+                printf '{"verdict":"skip","artifact_dir":"/fixture","skip_reason":"no valid --client-rpc / ZCL_ND_CLIENT_RPCPORT given"}\n' \
+                    >>"$_st_bench"
+            done
+            TIMEFORMAT='1001 rows, early failure: %3R seconds wall, %3U user, %3S system'
+            time _st_result="$(stopwatch_no_pass_all_benign "$_st_bench")"
+            [ "$_st_result" = 0 ] || { echo 'benchmark: FAIL' >&2; exit 1; }
+        fi
         exit 0
     fi
     echo "selftest: FAIL" >&2

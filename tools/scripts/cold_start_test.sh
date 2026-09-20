@@ -34,6 +34,7 @@
 set -uo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+. "$REPO_DIR/tools/scripts/stopwatch_json_lib.sh" || exit 2
 BIN="$REPO_DIR/build/bin/zclassic23"
 CLI="$REPO_DIR/build/bin/zcl-rpc"
 SRC_SNAP_CANDIDATES=(
@@ -61,6 +62,25 @@ MIN_UTXOS="${MIN_UTXOS:-1000000}"
 SUCCESS_PATTERN='snapshot-first import OK: '
 BUNDLE_SUCCESS_PATTERN='-load-snapshot-at-own-height: coin set RE-SEEDED'
 
+# An idle startup log needs only a metadata observation after a failed search.
+# Reuse only precise change stamps; unavailable/coarse metadata and reader
+# errors must retry. Capture before grep so a concurrent append is not hidden.
+log_miss_signature=''
+cold_start_log_hit() {
+    local metadata signature='' rc=0
+    hit=''
+    metadata=$(stopwatch_file_metadata "$LOG") || metadata=''
+    # The shared stat observes a symlink itself, not its growing target.
+    if [[ ! -L $LOG && -n $metadata && $metadata != *unavailable ]]; then
+        signature="$want_pattern:$metadata"
+        [[ $signature != "$log_miss_signature" ]] || return 0
+    fi
+    log_miss_signature=''
+    hit=$(grep -am1 -F -- "$want_pattern" "$LOG" 2>/dev/null) || rc=$?
+    if [[ $rc == 1 ]]; then log_miss_signature=$signature; fi
+    return 0
+}
+
 cleanup() {
     if [ -n "${NODE_PID:-}" ]; then
         kill -TERM "$NODE_PID" 2>/dev/null || true
@@ -86,9 +106,10 @@ if [ -z "$SRC_BUNDLE_SNAP" ]; then
     newest_mtime=0
     for cand in "${SRC_BUNDLE_SNAP_CANDIDATES[@]}"; do
         [ -f "$cand" ] || continue
-        size=$(stat -c %s "$cand" 2>/dev/null || echo 0)
+        # Both fields describe one observation, with one process per candidate.
+        metadata=$(stat -c '%s %Y' "$cand" 2>/dev/null) || continue
+        read -r size mt <<< "$metadata"
         [ "$size" -gt $((10*1024*1024)) ] || continue
-        mt=$(stat -c %Y "$cand" 2>/dev/null || echo 0)
         if [ "$mt" -ge "$newest_mtime" ]; then
             newest_mtime="$mt"
             SRC_BUNDLE_SNAP="$cand"
@@ -164,6 +185,7 @@ echo "[coldstart] launching node mode=$MODE datadir=$TEST_DIR rpcport=$TEST_RPCP
 # the operator's main node. The dead -connect target prevents accidental seed
 # dialing; this test asserts local cold-start seeding, not network catchup.
 # -nolegacyimport: don't pull from any local ~/.zclassic legacy datadir.
+start_t=$(date +%s)
 "$BIN" \
     -datadir="$TEST_DIR" \
     -port="$TEST_PORT" \
@@ -178,17 +200,19 @@ echo "[coldstart] launching node mode=$MODE datadir=$TEST_DIR rpcport=$TEST_RPCP
     > "$LOG" 2>&1 &
 NODE_PID=$!
 
-start_t=$(date +%s)
+if [ "$MODE" = "operator-bundle" ]; then
+    want_pattern="$BUNDLE_SUCCESS_PATTERN"
+else
+    want_pattern="$SUCCESS_PATTERN"
+fi
 while :; do
+    cold_start_log_hit
+    # Timestamp the completed observation: log scanning under IBD load can
+    # take time, and a success first observed at/after the deadline is late.
     now=$(date +%s)
     elapsed=$((now - start_t))
     if [ $elapsed -ge $DEADLINE_SECS ]; then
-        if [ "$MODE" = "operator-bundle" ]; then
-            want_pattern="$BUNDLE_SUCCESS_PATTERN"
-        else
-            want_pattern="$SUCCESS_PATTERN"
-        fi
-        echo "[coldstart] TIMEOUT after ${elapsed}s — no '$want_pattern' in node.log"
+        echo "[coldstart] TIMEOUT after ${elapsed}s — '$want_pattern' not observed within deadline"
         echo "[coldstart] last 40 log lines:"
         tail -40 "$LOG" || true
         exit 1
@@ -200,7 +224,6 @@ while :; do
     fi
 
     if [ "$MODE" = "operator-bundle" ]; then
-        hit=$(grep -am1 -F -- "$BUNDLE_SUCCESS_PATTERN" "$LOG" 2>/dev/null || true)
         if [ -n "$hit" ]; then
             count=$(echo "$hit" | sed -n 's/.*count=\([0-9]*\).*/\1/p')
             count="${count:-0}"
@@ -213,7 +236,6 @@ while :; do
             exit 1
         fi
     else
-        hit=$(grep -am1 -F -- "$SUCCESS_PATTERN" "$LOG" 2>/dev/null || true)
         if [ -n "$hit" ]; then
         # Parse UTXO count from the log line. Format:
         #   "[boot] snapshot-first import OK: 1339612 UTXOs at h=3117754 ..."

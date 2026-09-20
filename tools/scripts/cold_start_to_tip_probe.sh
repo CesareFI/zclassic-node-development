@@ -99,11 +99,7 @@ boots=1
 declare -a LOAD_ARGS=()
 
 # shellcheck source=tools/scripts/stopwatch_json_lib.sh
-. "$REPO_ROOT/tools/scripts/stopwatch_json_lib.sh"  # json_escape
-
-json_string() {
-    printf '"%s"' "$(json_escape "$1")"
-}
+. "$REPO_ROOT/tools/scripts/stopwatch_json_lib.sh"  # json_escape/json_string
 
 json_number_or_null() {
     case "${1:-}" in
@@ -118,6 +114,17 @@ json_bool() {
     else
         printf 'false'
     fi
+}
+
+# Fixed getblockchaininfo fields, not a general JSON parser. Require the whole
+# integer token so decimals/exponents cannot be mistaken for a captured tip.
+# Reset both outputs on every poll; no child processes on the observation path.
+parse_tip_heights() {
+    local blocks_pattern='"blocks"[[:space:]]*:[[:space:]]*(-?[0-9]+)[[:space:]]*[,}]'
+    local headers_pattern='"headers"[[:space:]]*:[[:space:]]*(-?[0-9]+)[[:space:]]*[,}]'
+    h='' hdr=''
+    if [[ "$bci" =~ $blocks_pattern ]]; then h="${BASH_REMATCH[1]}"; fi
+    if [[ "$bci" =~ $headers_pattern ]]; then hdr="${BASH_REMATCH[1]}"; fi
 }
 
 write_artifact() {
@@ -205,14 +212,24 @@ copy_fixture() {
     cp --reflink=auto "$src" "$dst" 2>/dev/null || cp "$src" "$dst"
 }
 
+# Size and epoch mtime select fixtures; the remaining change stamp lets the
+# log observer reuse a miss. BSD's seconds-only fallback cannot establish that
+# a same-size rewrite is unchanged, so it explicitly disables that cache.
+probe_file_metadata() {
+    stopwatch_file_metadata "$1"
+}
+
 select_newest_bundle_snapshot() {
+    local metadata stamp
     newest_mtime=0
     newest_path=""
     for cand in "${BUNDLE_SNAP_CANDIDATES[@]}"; do
         [ -f "$cand" ] || continue
-        size=$(stat -c %s "$cand" 2>/dev/null || echo 0)
+        # Read size and mtime together: one metadata process per candidate,
+        # with both fields describing the same observation of the file.
+        metadata=$(probe_file_metadata "$cand") || continue
+        read -r size mt stamp <<< "$metadata"
         [ "$size" -gt $((10*1024*1024)) ] || continue
-        mt=$(stat -c %Y "$cand" 2>/dev/null || echo 0)
         if [ "$mt" -ge "$newest_mtime" ]; then
             newest_mtime="$mt"
             newest_path="$cand"
@@ -221,8 +238,9 @@ select_newest_bundle_snapshot() {
     printf '%s' "$newest_path"
 }
 
-# Parse height out of a canonical "consensus-state-bundle-<N>.sqlite" name,
-# or -1 for any other name. Numeric, not lexicographic (unpadded heights
+# Assign height from a canonical "consensus-state-bundle-<N>.sqlite" name
+# to the variable named by $2, or -1 for any other name. Avoid a subshell
+# per retained bundle. Numeric, not lexicographic (unpadded heights
 # lex-mis-sort: "...-9.sqlite" > "...-3056758.sqlite").
 consensus_bundle_height() {
     local name="$1"
@@ -232,11 +250,11 @@ consensus_bundle_height() {
             n="${name#consensus-state-bundle-}"
             n="${n%.sqlite}"
             case "$n" in
-                ''|*[!0-9]*) printf '%s' '-1' ;;
-                *) printf '%s' "$n" ;;
+                ''|*[!0-9]*) printf -v "$2" '%s' '-1' ;;
+                *) printf -v "$2" '%s' "$n" ;;
             esac
             ;;
-        *) printf '%s' '-1' ;;
+        *) printf -v "$2" '%s' '-1' ;;
     esac
 }
 
@@ -251,10 +269,10 @@ select_newest_consensus_bundle() {
             *) continue ;;
         esac
         [ -e "${cand}.failed" ] && continue
-        size=$(stat -c %s "$cand" 2>/dev/null || echo 0)
-        [ "$size" -gt $((10*1024*1024)) ] || continue
-        name="$(basename -- "$cand")"
-        h="$(consensus_bundle_height "$name")"
+        # The .sqlite suffix excludes trailing slashes; strip the directory
+        # in-process instead of spawning basename for each retained bundle.
+        name="${cand##*/}"
+        consensus_bundle_height "$name" h
         take=0
         if [ -z "$newest_path" ]; then
             take=1
@@ -264,6 +282,11 @@ select_newest_consensus_bundle() {
             take=1
         fi
         if [ "$take" = 1 ]; then
+            # Size cannot make a lower-ranked candidate win. Inspect it only
+            # before replacing the current eligible winner; an undersized
+            # candidate must never hide a later usable bundle.
+            size=$(stat -c %s "$cand" 2>/dev/null || echo 0)
+            [ "$size" -gt $((10*1024*1024)) ] || continue
             newest_h="$h"
             newest_path="$cand"
             newest_name="$name"
@@ -323,8 +346,41 @@ read_exit_reason() {
     sed -n 's/^reason=\(.*\)$/\1/p' "$f" 2>/dev/null | tail -1
 }
 
+# Timestamp the observation after RPC returns. During IBD the call can consume
+# the remaining budget; a tip observed too late must not pass on the timestamp
+# from the start of the poll. Parsing/height acceptance stays with the caller.
+read_tip_sample() {
+    local remaining
+    bci=''
+    now=$(date +%s)
+    elapsed=$((now - start))
+    remaining=$((BUDGET - elapsed))
+    [ "$remaining" -gt 0 ] || return 1
+    # A stalled RPC must not hold the stopwatch beyond its remaining budget.
+    # Bound termination too, if the client ignores TERM. A timed-out response
+    # is discarded just like any other failed observation.
+    if ! bci="$(ZCL_DATADIR="$DATADIR" ZCL_RPCPORT="$RPC" \
+        timeout --kill-after=1 "$remaining" "$RPC_BIN" getblockchaininfo 2>/dev/null)"; then
+        # Failed commands can leave tip-looking partial output. Keep polling,
+        # but never promote those bytes to a successful timed observation.
+        bci=''
+        echo "c3-probe: getblockchaininfo failed; discarding observation" >&2
+    fi
+    now=$(date +%s)
+    elapsed=$((now - start))
+    [ "$elapsed" -lt "$BUDGET" ]
+}
+
 run_selftest() {
     st_fail=0
+    # Keep the trial deadline covered by the existing hermetic probe gate.
+    bash "$REPO_ROOT/tools/scripts/cold_start_poll_deadline_selftest.sh" || st_fail=1
+    bash "$REPO_ROOT/tools/scripts/cold_start_artifact_quote_selftest.sh" || st_fail=1
+    bash "$REPO_ROOT/tools/scripts/cold_start_peer_tip_selftest.sh" || st_fail=1
+    bash "$REPO_ROOT/tools/scripts/cold_start_bundle_rank_selftest.sh" || st_fail=1
+    bash "$REPO_ROOT/tools/scripts/cold_start_rpc_status_selftest.sh" || st_fail=1
+    bash "$REPO_ROOT/tools/scripts/cold_start_rpc_budget_selftest.sh" || st_fail=1
+    bash "$REPO_ROOT/tools/scripts/cold_start_tip_heights_selftest.sh" || st_fail=1
     st_dir="$(mktemp -d /tmp/zcl-c3-probe-st.XXXXXX)" || {
         echo "c3-probe: --selftest FAIL: mktemp" >&2
         exit 1
@@ -420,6 +476,33 @@ run_selftest() {
     drop_file_peer_for_staged_header_seed >/dev/null
     st_check "empty FILE_PEER stays empty" "" "$FILE_PEER"
 
+    # Exercise the real RPC/timestamp boundary with a deterministic clock.
+    # Function overrides stay in a subshell; no node or socket is involved.
+    (
+        start=100 BUDGET=500 DATADIR="$st_dir" RPC=39071 RPC_BIN=st_rpc
+        st_reply='{"blocks":3200000,"headers":3200000}'
+        date() { cat "$st_dir/clock"; }
+        # Virtual-clock RPC double; real timeout behavior has its own fixture.
+        timeout() { shift 2; "$@"; }
+        st_rpc() {
+            printf '%s\n' "$st_arrival" >"$st_dir/clock"
+            printf '%s\n' "$st_reply"
+        }
+        for st_arrival in 599 600 601; do
+            printf '598\n' >"$st_dir/clock"
+            st_rc=0
+            read_tip_sample || st_rc=$?
+            st_expected=1
+            [ "$st_arrival" -lt 600 ] && st_expected=0
+            st_check "RPC arrival $st_arrival budget decision" "$st_expected" "$st_rc"
+            st_check "RPC arrival $st_arrival elapsed includes RPC" \
+                "$((st_arrival - start))" "$elapsed"
+            st_check "RPC reply retained for height checks" "$st_reply" "$bci"
+        done
+        exit "$st_fail"
+    ) || st_fail=1
+    bash "$REPO_ROOT/tools/scripts/cold_start_seed_scan_selftest.sh" || st_fail=1
+    bash "$REPO_ROOT/tools/scripts/cold_start_seed_idle_selftest.sh" || st_fail=1
     rm -rf "$st_dir"
     if [ "$st_fail" != 0 ]; then
         echo "c3-probe: --selftest FAIL" >&2
@@ -468,8 +551,14 @@ if [ -n "$FILE_PEER" ]; then
 fi
 
 # Reference peer tip (the target). zclassicd has no params on getblockcount.
-PEER_TIP="$(ZCL_DATADIR="$TIP_DATADIR" ZCL_RPCPORT="$PEER_RPC" "$RPC_BIN" getblockcount 2>/dev/null \
-            | sed -E 's/.*"result":(-?[0-9]+).*/\1/')"
+# This preflight precedes the trial clock, so give it its own finite allowance.
+# Refuse failed/partial replies before extracting a height, including when the
+# client ignores TERM. Only a successful reference observation starts a trial.
+if ! PEER_TIP="$(ZCL_DATADIR="$TIP_DATADIR" ZCL_RPCPORT="$PEER_RPC" \
+    timeout --kill-after=1 5 "$RPC_BIN" getblockcount 2>/dev/null)"; then
+    skip "tip source ($PEER_RPC) getblockcount failed or exceeded 5s preflight budget"
+fi
+PEER_TIP="$(printf '%s' "$PEER_TIP" | sed -E 's/.*"result":(-?[0-9]+).*/\1/')"
 printf '%s' "$PEER_TIP" | grep -qE '^[0-9]+$' || skip "tip source ($PEER_RPC) not answering getblockcount"
 [ "$PEER_TIP" -gt 1000000 ] || skip "reference peer tip implausibly low ($PEER_TIP)"
 
@@ -583,27 +672,53 @@ mark_seeded() {
 
 note_seed_ready() {
     [ "$seeded" = 0 ] || return 0
+    if [ "$MODE" = "consensus-state-bundle" ] &&
+       [ -f "$DATADIR/$CONSENSUS_BUNDLE_MARKER" ]; then
+        mark_seeded
+        echo "c3-probe: seed authority ready — consensus-state-bundle installed"
+        return 0
+    fi
+    case "$MODE" in operator-bundle|consensus-state-bundle) ;; *) return 0 ;; esac
+    # A quiet startup log needs no repeated full scan. Include inode, extent
+    # and both nanosecond timestamps so replacement, truncation and in-place
+    # rewrites invalidate a miss. Observe metadata BEFORE scanning: concurrent
+    # appends must remain eligible for the next poll. Metadata/read failures
+    # never establish a reusable miss, and the install marker is checked first.
+    local signature='' scan_status=0
+    # Fixture metadata does not dereference symlinks; scan linked logs every
+    # time rather than mistaking link metadata for the target's change stamp.
+    if [ ! -L "$DATADIR/probe.log" ]; then
+        signature=$(probe_file_metadata "$DATADIR/probe.log") || signature=''
+    fi
+    case "$signature" in *' unavailable') signature='' ;; esac
+    if [ -n "$signature" ]; then
+        signature="$MODE:$DATADIR:$signature"
+        [ "$signature" != "${seed_log_signature:-}" ] || return 0
+    fi
+    seed_log_signature=''
     if [ "$MODE" = "operator-bundle" ]; then
-        seed_hit=$(grep -am1 -F -- "$BUNDLE_SUCCESS_PATTERN" "$DATADIR/probe.log" 2>/dev/null || true)
+        seed_hit=$(grep -am1 -F -- "$BUNDLE_SUCCESS_PATTERN" "$DATADIR/probe.log" 2>/dev/null) || scan_status=$?
         if [ -n "$seed_hit" ]; then
             mark_seeded
             echo "c3-probe: seed authority ready — $seed_hit"
         fi
     elif [ "$MODE" = "consensus-state-bundle" ]; then
-        if [ -f "$DATADIR/$CONSENSUS_BUNDLE_MARKER" ] ||
-           grep -aq -F -- "$CONSENSUS_BUNDLE_SUCCESS_PATTERN" "$DATADIR/probe.log" 2>/dev/null ||
-           grep -aq -F -- "$CONSENSUS_BUNDLE_REQUEST_PATTERN" "$DATADIR/probe.log" 2>/dev/null; then
+        if grep -aq -F -e "$CONSENSUS_BUNDLE_SUCCESS_PATTERN" \
+               -e "$CONSENSUS_BUNDLE_REQUEST_PATTERN" -- "$DATADIR/probe.log" 2>/dev/null; then
             mark_seeded
             echo "c3-probe: seed authority ready — consensus-state-bundle installed"
+        else
+            scan_status=$?
         fi
     fi
+    if [ "$scan_status" = 1 ]; then seed_log_signature=$signature; fi
 }
 
 echo "c3-probe: booting fresh node mode=$MODE (seed authority -> delta sync from $PEER) ..."
 : >"$DATADIR/probe.log"
+start=$(date +%s)
 launch_node
 
-start=$(date +%s)
 reached=0
 while :; do
     now=$(date +%s); elapsed=$((now - start))
@@ -624,14 +739,13 @@ while :; do
     # getblockchaininfo is param-free and reports both blocks (connected tip)
     # and headers (header chain) — at_tip = both >= peer tip AND blocks==headers.
     note_seed_ready
-    bci="$(ZCL_DATADIR="$DATADIR" ZCL_RPCPORT="$RPC" "$RPC_BIN" getblockchaininfo 2>/dev/null)"
-    h="$(printf '%s' "$bci"   | sed -E 's/.*"blocks":(-?[0-9]+).*/\1/')"
-    hdr="$(printf '%s' "$bci" | sed -E 's/.*"headers":(-?[0-9]+).*/\1/')"
-    if printf '%s' "$h" | grep -qE '^[0-9]+$'; then
+    read_tip_sample || break
+    parse_tip_heights
+    if [[ "$h" =~ ^[0-9]+$ ]]; then
         last_hdr="${hdr:-?}"
         [ "$h" != "$last_h" ] && { echo "c3-probe: t=${elapsed}s blocks=$h headers=${hdr:-?}"; last_h="$h"; }
         [ "$h" -ge 1000000 ] && mark_seeded
-        if [ "$h" -ge "$PEER_TIP" ] && printf '%s' "$hdr" | grep -qE '^[0-9]+$' \
+        if [ "$h" -ge "$PEER_TIP" ] && [[ "$hdr" =~ ^[0-9]+$ ]] \
            && [ "$hdr" -ge "$PEER_TIP" ] && [ "$h" -eq "$hdr" ]; then
             reached=1
             echo "c3-probe: REACHED at_tip blocks=$h headers=$hdr in ${elapsed}s"
@@ -639,7 +753,13 @@ while :; do
             break
         fi
     fi
-    sleep 5
+    # Observation work consumes the same trial budget. Retain the five-second
+    # cadence while it fits, but never add a full interval at the deadline.
+    now=$(date +%s)
+    remaining=$((BUDGET - (now - start)))
+    [ "$remaining" -le 0 ] && break
+    [ "$remaining" -gt 5 ] && remaining=5
+    sleep "$remaining"
 done
 
 if [ "$reached" = 1 ]; then

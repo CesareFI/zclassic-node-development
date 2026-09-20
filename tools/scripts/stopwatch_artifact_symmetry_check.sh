@@ -105,8 +105,24 @@ pj_top_keys() { grep -oE '^  "[a-z_0-9]+":' "$1" 2>/dev/null | tr -d ' ":' | sor
 # pj_scalar <proof.json> <key> — the first top-level scalar value of <key>,
 # unquoted, or empty.
 pj_scalar() {
-    grep -oE "\"$2\"[[:space:]]*:[[:space:]]*(\"[^\"]*\"|-?[0-9]+|true|false|null)" "$1" 2>/dev/null |
-        head -1 | sed -E "s/^\"$2\"[[:space:]]*:[[:space:]]*//; s/^\"//; s/\"$//"
+    # Keys are fixed emitter identifiers. One reader avoids per-field pipeline
+    # processes and grep's broken pipe on long artifacts after the first match.
+    # Preserve the existing scalar policy; string escapes remain undecoded.
+    awk -v key="$2" '
+        BEGIN {
+            prefix = "\"" key "\"[[:space:]]*:[[:space:]]*"
+            scalar = prefix "(\"[^\"]*\"|-?[0-9]+|true|false|null)"
+        }
+        match($0, scalar) {
+            value = substr($0, RSTART, RLENGTH)
+            sub("^" prefix, "", value)
+            sub(/^"/, "", value); sub(/"$/, "", value)
+            print value
+            found = 1
+            exit
+        }
+        END { if (!found) exit 1 }
+    ' "$1" 2>/dev/null
 }
 # pj_phase_names / pj_omitted_names — the multi-valued sets, sorted.
 pj_phase_names() { pj_array_blob "$1" phases | grep -o '"phase":"[^"]*"' | sed 's/.*:"//; s/"$//' | sort; }
@@ -196,8 +212,8 @@ compare_artifacts() {  # pass_dir, nonpass_dir
     ph="$(head -1 "$pd/samples.tsv" 2>/dev/null)"; nh="$(head -1 "$nd/samples.tsv" 2>/dev/null)"
     [ -n "$ph" ] && [ "$ph" = "$nh" ]
     ck "both artifacts carry samples.tsv with an identical header row" $?
-    [ "$(awk 'NR>1' "$pd/samples.tsv" 2>/dev/null | wc -l)" -gt 0 ] 2>/dev/null &&
-        [ "$(awk 'NR>1' "$nd/samples.tsv" 2>/dev/null | wc -l)" -gt 0 ] 2>/dev/null
+    samples_have_data "$pd/samples.tsv" &&
+        samples_have_data "$nd/samples.tsv"
     ck "both samples.tsv carry at least one data row (the series was actually written, not just headed)" $?
     [ "$(pj_scalar "$pp" samples_tsv)" = "samples.tsv" ] &&
         [ "$(pj_scalar "$np" samples_tsv)" = "samples.tsv" ]
@@ -347,6 +363,12 @@ run_one() {  # mode(pass|seam), root, mock_bin, header_src, params_dir  -> echoe
     printf '%s' "$root/$mode"
 }
 
+# This check claims row presence, not a row count or TSV validity. Stop as soon
+# as a data row is observed; long IBD ledgers need not be streamed in full.
+samples_have_data() {
+    awk 'NR == 2 { found = 1; exit } END { exit !found }' "$1" 2>/dev/null
+}
+
 # ── --selftest: mutation-test the comparison above ───────────────────────────
 #
 # WHY THIS MODE IS NOT OPTIONAL. A self-test in this repo was recently found
@@ -402,6 +424,8 @@ synth_pair() {
 }
 
 if [ "$SELFTEST" = "1" ]; then
+    bash "$REPO_ROOT/tools/scripts/stopwatch_scalar_selftest.sh" || exit 1
+    bash "$REPO_ROOT/tools/scripts/stopwatch_sample_presence_selftest.sh" || exit 1
     export ZCL_SYM_EXPECT_FIRST_ID="$FIRST_ID"
     ST_ROOT="$(mktemp -d /tmp/zcl-sym-selftest.XXXXXX)" || exit 1
     trap 'rm -rf "$ST_ROOT" 2>/dev/null || true' EXIT INT TERM

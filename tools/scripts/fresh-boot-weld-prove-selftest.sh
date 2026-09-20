@@ -28,6 +28,7 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT="$REPO/tools/scripts/fresh-boot-weld-prove.sh"
+bash "$REPO/tools/scripts/fresh_boot_weld_parser_selftest.sh"
 SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/zcl-fresh-boot-weld-selftest.XXXXXX")"
 chmod 700 "$SANDBOX"
 

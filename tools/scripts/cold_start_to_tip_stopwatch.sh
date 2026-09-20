@@ -320,36 +320,35 @@ case "$CLK_TCK" in ''|*[!0-9]*) CLK_TCK=100 ;; esac
 PAGE_KB=$(( $(getconf PAGESIZE 2>/dev/null || echo 4096) / 1024 ))
 [ "$PAGE_KB" -gt 0 ] 2>/dev/null || PAGE_KB=4
 
-# parse_proc_stat_cpu_ticks <contents-of-/proc/PID/stat> — utime+stime in clock
-# ticks, or -1. PURE (no /proc access) so --selftest can exercise it on a canned
-# fixture. Field 2 (comm) is parenthesized and MAY CONTAIN SPACES AND
-# PARENTHESES, so a naive $14/$15 read is wrong; everything is indexed from
+# parse_proc_stat_counters <contents-of-/proc/PID/stat> — CPU ticks and RSS
+# pages, each independently -1 when unavailable. PURE (no /proc access).
+# Parse both counters with shell builtins. Field 2 (comm) may contain
+# spaces and parentheses, so a naive $14/$15 read is wrong; everything is indexed from
 # after the LAST ')' instead, which is what proc(5) itself prescribes. With that
-# split, utime is field 12 and stime field 13.
-parse_proc_stat_cpu_ticks() {
-    printf '%s' "${1:-}" | awk '
-        { i = index($0, ")"); last = 0
-          while (i > 0) { last += i; rest = substr($0, last + 1); i = index(rest, ")") }
-          if (last == 0) { print -1; exit }
-          n = split(substr($0, last + 2), f, /[ \t]+/)
-          if (n < 13) { print -1; exit }
-          if (f[12] !~ /^[0-9]+$/ || f[13] !~ /^[0-9]+$/) { print -1; exit }
-          print f[12] + f[13] }
-        END { if (NR == 0) print -1 }'
-}
-
-# parse_proc_stat_rss_pages <contents-of-/proc/PID/stat> — the rss field in
-# pages, or -1. Same after-the-last-')' indexing as above; rss is field 22
-# there. PURE.
-parse_proc_stat_rss_pages() {
-    printf '%s' "${1:-}" | awk '
-        { i = index($0, ")"); last = 0
-          while (i > 0) { last += i; rest = substr($0, last + 1); i = index(rest, ")") }
-          if (last == 0) { print -1; exit }
-          n = split(substr($0, last + 2), f, /[ \t]+/)
-          if (n < 22 || f[22] !~ /^[0-9]+$/) { print -1; exit }
-          print f[22] }
-        END { if (NR == 0) print -1 }'
+# split, utime is field 12, stime field 13 and RSS field 22.
+parse_proc_stat_counters() {
+    local record=${1:-} cpu=0 rss=-1 ticks LC_ALL=C
+    local -a fields=()
+    if [[ $record != *')'* ]]; then
+        printf '%s\n' '-1 -1'
+        return 0
+    fi
+    IFS=$' \t' read -r -a fields <<< "${record##*)}"
+    for ticks in "${fields[11]:-}" "${fields[12]:-}"; do
+        if [[ ! $ticks =~ ^[0-9]+$ ]]; then cpu=-1; break; fi
+        # Normalize decimal text before arithmetic (leading zeros are not
+        # octal), and refuse overflow instead of wrapping a counter.
+        ticks=${ticks#"${ticks%%[!0]*}"}
+        ticks=${ticks:-0}
+        if (( ${#ticks} > 19 )) ||
+           { (( ${#ticks} == 19 )) && [[ $ticks > 9223372036854775807 ]]; }; then
+            cpu=-1; break
+        fi
+        if (( ticks > 9223372036854775807 - cpu )); then cpu=-1; break; fi
+        cpu=$((cpu + ticks))
+    done
+    if [[ ${fields[21]:-} =~ ^[0-9]+$ ]]; then rss=${fields[21]}; fi
+    printf '%s %s\n' "$cpu" "$rss"
 }
 
 # parse_proc_io_field <contents-of-/proc/PID/io> <key> — the integer value of
@@ -358,9 +357,16 @@ parse_proc_stat_rss_pages() {
 # what "disk" means for a fold-cost baseline — rchar/wchar would also count
 # page-cache hits.
 parse_proc_io_field() {
-    printf '%s\n' "${1:-}" | awk -v k="${2:-}" '
-        $1 == k ":" && $2 ~ /^[0-9]+$/ { print $2; found = 1; exit }
-        END { if (!found) print -1 }'
+    # The kernel counters are already in memory. Read their exact decimal
+    # text without launching a parser for each of the two fields per poll.
+    local key value rest
+    while IFS=$' \t' read -r key value rest; do
+        [ "$key" = "${2:-}:" ] || continue
+        case "$value" in ''|*[!0-9]*) continue ;; esac
+        printf '%s\n' "$value"
+        return 0
+    done <<< "${1:-}"
+    printf '%s\n' -1
 }
 
 # refresh_process_counters — read the watched PID's cumulative CPU/RSS/disk
@@ -373,13 +379,12 @@ refresh_process_counters() {
     local statline ioblob ticks pages
     statline="$(cat "/proc/$PID/stat" 2>/dev/null)"
     if [ -n "$statline" ]; then
-        ticks="$(parse_proc_stat_cpu_ticks "$statline")"
+        IFS=' ' read -r ticks pages <<< "$(parse_proc_stat_counters "$statline")"
         if [ "$ticks" != "-1" ]; then
             # Two decimals of CPU seconds without floating-point shell math.
             LAST_CPU_SECONDS="$(( ticks * 100 / CLK_TCK ))"
             LAST_CPU_SECONDS="$(( LAST_CPU_SECONDS / 100 )).$(printf '%02d' "$(( LAST_CPU_SECONDS % 100 ))")"
         fi
-        pages="$(parse_proc_stat_rss_pages "$statline")"
         [ "$pages" != "-1" ] && LAST_RSS_KB="$(( pages * PAGE_KB ))"
     fi
     ioblob="$(cat "/proc/$PID/io" 2>/dev/null)"
@@ -421,41 +426,51 @@ bytes_reading_from_json() {
     printf '%s' "$v"
 }
 
-# boot_count_from_log <node.log> — count actual node boots, including an
+# boot_observation_from_log <node.log> — count actual node boots, including an
 # in-process execv self-respawn that retains its PID.  boot.c emits exactly one
 # top-level prologue marker per boot; use the same strict marker shape as the
-# phases[] parser so prose containing "[boot]" cannot mint a boot.
-boot_count_from_log() {
-    [ -n "${1:-}" ] && [ -r "$1" ] || { printf '%s' 0; return 0; }
+# phases[] parser so prose containing "[boot]" cannot mint a boot. Emit the
+# count and latest matching self-respawn breadcrumb together, so each sample
+# reads the growing log only once. The caller applies the existing classifier.
+boot_observation_from_log() {
+    [ -n "${1:-}" ] && [ -r "$1" ] || { printf '0\n'; return 0; }
     awk '
         /^\[boot\] prologue[[:space:]]+[0-9]+ms$/ { n++ }
-        END { print n + 0 }
+        /exit-reason breadcrumb written: reason=self_respawn_[a-z_]*$/ {
+            reason = $0
+            sub(/^.*exit-reason breadcrumb written: reason=/, "", reason)
+        }
+        END { printf "%d %s\n", n + 0, reason }
     ' "$1" 2>/dev/null
-}
-
-# last_self_respawn_from_log <node.log> — recover the last durable self-respawn
-# reason even when execv retained the PID and the harness therefore never read
-# the exit breadcrumb.  Only the closed set accepted by is_self_respawn_reason
-# is returned.
-last_self_respawn_from_log() {
-    [ -n "${1:-}" ] && [ -r "$1" ] || return 0
-    local reason
-    reason="$(sed -n 's/^.*exit-reason breadcrumb written: reason=\(self_respawn_[a-z_]*\)$/\1/p' "$1" 2>/dev/null | tail -1)"
-    is_self_respawn_reason "$reason" && printf '%s' "$reason"
-    return 0
 }
 
 # refresh_boot_observation — make the node's own boot markers authoritative
 # for evidence.  PID liveness alone cannot see execv, yet per-process node
 # counters such as download_bytes_received reset on that path.
 refresh_boot_observation() {
-    local observed reason log="${DATADIR:-}/node.log"
-    [ -n "${DATADIR:-}" ] && [ -s "$log" ] || return 0
-    observed="$(boot_count_from_log "$log")"
+    local observed="" reason="" log="${DATADIR:-}/node.log"
+    [ -n "${DATADIR:-}" ] && [ -s "$log" ] && [ -r "$log" ] || return 0
+    # A quiet IBD log needs no repeated full scan. Sample identity before
+    # reading so an append during the scan invalidates the next observation.
+    # Coarse metadata, symlinks and failed reads never establish a cache entry.
+    local signature='' observation=''
+    if [ ! -L "$log" ]; then
+        signature=$(stopwatch_file_metadata "$log" 2>/dev/null) || signature=''
+    fi
+    case "$signature" in *' unavailable') signature='' ;; esac
+    [ -z "$signature" ] || signature="$log:$signature"
+    if [ -n "$signature" ] && [ "$signature" = "${boot_log_signature:-}" ]; then
+        observation=${boot_log_observation:-}
+    else
+        boot_log_signature=''
+        observation=$(boot_observation_from_log "$log") || return 0
+        boot_log_observation=$observation
+        boot_log_signature=$signature
+    fi
+    read -r observed reason <<< "$observation" || true
     case "$observed" in ''|*[!0-9]*) observed=0 ;; esac
     [ "$observed" -gt "$boots" ] 2>/dev/null && boots="$observed"
-    reason="$(last_self_respawn_from_log "$log")"
-    [ -n "$reason" ] && last_respawn_reason="$reason"
+    is_self_respawn_reason "$reason" && last_respawn_reason="$reason"
     return 0
 }
 
@@ -847,38 +862,54 @@ phase_state_init
 # joined across two different peers. The closing-quote anchor is what keeps
 # "advertised_height" from matching "advertised_height_trusted".
 pl_handshake_unix() {
-    printf '%s' "${1:-}" | tr '{' '\n' | awk -v need="${2:-1}" '
+    # Split each line inside awk; retain peer and newline boundaries without tr.
+    awk -F '{' -v need="${2:-1}" '
         BEGIN { best = -1 }
-        /"peer_id"/ {
-            hc = -1; ah = -1
-            if (match($0, /"handshake_complete_at"[ \t]*:[ \t]*-?[0-9]+/)) {
-                s = substr($0, RSTART, RLENGTH); sub(/.*:[ \t]*/, "", s); hc = s + 0
+        {
+            for (i = 1; i <= NF; i++) {
+                if ($i !~ /"peer_id"/) continue
+                hc = -1; ah = -1
+                if (match($i, /"handshake_complete_at"[ \t]*:[ \t]*-?[0-9]+/)) {
+                    s = substr($i, RSTART, RLENGTH); sub(/.*:[ \t]*/, "", s); hc = s + 0
+                }
+                if (match($i, /"advertised_height"[ \t]*:[ \t]*-?[0-9]+/)) {
+                    s = substr($i, RSTART, RLENGTH); sub(/.*:[ \t]*/, "", s); ah = s + 0
+                }
+                if (hc <= 0) continue
+                if (need == 1 && ah <= 0) continue
+                if (best < 0 || hc < best) best = hc
             }
-            if (match($0, /"advertised_height"[ \t]*:[ \t]*-?[0-9]+/)) {
-                s = substr($0, RSTART, RLENGTH); sub(/.*:[ \t]*/, "", s); ah = s + 0
-            }
-            if (hc <= 0) next
-            if (need == 1 && ah <= 0) next
-            if (best < 0 || hc < best) best = hc
         }
-        END { print best + 0 }' 2>/dev/null
+        END { print best + 0 }' <<< "${1:-}" 2>/dev/null
 }
 
-# frontier_stage_cursor <reducer_frontier-json> <stage> — the `cursor` of one
-# named element of the frontier's stage_cursors[] array, or -1. A fresh node
+# frontier_stage_cursor <reducer_frontier-json> <stage> [second-stage] — the
+# requested stage cursors, space-separated, each independently -1 if absent.
+# Read both phase cursors in one pass over the same captured response. A fresh node
 # reports header_admit cursor=1 with admitted_total=0, so "a header was
 # admitted" is cursor>1, never cursor>0. Splitting on '{' isolates each element
 # so `stage` and `cursor` can never be read off two different stages.
 frontier_stage_cursor() {
-    printf '%s' "${1:-}" | tr '{' '\n' | awk -v st="${2:-}" '
-        BEGIN { v = -1 }
+    # Split braces within each line in awk instead of launching tr for every
+    # cursor. Keep the existing compact-record and last-matching-record policy.
+    awk -F '{' -v st="${2:-}" -v second="${3:-}" '
+        BEGIN { v = -1; v2 = -1 }
         {
-            if (index($0, "\"stage\":\"" st "\"") == 0) next
-            if (match($0, /"cursor"[ \t]*:[ \t]*-?[0-9]+/)) {
-                s = substr($0, RSTART, RLENGTH); sub(/.*:[ \t]*/, "", s); v = s + 0
+            for (i = 1; i <= NF; i++) {
+                first_match = index($i, "\"stage\":\"" st "\"") != 0
+                second_match = second != "" && index($i, "\"stage\":\"" second "\"") != 0
+                if (!first_match && !second_match) continue
+                if (match($i, /"cursor"[ \t]*:[ \t]*-?[0-9]+/)) {
+                    s = substr($i, RSTART, RLENGTH); sub(/.*:[ \t]*/, "", s)
+                    if (first_match) v = s + 0
+                    if (second_match) v2 = s + 0
+                }
             }
         }
-        END { print v + 0 }' 2>/dev/null
+        END {
+            if (second == "") print v + 0
+            else print (v + 0) " " (v2 + 0)
+        }' <<< "${1:-}" 2>/dev/null
 }
 
 # jnum <json> <key> — jget with a -1 never-read sentinel instead of an empty
@@ -889,28 +920,37 @@ jnum() {
     case "$v" in ''|*[!0-9-]*) printf '%s' -1 ;; *) printf '%s' "$v" ;; esac
 }
 
-# rsp_cum <reducer_stage_profile-json> <domain> <key> — one CUMULATIVE-since-boot
+# rsp_cum <reducer_stage_profile-json> [<domain> <key>] — CUMULATIVE-since-boot
 # counter out of `dumpstate reducer_stage_profile`, or -1 when it is absent or
 # JSON null. The read is SCOPED to the domain's "cumulative" object and stops at
 # its "last_batch" sibling: unscoped, a null cumulative value would silently
 # fall through to the last_batch reading of the same key and report a
 # single-batch number as a lifetime total. (last_batch is reset on every stage
 # batch generation rollover; only cumulative is safe to difference.)
+# Without a domain/key, emit the three snapshot-index counters together:
+# body_persist total_us, body_persist blocks, script_validate total_us.
+# A boundary needs all three from the same document; parse it in one process.
 rsp_cum() {
-    printf '%s' "${1:-}" | awk -v st="${2:-}" -v k="${3:-}" '
-        {
+    awk -v st="${2:-}" -v k="${3:-}" '
+        function counter(st, k, i, rest, j, s) {
             i = index($0, "\"" st "\":{\"cumulative\":{")
-            if (i == 0) { print -1; exit }
+            if (i == 0) return -1
             rest = substr($0, i)
             j = index(rest, "\"last_batch\"")
             if (j > 1) rest = substr(rest, 1, j - 1)
             if (match(rest, "\"" k "\"[ \t]*:[ \t]*-?[0-9]+")) {
                 s = substr(rest, RSTART, RLENGTH); sub(/.*:[ \t]*/, "", s)
-                print s + 0; exit
+                return s + 0
             }
-            print -1; exit
+            return -1
         }
-        END { if (NR == 0) print -1 }' 2>/dev/null
+        {
+            if (st != "") print counter(st, k)
+            else print counter("body_persist", "total_us"),
+                       counter("body_persist", "blocks"),
+                       counter("script_validate", "total_us")
+            exit
+        }' <<< "${1:-}" 2>/dev/null
 }
 
 # phase_boundaries_tsv_init — the durable boundary log, armed BEFORE the first
@@ -944,9 +984,7 @@ phase_profile_snapshot() {
     [ -n "$doc" ] || return 0
     f="$PHASE_PROFILE_DIR/$label.json"
     printf '%s\n' "$doc" >"$f" 2>/dev/null || return 0
-    bp_us="$(rsp_cum "$doc" body_persist total_us)"
-    bp_blocks="$(rsp_cum "$doc" body_persist blocks)"
-    sv_us="$(rsp_cum "$doc" script_validate total_us)"
+    IFS=' ' read -r bp_us bp_blocks sv_us <<< "$(rsp_cum "$doc")"
     [ -n "$PHASE_PROFILE_INDEX_ROWS" ] && PHASE_PROFILE_INDEX_ROWS="$PHASE_PROFILE_INDEX_ROWS,"
     PHASE_PROFILE_INDEX_ROWS="$PHASE_PROFILE_INDEX_ROWS{\"at\":$(json_string "$label")"
     PHASE_PROFILE_INDEX_ROWS="$PHASE_PROFILE_INDEX_ROWS,\"unix_s\":$(json_number_or_null "$at")"
@@ -1035,8 +1073,7 @@ phase_observe() {
     # The frontier's own per-stage cursors. A stage cursor is the NEXT height
     # that stage will process, so "stage has finished height H" is cursor > H,
     # and a fresh node reports 1 (genesis is 0, nothing admitted yet).
-    hdr_cursor="$(frontier_stage_cursor "$fj" header_admit)"
-    body_cursor="$(frontier_stage_cursor "$fj" body_persist)"
+    read -r hdr_cursor body_cursor <<< "$(frontier_stage_cursor "$fj" header_admit body_persist)"
 
     # ── headers ──────────────────────────────────────────────────────────
     # header_admit's cursor is PRIMARY and tip_eval_header_height is the
@@ -1209,8 +1246,11 @@ phase_rows_json() {
 phase_overlap_json() {
     local captured_at="${1:-0}" p q sum=0 d union=-1 obs=0 pairs="" ov lo hi win=-1
     local -a S=() E=()
+    local -A spans=()
     for p in $PHASE_NAMES; do
         d="$(phase_span_ms "$p")"
+        # Reuse this report's spans for each pair; avoid two shells per pair.
+        spans[$p]=$d
         if [ "$d" != "-1" ]; then
             sum=$((sum + d)); obs=$((obs + 1))
             S+=( "${PH_START[$p]}" ); E+=( "${PH_END[$p]}" )
@@ -1219,7 +1259,7 @@ phase_overlap_json() {
     for p in $PHASE_NAMES; do
         for q in $PHASE_NAMES; do
             [ "$p" \< "$q" ] || continue
-            if [ "$(phase_span_ms "$p")" = "-1" ] || [ "$(phase_span_ms "$q")" = "-1" ]; then
+            if [ "${spans[$p]}" = "-1" ] || [ "${spans[$q]}" = "-1" ]; then
                 ov=null
             else
                 hi="${PH_END[$p]}"; [ "${PH_END[$q]}" -lt "$hi" ] && hi="${PH_END[$q]}"
@@ -1434,9 +1474,22 @@ frontier_provable_sample() {
 # blocker_ids <blocker-doc> — comma-joined "id" values of a `dumpstate blocker`
 # doc (empty if none / unreadable).
 blocker_ids() {
-    printf '%s' "$1" | tr -d '\n' |
-        grep -oE '"id"[[:space:]]*:[[:space:]]*"[^"]*"' |
-        sed -E 's/.*"id"[[:space:]]*:[[:space:]]*"([^"]*)"/\1/' | paste -sd, -
+    # One parser per poll. Keep the former newline removal, ID ordering,
+    # empty fields and no-match status (the caller displays a dash).
+    awk '
+        { doc = doc $0 }
+        END {
+            count = 0
+            while (match(doc, /"id"[[:space:]]*:[[:space:]]*"[^"]*"/)) {
+                id = substr(doc, RSTART, RLENGTH)
+                doc = substr(doc, RSTART + RLENGTH)
+                sub(/^"id"[[:space:]]*:[[:space:]]*"/, "", id)
+                if (count++) printf ","
+                printf "%s", substr(id, 1, length(id) - 1)
+            }
+            printf "\n"
+            if (!count) exit 1
+        }' <<< "$1"
 }
 
 # classify_final_verdict — the PURE end-of-run decision, factored out of the
@@ -1582,9 +1635,22 @@ peer_prechecks_json() {
 
 # --selftest: hermetic classification self-check for is_busy_response() /
 # the "hstar" field detector rpc_frontier() uses — canned JSON fixtures,
-# no binary/network/mktemp touched. Exits before any real infra setup.
+# local temporary fixtures only. Exits before any real infra setup.
 if [ "$SELFTEST" = "1" ]; then
-    st_fail=0
+    st_fail=0; bash "$REPO_ROOT/tools/scripts/stopwatch_frontier_read_selftest.sh" || st_fail=1
+    bash "$REPO_ROOT/tools/scripts/stopwatch_boot_idle_selftest.sh" || st_fail=1
+    bash "$REPO_ROOT/tools/scripts/stopwatch_boot_scan_selftest.sh" || st_fail=1
+    bash "$REPO_ROOT/tools/scripts/stopwatch_park_log_selftest.sh" || st_fail=1
+    bash "$REPO_ROOT/tools/scripts/stopwatch_park_cache_selftest.sh" || st_fail=1
+    bash "$REPO_ROOT/tools/scripts/stopwatch_stage_cursor_selftest.sh" || st_fail=1
+    bash "$REPO_ROOT/tools/scripts/stopwatch_stage_pair_selftest.sh" || st_fail=1
+    bash "$REPO_ROOT/tools/scripts/stopwatch_phase_profile_selftest.sh" || st_fail=1
+    bash "$REPO_ROOT/tools/scripts/stopwatch_handshake_selftest.sh" || st_fail=1
+    bash "$REPO_ROOT/tools/scripts/stopwatch_blocker_ids_selftest.sh" || st_fail=1
+    bash "$REPO_ROOT/tools/scripts/stopwatch_io_counter_selftest.sh" || st_fail=1
+    bash "$REPO_ROOT/tools/scripts/stopwatch_proc_stat_selftest.sh" || st_fail=1
+    bash "$REPO_ROOT/tools/scripts/stopwatch_json_selftest.sh" || st_fail=1
+    bash "$REPO_ROOT/tools/scripts/stopwatch_busy_selftest.sh" || st_fail=1
     st_check() {  # desc, expect_rc, actual_rc
         if [ "$3" = "$2" ]; then
             echo "  ok: $1"
@@ -1627,13 +1693,11 @@ if [ "$SELFTEST" = "1" ]; then
             st_fail=1
         fi
     }
-    st_ps_check "boot evidence: in-process execv is counted from exact prologue markers" \
-        2 "$(printf '%s\n' "$st_boot_log" | boot_count_from_log /dev/stdin)"
-    st_ps_check "boot evidence: the durable in-process respawn reason is recovered" \
-        self_respawn_tip_watchdog \
-        "$(printf '%s\n' "$st_boot_log" | last_self_respawn_from_log /dev/stdin)"
+    st_ps_check "boot evidence: execv count and durable respawn reason are recovered" \
+        '2 self_respawn_tip_watchdog' \
+        "$(printf '%s\n' "$st_boot_log" | boot_observation_from_log /dev/stdin)"
     st_ps_check "boot evidence: prose resembling a marker cannot mint a boot" \
-        0 "$(printf '%s\n' '[boot] prologue took 10ms today' | boot_count_from_log /dev/stdin)"
+        '0 ' "$(printf '%s\n' '[boot] prologue took 10ms today' | boot_observation_from_log /dev/stdin)"
 
     # Provable-sample extraction: a FULL read yields the authoritative hstar; a
     # busy partial doc (no hstar) falls back to cached_provable_tip WITHOUT ever
@@ -1793,16 +1857,14 @@ if [ "$SELFTEST" = "1" ]; then
 
     # /proc parsers. The comm field is parenthesized AND may itself contain
     # spaces and parentheses, which is exactly what breaks a naive $14/$15 read
-    # — the second fixture is a process literally named ") x (y z" and both
-    # parsers must still land on the right fields.
+    # — the second fixture is a process literally named ") x (y z" and the
+    # parser must still land on the right fields.
     st_stat_plain='4242 (zclassic23) S 1 4242 4242 0 -1 4194560 900 0 3 0 731 219 0 0 20 0 12 0 55 9999 262144 0 0 0 0 0 0 0 0 0 0 0 0 0 17 3'
     st_stat_nasty='4242 () x (y z) S 1 4242 4242 0 -1 4194560 900 0 3 0 731 219 0 0 20 0 12 0 55 9999 262144 0'
-    st_ps_check "proc stat: cpu ticks are utime+stime (731+219)" 950 "$(parse_proc_stat_cpu_ticks "$st_stat_plain")"
-    st_ps_check "proc stat: a comm containing spaces AND parens does not shift the cpu fields" 950 "$(parse_proc_stat_cpu_ticks "$st_stat_nasty")"
-    st_ps_check "proc stat: rss pages read from the right field" 262144 "$(parse_proc_stat_rss_pages "$st_stat_plain")"
-    st_ps_check "proc stat: rss survives the nasty comm too" 262144 "$(parse_proc_stat_rss_pages "$st_stat_nasty")"
-    st_ps_check "proc stat: a truncated line yields -1, never a fabricated 0" -1 "$(parse_proc_stat_cpu_ticks '4242 (x) S 1 2')"
-    st_ps_check "proc stat: empty input yields -1, never 0" -1 "$(parse_proc_stat_cpu_ticks '')"
+    st_ps_check "proc stat: cpu ticks are utime+stime and RSS is pages" '950 262144' "$(parse_proc_stat_counters "$st_stat_plain")"
+    st_ps_check "proc stat: spaces AND parens in comm do not shift either counter" '950 262144' "$(parse_proc_stat_counters "$st_stat_nasty")"
+    st_ps_check "proc stat: a truncated line yields -1, never a fabricated 0" '-1 -1' "$(parse_proc_stat_counters '4242 (x) S 1 2')"
+    st_ps_check "proc stat: empty input yields -1, never 0" '-1 -1' "$(parse_proc_stat_counters '')"
     st_io_blob='rchar: 111
 wchar: 222
 read_bytes: 4096000
@@ -2858,7 +2920,7 @@ rpc_frontier() {
     local out="" best_busy="" backoff
     for backoff in 1 1 2 3 5 0; do
         out="$(rpc dumpstate reducer_frontier)"
-        if printf '%s' "$out" | grep -q '"hstar"'; then
+        if [[ "$out" == *'"hstar"'* ]]; then # No pipe/SIGPIPE on a large response.
             FRONTIER_LAST_BUSY=0
             printf '%s' "$out"
             return 0
@@ -2884,10 +2946,41 @@ rpc_frontier() {
 # names the gate on stderr into node.log ("[boot] PARKED alive-degraded at
 # gate '<name>' ... NOT crash-looping; waiting for a shutdown signal") — that
 # is the honest named-stall signal in this window, not a silent hang. Surface
-# it the same way the RPC blocker list would.
+# it the same way the RPC blocker list would. Assign the caller's variable
+# directly so reading the result does not require another command substitution.
+# The destination is an internal variable name, never log content.
 log_named_park() {
-    grep -aoE "PARKED alive-degraded at gate '[^']*'" "$DATADIR/node.log" 2>/dev/null |
-        tail -1 | sed -E "s/.*gate '([^']*)'.*/\1/"
+    local marker signature='' scan_status=0
+    printf -v "$1" '%s' ''
+    # A parked/quiet boot can leave a large log unchanged across many polls.
+    # Cache only a successful scan or a confirmed miss, bound to the path,
+    # inode, size and nanosecond modification/change timestamps. Observe the
+    # stamp BEFORE scanning so concurrent appends invalidate the next poll.
+    # The shared fixture helper names insufficient precision as unavailable;
+    # those hosts and metadata failures scan normally. A symlink's metadata
+    # cannot identify changes in its target.
+    if [ ! -L "$DATADIR/node.log" ]; then
+        signature=$(stopwatch_file_metadata "$DATADIR/node.log") || signature=''
+    fi
+    case "$signature" in *' unavailable') signature='' ;; esac
+    if [ -n "$signature" ]; then
+        signature="$DATADIR:$signature"
+        if [ "$signature" = "${LOG_PARK_SIGNATURE:-}" ]; then
+            printf -v "$1" '%s' "$LOG_PARK_VALUE"
+            return "$LOG_PARK_STATUS"
+        fi
+    fi
+    LOG_PARK_SIGNATURE=''
+    # tail drains grep under pipefail and bounds captured output to one match.
+    marker=$(grep -aoE "PARKED alive-degraded at gate '[^']*'" "$DATADIR/node.log" 2>/dev/null |
+        tail -1) || scan_status=$?
+    [ "$scan_status" -le 1 ] || return "$scan_status"
+    marker=${marker#"PARKED alive-degraded at gate '"}
+    LOG_PARK_VALUE=${marker%\'}
+    LOG_PARK_STATUS=$scan_status
+    LOG_PARK_SIGNATURE=$signature
+    printf -v "$1" '%s' "$LOG_PARK_VALUE"
+    return "$scan_status"
 }
 
 # Arm the per-tick sink BEFORE the first tick. The artifact dir is created here
@@ -2983,7 +3076,7 @@ while :; do
     bc="$(jget "$bj" active_count)";       [ -z "$bc" ] && bc="0"
     bids="$(blocker_ids "$bj")"
     [ -z "$bids" ] && bids="-"
-    park_gate="$(log_named_park)"
+    log_named_park park_gate
     if [ -n "$park_gate" ] && [ "$bc" = "0" ]; then
         bc=1; bids="boot_park:$park_gate"
     fi
@@ -3127,7 +3220,7 @@ if [ -n "$final_bc" ]; then
     final_bids="$(blocker_ids "$final_bj")"
     [ -n "$final_bids" ] && last_blocker_ids="$final_bids"
 fi
-final_park="$(log_named_park)"
+log_named_park final_park
 if [ -n "$final_park" ] && [ "${last_blocker_count:-0}" = "0" ]; then
     last_blocker_count=1; last_blocker_ids="boot_park:$final_park"
 fi

@@ -81,7 +81,17 @@ HISTORY_DIR="${ZCL_ND_HISTORY_DIR:-${HOME:-/root}/.local/state/zclassic23-netdis
 HISTORY_FILE="$HISTORY_DIR/history.jsonl"
 mkdir -p "$HISTORY_DIR"
 
-json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g; s/\r/\\r/g' | tr '\n' ' '; }
+json_escape() {
+    # Seven string fields per ledger row: avoid spawning sed/tr for each.
+    # Preserve the ledger's existing escaping and newline-to-space contract.
+    local value=$1
+    value=${value//\\/\\\\}
+    value=${value//\"/\\\"}
+    value=${value//$'\t'/\\t}
+    value=${value//$'\r'/\\r}
+    value=${value//$'\n'/ }
+    printf '%s' "$value"
+}
 json_string() { printf '"%s"' "$(json_escape "$1")"; }
 json_num_or_null() { case "${1:-}" in ''|*[!0-9-]*) printf 'null' ;; *) printf '%s' "$1" ;; esac; }
 

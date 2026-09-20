@@ -141,7 +141,7 @@ export ZCL_CS_BUDGET_SECS="${ZCL_CS_BUDGET_SECS:-600}"
 
 HISTORY_DIR="${ZCL_C3_HISTORY_DIR:-${HOME:-/root}/.local/state/zclassic23-c3-stopwatch}"
 HISTORY_FILE="$HISTORY_DIR/history.jsonl"
-mkdir -p "$HISTORY_DIR"
+# Defer history creation until after the hermetic selftest entry point below.
 
 # Serving fixture peer whose hot-table row volumes we record (read-only) for
 # the fixture-shape fields. Defaults match the dedicated zcl-stopwatch-peer
@@ -230,7 +230,7 @@ c3_result_class() {
 # the honest record (a genuinely-uncountable-under-load table), never fabricated.
 # NEVER allowed to fail the collect: wrapped so a non-zero rc is swallowed.
 count_peer_rows() {
-    local table="$1" out cnt backoff
+    local table="$1" out backoff pattern='"rows":\[\[(-?[0-9]+)'
     [ -x "$ZCL_BIN" ] || return 0
     [ -d "$PEER_DATADIR" ] || return 0
     for backoff in 1 2 3 0; do
@@ -238,14 +238,107 @@ count_peer_rows() {
                 core storage query --sql="SELECT COUNT(*) FROM $table" --format=json \
                 2>/dev/null)" || out=""
         # dbquery renders result rows as a positional array: {"rows":[[<count>]],...}
-        cnt="$(printf '%s' "$out" | tr -d ' \n' |
-               grep -oE '"rows":\[\[-?[0-9]+' | grep -oE -- '-?[0-9]+$' | head -n1)"
-        [ -n "$cnt" ] && { printf '%s' "$cnt"; return 0; }
+        # Preserve the existing space/newline normalization and first match,
+        # without four external parsing tools per attempt. Keep wide counts as
+        # text; unavailable data still takes the same bounded retry path.
+        out="${out// /}"
+        out="${out//$'\n'/}"
+        if [[ "$out" =~ $pattern ]]; then
+            printf '%s' "${BASH_REMATCH[1]}"
+            return 0
+        fi
         [ "$backoff" = 0 ] && break
         sleep "$backoff"
     done
-    printf '%s' "$cnt"
+    return 0
 }
+
+# Hermetic collector-cost checks: fake only the RPC and backoff, exercise the
+# real count_peer_rows path. No node, network, or operator history is opened.
+if [ "${1:-}" = "--selftest" ]; then
+    st_root="$(mktemp -d /tmp/zcl-c3-collector.XXXXXX)" || exit 1
+    trap 'rm -rf "$st_root"' EXIT
+    ZCL_BIN="$BASH"
+    PEER_DATADIR="$st_root"
+    st_fail=0
+    fixture_rc=0
+    fixture_retry=0
+    timeout() {
+        printf 'rpc\n' >>"$st_root/calls"
+        if [ "$fixture_retry" = 1 ] && [ "$(<"$st_root/calls")" = rpc ]; then
+            return 0
+        fi
+        printf '%s' "$fixture_reply"
+        return "$fixture_rc"
+    }
+    sleep() { printf '%s\n' "$1" >>"$st_root/backoffs"; }
+    check_count() {
+        local label="$1" expected="$2" calls="$3" backoffs="$4" got
+        : >"$st_root/calls"
+        : >"$st_root/backoffs"
+        got="$(count_peer_rows blocks)"
+        if [ "$got" = "$expected" ] &&
+           [ "$(wc -l <"$st_root/calls" | tr -d ' ')" = "$calls" ] &&
+           [ "$(tr '\n' ',' <"$st_root/backoffs")" = "$backoffs" ]; then
+            printf '  ok: %s\n' "$label"
+        else
+            printf '  FAIL: %s (count=%s)\n' "$label" >&2
+            st_fail=1
+        fi
+    }
+    fixture_reply='{"rows":[[3200000]],"ok":true}'
+    check_count 'compact reply' 3200000 1 ''
+    fixture_reply=$'{\n "rows" : [ [ 42 ] ]\n}'
+    check_count 'space/newline formatted reply' 42 1 ''
+    fixture_reply='{"rows":[[0]]}'
+    check_count 'zero is an observed count' 0 1 ''
+    fixture_reply='{"rows":[[-1]]}'
+    check_count 'signed sentinel preserved' -1 1 ''
+    fixture_reply='{"rows":[[18446744073709551615]]}'
+    check_count 'wide counter stays text' 18446744073709551615 1 ''
+    fixture_reply='{"rows":[[7]],"data":{"rows":[[8]]}}'
+    check_count 'first matching rows wins' 7 1 ''
+    fixture_reply='{"other_rows":[[9]],"rows":[[10]]}'
+    check_count 'exact field name' 10 1 ''
+    fixture_retry=1
+    check_count 'successful retry stops further RPC and backoff' 10 2 '1,'
+    fixture_retry=0
+    fixture_reply='{"rows":[[null]]}'
+    check_count 'unavailable count retains bounded retries' '' 4 '1,2,3,'
+    fixture_reply=''
+    check_count 'empty RPC reply retains bounded retries' '' 4 '1,2,3,'
+    fixture_reply='{"rows":[[99]]}'
+    fixture_rc=1
+    check_count 'failed RPC discards even numeric output' '' 4 '1,2,3,'
+    fixture_rc=0
+    ZCL_BIN="$st_root/absent"
+    check_count 'absent binary never calls RPC' '' 0 ''
+    ZCL_BIN="$BASH"
+    PEER_DATADIR="$st_root/absent"
+    check_count 'absent peer datadir never calls RPC' '' 0 ''
+    PEER_DATADIR="$st_root"
+    # RPC/backoff are shell functions above; successful parsing must need no
+    # external command. This deterministic guard avoids a flaky timing gate.
+    if [ "$(PATH=/nonexistent count_peer_rows blocks 2>/dev/null)" = 99 ]; then
+        echo '  ok: successful reply parsing needs no external tools'
+    else
+        echo '  FAIL: successful reply parsing needs external tools' >&2
+        st_fail=1
+    fi
+    # Optional timing report includes the real function's command substitutions
+    # with a shell RPC double; it does not measure node or network performance.
+    if [ "${2:-}" = "--bench" ]; then
+        timeout() { printf '%s' "$fixture_reply"; }
+        TIMEFORMAT='1000 fixture count replies: %3R seconds wall, %3U user, %3S system'
+        time for ((st_i = 0; st_i < 1000; st_i++)); do
+            count_peer_rows blocks >/dev/null
+        done
+    fi
+    [ "$st_fail" = 0 ] && echo 'selftest: PASS' || echo 'selftest: FAIL' >&2
+    exit "$st_fail"
+fi
+
+mkdir -p "$HISTORY_DIR"
 
 build_commit="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || true)"
 [ -z "$build_commit" ] && build_commit="unknown"

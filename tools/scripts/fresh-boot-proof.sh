@@ -95,7 +95,9 @@ rpc_frontier() {
   local out=""
   for _ in 1 2 3 4; do
     out="$(rpc dumpstate reducer_frontier)"
-    if printf '%s' "$out" | grep -q '"hstar"'; then
+    # Match in-process: an early-closing grep can discard a large valid
+    # observation when pipefail is inherited, adding retries and backoff.
+    if [[ "$out" == *'"hstar"'* ]]; then
       printf '%s' "$out"; return 0
     fi
     sleep 1
@@ -104,17 +106,30 @@ rpc_frontier() {
 }
 
 # Extract an integer field from a flat-ish JSON blob by key name.
+# Reader regression / observer benchmark (no node):
+#   bash tools/scripts/fresh_boot_fields_selftest.sh --bench
 jget() {
   # $1 = json, $2 = key -> prints integer value or empty
-  printf '%s' "$1" | grep -oE "\"$2\"[[:space:]]*:[[:space:]]*-?[0-9]+" | head -1 |
-    grep -oE -- '-?[0-9]+$'
+  local line pattern="\"$2\"[[:space:]]*:[[:space:]]*(-?[0-9]+)"
+  # Preserve grep's line boundaries and first match; no per-field processes.
+  while IFS= read -r line; do
+    if [[ "$line" =~ $pattern ]]; then
+      printf '%s\n' "${BASH_REMATCH[1]}"
+      return 0
+    fi
+  done <<< "$1"
+  return 1
 }
 
 # Extract the header_admit stage cursor from the frontier JSON.
 jget_header_admit() {
-  printf '%s' "$1" | tr -d '\n' |
-    grep -oE '"stage"[[:space:]]*:[[:space:]]*"header_admit"[^}]*"cursor"[[:space:]]*:[[:space:]]*-?[0-9]+' |
-    head -1 | grep -oE -- '-?[0-9]+$'
+  local json=${1//$'\n'/}
+  local pattern='"stage"[[:space:]]*:[[:space:]]*"header_admit"[^}]*"cursor"[[:space:]]*:[[:space:]]*(-?[0-9]+)'
+  if [[ "$json" =~ $pattern ]]; then
+    printf '%s\n' "${BASH_REMATCH[1]}"
+    return 0
+  fi
+  return 1
 }
 
 # Node-log-derived progress. The reducer drive holds the progress_store lock
@@ -124,8 +139,31 @@ jget_header_admit() {
 # lock-free corroborating progress signal. Print the MAX seen so far.
 log_max() {
   # $1 = regex capturing "<label>=<int>" -> prints max int (or empty)
-  grep -oE "$1=[0-9]+" "$NODE_LOG" 2>/dev/null | grep -oE '[0-9]+$' |
-    sort -n | tail -1
+  # Reduce while scanning instead of materializing and sorting every height
+  # on every poll. Compare decimal strings exactly, retaining sort -n's
+  # lexical tie break and the original spelling (including leading zeros).
+  grep -oE "$1=[0-9]+" "$NODE_LOG" 2>/dev/null | LC_ALL=C awk -F= '
+    {
+      value = $NF
+      if (!seen || value + 0 > best + 0) {
+        best = value
+        seen = 1
+      } else if (value + 0 == best + 0) {
+        # Only rounded/equal numeric values need exact string comparison.
+        digits = value
+        sub(/^0+/, "", digits)
+        best_digits = best
+        sub(/^0+/, "", best_digits)
+        if (length(digits) > length(best_digits) ||
+            (length(digits) == length(best_digits) &&
+             ("x" digits > "x" best_digits ||
+              ("x" digits == "x" best_digits && "x" value > "x" best)))) {
+          best = value
+        }
+      }
+    }
+    END { if (seen) print best }
+  '
 }
 
 # ── 1. wipe + recreate the datadir + isolated home ──────────────────────────

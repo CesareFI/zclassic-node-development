@@ -249,8 +249,28 @@ rpc_frontier() {
     printf '%s' "$_out"
 }
 jget() { # jget JSON KEY -> integer or empty
-    printf '%s' "$1" | grep -oE "\"$2\"[[:space:]]*:[[:space:]]*-?[0-9]+" | head -1 |
-        grep -oE -- '-?[0-9]+$'
+    # The caller uses a literal field name. Preserve grep's line boundaries
+    # and first numeric match using POSIX shell builtins; no parser processes
+    # or arithmetic conversion of negative sentinels / wide integers.
+    while IFS= read -r _jg_line; do
+        while :; do
+            case "$_jg_line" in *\""$2"\"*) ;; *) break ;; esac
+            _jg_line=${_jg_line#*\""$2"\"}
+            _jg_value=${_jg_line#"${_jg_line%%[![:space:]]*}"}
+            case "$_jg_value" in :*) _jg_value=${_jg_value#:} ;; *) continue ;; esac
+            _jg_value=${_jg_value#"${_jg_value%%[![:space:]]*}"}
+            _jg_sign=''
+            case "$_jg_value" in -*) _jg_sign=-; _jg_value=${_jg_value#-} ;; esac
+            _jg_digits=${_jg_value%%[!0-9]*}
+            if [ -n "$_jg_digits" ]; then
+                printf '%s%s\n' "$_jg_sign" "$_jg_digits"
+                return 0
+            fi
+        done
+    done <<EOF
+$1
+EOF
+    return 1
 }
 
 # ── Wall time is REPORTED, never asserted on ──────────────────────────────

@@ -193,6 +193,9 @@ if [ "$SELFTEST" = "1" ]; then
     st_check "no climb + blocker -> stalled-named" "stalled-named" "$(nd2_classify_terminal 0 0 1)"
     st_check "no climb + no blocker -> fail"      "fail"          "$(nd2_classify_terminal 0 0 0)"
 
+    bash "$REPO_ROOT/tools/scripts/netdisrupt_height_selftest.sh" "${BASH_SOURCE[0]}"
+    st_check "height polling regression and process budget" 0 $?
+
     if [ "$st_fail" = 0 ]; then echo "netdisrupt-two-node: --selftest PASS"; exit 0; fi
     echo "netdisrupt-two-node: --selftest FAIL" >&2; exit 1
 fi
@@ -266,9 +269,17 @@ nd2_rpc() {  # $1=datadir $2=rpcport $3.. method+args
 a_rpc() { nd2_rpc "$DD_A" "$A_RPC" "$@"; }
 b_rpc() { nd2_rpc "$DD_B" "$B_RPC" "$@"; }
 nd2_blockcount() {
-    local out
+    local out line pattern='.*"result"[: ]*([0-9-]*).*'
     out="$(nd2_rpc "$1" "$2" getblockcount)"
-    printf '%s' "$out" | sed -n 's/.*"result"[: ]*\([0-9-]*\).*/\1/p'
+    # Startup, initial catch-up and recovery all poll here. Keep the narrow
+    # RPC reader in Bash instead of launching sed on every observation.
+    # Preserve the last match per line and integer text without arithmetic;
+    # all callers capture the result with command substitution.
+    while IFS= read -r line; do
+        if [[ "$line" =~ $pattern ]]; then
+            printf '%s\n' "${BASH_REMATCH[1]}"
+        fi
+    done <<< "$out"
 }
 b_dumpstate() {  # $1=subcommand (reducer_frontier|blocker)
     "$NODE_BIN" -rpcport="$B_RPC" -datadir="$DD_B" dumpstate "$1" 2>/dev/null || true

@@ -149,10 +149,10 @@ if [ "$dest_sha3" != "$src_sha3" ]; then
 fi
 
 mv -f -- "$TMP" "$DEST"
-# Directory entry durability best-effort (a crash between mv and the next
-# boot's autodetect just repeats the (idempotent) no-op guard above rather
-# than double-staging).
-sync 2>/dev/null || true
+# Flush the containing filesystem, including newly created parent directories,
+# without waiting for unrelated filesystems during bootstrap. Retain the
+# system-wide, best-effort flush on hosts whose sync lacks -f or rejects it.
+sync -f "$BUNDLES_DIR" 2>/dev/null || sync 2>/dev/null || true
 
 log "PASS: staged $DEST (sha3 $dest_sha3)"
 log "the next zero-flag boot's cold-boot autodetect will find it; the"

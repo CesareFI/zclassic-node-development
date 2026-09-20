@@ -43,6 +43,8 @@
 #       [--peer-datadir=DIR] [--peer-rpcport=N] [--runs=3] [--bin=PATH] \
 #       [--budget=600] [--out=DIR]
 #   tools/scripts/c3_stopwatch_triple_run.sh --selftest
+#   ZCL_CS_ROOT selects an existing private scratch parent, as for the single
+#   stopwatch. Each run gets its own child directory for client discovery.
 #
 # EXIT
 #   0  every run PASSed the height bar AND the hash check agreed (or was
@@ -76,7 +78,7 @@ SELFTEST=0
 # HTTPS=39173). Kept as a variable so a reader can see it is a copy of that
 # harness's constant, not an independent choice.
 CLIENT_RPCPORT=39171
-CLIENT_DATADIR_GLOB='/tmp/zcl-c3-stopwatch.*'
+CS_ROOT="${ZCL_CS_ROOT:-$HOME/.local/state/zclassic23/scratch/coldstart}"
 
 for arg in "$@"; do
     case "$arg" in
@@ -98,19 +100,28 @@ done
 # tip doc is a single line with unique keys. A dependency-free reader is the
 # point; anything that needs real parsing is quoted from the artifact instead.
 json_field() {
-    printf '%s' "${1:-}" \
-        | tr ',' '\n' \
-        | sed -n "s/.*\"${2}\"[[:space:]]*:[[:space:]]*\"\{0,1\}\([^\",}]*\)\"\{0,1\}.*/\1/p" \
-        | head -1
+    # All callers supply literal identifier keys and simple scalar values.
+    # Keep this hot polling path inside bash: three external tools per field
+    # add observer CPU/process load while the client is doing IBD. As before,
+    # this is not a general JSON parser (no string escape or array decoding).
+    local pattern='"'"${2}"'"[[:space:]]*:[[:space:]]*"?([^",}'$'\n'']*)'
+    if [[ ${1:-} =~ $pattern ]]; then
+        printf '%s' "${BASH_REMATCH[1]}"
+    fi
 }
 
 # ── tip_doc <datadir> <rpcport> — one `core chain tip` line, or empty.
 # Read through the RUNNING node's RPC; the datadir is only how the CLI finds the
 # auth cookie.
 tip_doc() {
-    local dd="$1" port="$2"
+    local dd="$1" port="$2" doc
     [ -n "$dd" ] || return 0
-    timeout 20 "$NODE_BIN" -datadir="$dd" -rpcport="$port" core chain tip 2>/dev/null
+    # Bound TERM-resistant clients too. A failed/timed-out command may have
+    # printed a plausible tip prefix; only a successful read is evidence.
+    if doc="$(timeout --kill-after=1 20 "$NODE_BIN" -datadir="$dd" \
+        -rpcport="$port" core chain tip 2>/dev/null)"; then
+        printf '%s' "$doc"
+    fi
 }
 
 # ── tip_h_hash <tip-doc> — "<height> <hash>", or "-1 -" when unreadable.
@@ -118,11 +129,20 @@ tip_doc() {
 # the -1 never-read sentinel, so a reader can tell "peer said 0" from "nobody
 # asked successfully".
 tip_h_hash() {
-    local doc="${1:-}" h hash ok
-    ok="$(json_field "$doc" ok)"
-    [ "$ok" = "true" ] || { printf '%s' "-1 -"; return 0; }
-    h="$(json_field "$doc" height)"
-    hash="$(json_field "$doc" hash)"
+    local doc="${1:-}" h="" hash="" key value pattern
+    # Decode this sample in the caller's shell. Three command substitutions
+    # per tip compete with IBD even when json_field uses only shell builtins.
+    # These are the same simple scalars as json_field, not general JSON.
+    for key in ok height hash; do
+        value=""
+        pattern='"'"$key"'"[[:space:]]*:[[:space:]]*"?([^",}'$'\n'']*)'
+        if [[ $doc =~ $pattern ]]; then value=${BASH_REMATCH[1]}; fi
+        case "$key" in
+            ok) [ "$value" = true ] || { printf '%s' "-1 -"; return 0; } ;;
+            height) h=$value ;;
+            hash) hash=$value ;;
+        esac
+    done
     case "$h" in ''|*[!0-9]*) h="-1" ;; esac
     [ -n "$hash" ] || hash="-"
     printf '%s %s' "$h" "$hash"
@@ -163,12 +183,31 @@ hash_verdict() {
 
 # ── selftest — hermetic. No binary, no network, no datadir, no peer.
 if [ "$SELFTEST" = "1" ]; then
+    bash "$SCRIPT_DIR/c3_stopwatch_tip_decode_selftest.sh" || exit 1
     st_fail=0
     st_check() { # <label> <expect> <got>
         if [ "$2" = "$3" ]; then echo "  ok   $1"; else
             echo "  FAIL $1: expected [$2] got [$3]"; st_fail=1; fi
     }
     echo "c3-stopwatch-triple --selftest"
+    st_check "scalar polling needs no external processes" "3196929" \
+        "$(PATH=/nonexistent json_field '{"height":3196929}' height)"
+    st_check "quoted scalar" "serving" \
+        "$(json_field '{"phase":"serving"}' phase)"
+    st_check "pretty scalar" "123" \
+        "$(json_field $'{\n  "height" : 123\n}' height)"
+    st_check "first duplicate field wins" "1" \
+        "$(json_field '{"height":1,"height":2}' height)"
+    st_check "missing field is empty" "" \
+        "$(json_field '{"height":1}' missing)"
+    st_check "empty string is empty" "" \
+        "$(json_field '{"phase":""}' phase)"
+    st_check "null remains null" "null" \
+        "$(json_field '{"wall_clock_seconds":null}' wall_clock_seconds)"
+    st_check "decimal duration" "12.5" \
+        "$(json_field '{"wall_clock_seconds":12.5}' wall_clock_seconds)"
+    st_check "negative sentinel" "-1" \
+        "$(json_field '{"height":-1}' height)"
     st_check "exit 0 is pass"            "pass"          "$(classify_exit 0)"
     st_check "exit 3 is seam"            "seam"          "$(classify_exit 3)"
     st_check "exit 4 is stalled-named"   "stalled-named" "$(classify_exit 4)"
@@ -199,6 +238,8 @@ if [ "$SELFTEST" = "1" ]; then
     # harness asserts its own: the flag must be required, so that a proof lane
     # cannot quietly regain a default peer between runs.
     st_check "no default peer is baked into this driver" "" "$PEER"
+    bash "$SCRIPT_DIR/c3_stopwatch_scratch_selftest.sh" || st_fail=1
+    bash "$SCRIPT_DIR/c3_stopwatch_tip_query_selftest.sh" || st_fail=1
     [ "$st_fail" = "0" ] && echo "c3-stopwatch-triple --selftest: ALL OK" \
         || echo "c3-stopwatch-triple --selftest: FAILED"
     exit "$st_fail"
@@ -234,6 +275,26 @@ if [ "${_pre_probe%% *}" = "-1" ]; then
 fi
 echo "c3-stopwatch-triple: peer tip readable: $_pre_probe"
 
+run_scratch=""
+poller_pid=""
+cleanup_run() {
+    if [ -n "$poller_pid" ]; then
+        kill "$poller_pid" 2>/dev/null || true
+        wait "$poller_pid" 2>/dev/null || true
+        poller_pid=""
+    fi
+    if [ -n "$run_scratch" ]; then
+        # The single-run harness owns datadir cleanup. Preserve any residue
+        # on failure; this driver only removes its empty containing directory.
+        rmdir -- "$run_scratch" 2>/dev/null || \
+            echo "c3-stopwatch-triple: scratch retained: $run_scratch" >&2
+        run_scratch=""
+    fi
+}
+trap cleanup_run EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
 overall=0
 run=1
 while [ "$run" -le "$RUNS" ]; do
@@ -243,15 +304,19 @@ while [ "$run" -le "$RUNS" ]; do
     pb_h="${peer_before%% *}"; pb_hash="${peer_before##* }"
     echo "run $run: peer tip BEFORE  h=$pb_h hash=$pb_hash"
 
-    # Side-poller: the client's own tip, sampled while it runs. Its scratch
-    # datadir is created by the harness after we start, so the poller globs for
-    # it each tick instead of being told where it is.
+    # Bind discovery to this run, under the same configured scratch parent as
+    # the single-run harness. A global /tmp glob misses the default location
+    # and can query another run's client. The cookie also excludes ISO_HOME.
+    run_scratch="$(mktemp -d "$CS_ROOT/zcl-c3-triple.XXXXXX")" || {
+        echo "c3-stopwatch-triple: SKIP (create the private scratch root or set ZCL_CS_ROOT: $CS_ROOT)" >&2
+        exit 2
+    }
     client_trace="$OUT_DIR/run$run.client-tip.tsv"
     printf 'unix_s\theight\thash\n' >"$client_trace"
     (
         while :; do
-            for _dd in $CLIENT_DATADIR_GLOB; do
-                [ -d "$_dd" ] || continue
+            for _dd in "$run_scratch"/zcl-c3-stopwatch.*; do
+                [ -f "$_dd/.cookie" ] || continue
                 _t="$(tip_h_hash "$(tip_doc "$_dd" "$CLIENT_RPCPORT")")"
                 [ "${_t%% *}" = "-1" ] && continue
                 printf '%s\t%s\t%s\n' "$(date +%s)" "${_t%% *}" "${_t##* }" >>"$client_trace"
@@ -262,12 +327,13 @@ while [ "$run" -le "$RUNS" ]; do
     poller_pid=$!
 
     run_log="$OUT_DIR/run$run.harness.log"
+    ZCL_CS_ROOT="$run_scratch" \
     ZCL_CS_RUN_ID="triple$run-$(date -u +%Y%m%dT%H%M%SZ)-$$" \
     bash "$SCRIPT_DIR/cold_start_to_tip_stopwatch.sh" \
         --bin="$NODE_BIN" --peer="$PEER" --budget="$BUDGET" \
         ${FILE_PEER:+--file-peer="$FILE_PEER"} >"$run_log" 2>&1
     rc=$?
-    kill "$poller_pid" 2>/dev/null; wait "$poller_pid" 2>/dev/null
+    cleanup_run
 
     peer_after="$(tip_h_hash "$(tip_doc "$PEER_DATADIR" "$PEER_RPCPORT")")"
     pa_h="${peer_after%% *}"; pa_hash="${peer_after##* }"

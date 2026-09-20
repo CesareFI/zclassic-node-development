@@ -71,7 +71,7 @@
 # as before. Old ledgers stay judgeable.
 #
 # Usage: stopwatch_evidence_judge.sh <history.jsonl> [--max-age-secs N]
-#        stopwatch_evidence_judge.sh --selftest
+#        stopwatch_evidence_judge.sh --selftest [--bench-oracle]
 #
 # Env: ZCL_STOPWATCH_JUDGE_NOW  epoch override for "now" (hermetic test
 #        seam — same pattern as soak_evidence.sh's ZCL_SOAK_NOW).
@@ -122,13 +122,17 @@ fi
 . "$_SW_JUDGE_DIR/sh_str.sh" || { echo "stopwatch-judge: cannot source sh_str.sh" >&2; exit 2; }
 
 # fld_num/fld_str <json_line> <key> — first matching "key":value extraction.
-# Deliberately simple (single-line JSON, no nesting) — matches the
-# soak_evidence.sh awk fld() convention, just in sed for a one-line read.
+# Deliberately simple (compact fields, no nesting or escape decoding). Match
+# the first eligible field without three external parsing tools per read.
 fld_num() {
-    printf '%s' "$1" | grep -oE "\"$2\":-?[0-9]+" | head -n1 | sed -E "s/\"$2\"://"
+    local re="\"$2\":(-?[0-9]+)"
+    if [[ "$1" =~ $re ]]; then printf '%s\n' "${BASH_REMATCH[1]}"; else return 1; fi
 }
 fld_str() {
-    printf '%s' "$1" | grep -oE "\"$2\":\"[^\"]*\"" | head -n1 | sed -E "s/\"$2\":\"([^\"]*)\"/\1/"
+    # grep's original line-based match never crossed a literal newline.
+    local newline=$'\n' re
+    re="\"$2\":\"([^\"$newline]*)\""
+    if [[ "$1" =~ $re ]]; then printf '%s\n' "${BASH_REMATCH[1]}"; else return 1; fi
 }
 
 # ── fixture-integrity config (env-overridable; validated positive ints) ──
@@ -150,27 +154,40 @@ done
 # the MOST-RECENT SLO ledger line carrying a numeric (non-null) oracle_height
 # IFF that line's ts is within <max_age> of <now>; echoes nothing otherwise
 # (missing/empty ledger, no numeric oracle sample in the recent tail, or the
-# freshest such sample is stale). Scans only the recent tail (bounded) newest-
-# first so a large rotated ledger stays cheap. The FIRST numeric-oracle line
-# found scanning backwards IS the freshest sample and decides the outcome:
+# freshest such sample is stale). Scans only the recent tail (bounded), keeping
+# the last row with a numeric oracle and timestamp. That row IS the freshest
+# sample and decides the outcome:
 # fresh -> echo it, stale -> echo nothing (an older-but-fresher-looking sample
 # further back is not "the current oracle").
 slo_freshest_oracle() {
-    local f="$1" nowv="$2" maxage="$3" line oh ts age
+    local f="$1"
     [ -s "$f" ] || return 1
-    while IFS= read -r line; do
-        oh="$(fld_num "$line" oracle_height)"
-        [ -n "$oh" ] || continue
-        ts="$(fld_num "$line" ts)"
-        [ -n "$ts" ] || continue
-        age=$((nowv - ts))
-        [ "$age" -lt 0 ] && age=$((-age))
-        if [ "$age" -lt "$maxage" ] 2>/dev/null; then
-            printf '%s\n' "$oh"
-        fi
-        return 0
-    done < <(tail -n 500 "$f" | tac)
-    return 1
+    # One reader for the entire tail avoids per-row shells and pipelines when
+    # the oracle is unavailable. Match the same compact numeric fields as
+    # fld_num; keep heights as text and apply freshness only after selection.
+    tail -n 500 "$f" | awk -v nowv="$2" -v maxage="$3" '
+        function num(line, key, value) {
+            if (!match(line, "\"" key "\":-?[0-9]+")) return ""
+            value = substr(line, RSTART, RLENGTH)
+            sub(/^[^:]*:/, "", value)
+            return value
+        }
+        {
+            oh = num($0, "oracle_height")
+            ts = num($0, "ts")
+            if (oh != "" && ts != "") {
+                oracle = oh
+                timestamp = ts
+                found = 1
+            }
+        }
+        END {
+            if (!found) exit 1
+            age = nowv - timestamp
+            if (age < 0) age = -age
+            if (age < maxage) print oracle
+        }
+    '
 }
 
 # ── --selftest: hermetic gate checks (canned tmp ledgers, no live infra) ──
@@ -294,6 +311,65 @@ if [ "${1:-}" = "--selftest" ]; then
         "$((NOW - 7200))" "$GOOD_TIP" "$GOOD_TIP" 3200000 3200000 >"$slo_stale"
     run_case "stale oracle sample tolerated (rule 2 skipped)" "$modern_pass" PASS 0 \
         "ZCL_STOPWATCH_SLO_LEDGER=$slo_stale"
+
+    # Selection and freshness must survive a batched scan: the last usable
+    # row wins, even if an older row has a more recent timestamp.
+    oracle_case() {
+        local name="$1" file="$2" want="$3" want_rc="$4" got rc
+        got="$(slo_freshest_oracle "$file" "$NOW" 3600)"; rc=$?
+        if [ "$got" = "$want" ] && [ "$rc" = "$want_rc" ]; then
+            echo "  ok: oracle $name"
+        else
+            echo "  FAIL: oracle $name: got '$got' rc=$rc, wanted '$want' rc=$want_rc"
+            st_fail=1
+        fi
+    }
+    slo_selection="$st_tmp/slo_selection.jsonl"
+    printf '{"ts":%s,"oracle_height":3200000}\n' "$NOW" >"$slo_selection"
+    printf '{"ts":%s,"oracle_height":3100000}\n' "$((NOW - 7200))" >>"$slo_selection"
+    oracle_case 'newest stale row prevents fallback' "$slo_selection" '' 0
+    printf '{"ts":%s,"oracle_height":3200000}\n' "$NOW" >>"$slo_selection"
+    printf '%s\n' '{"ts":null,"oracle_height":3300000}' \
+        '{"ts":2000000000,"oracle_height":null}' >>"$slo_selection"
+    oracle_case 'rows without numeric height or timestamp are skipped' "$slo_selection" 3200000 0
+    printf '{"ts":%s,"oracle_height":0}\n' "$NOW" >"$slo_selection"
+    oracle_case 'zero remains a numeric sample' "$slo_selection" 0 0
+    printf '{"ts":%s,"oracle_height":-1}\n' "$NOW" >"$slo_selection"
+    oracle_case 'negative sentinel remains numeric' "$slo_selection" -1 0
+    printf '{"ts":%s,"oracle_height":3100000,"oracle_height":3200000}\n' "$NOW" >"$slo_selection"
+    oracle_case 'first matching field in a row wins' "$slo_selection" 3100000 0
+    for offset in -3600 3600; do
+        printf '{"ts":%s,"oracle_height":3200000}\n' "$((NOW + offset))" >"$slo_selection"
+        oracle_case "age boundary $offset is stale" "$slo_selection" '' 0
+    done
+    printf '{"ts":%s,"oracle_height":3200000}\n' "$((NOW + 3599))" >"$slo_selection"
+    oracle_case 'future timestamp inside absolute-age window' "$slo_selection" 3200000 0
+    : >"$slo_selection"
+    oracle_case 'empty ledger' "$slo_selection" '' 1
+    oracle_case 'missing ledger' "$st_tmp/absent-oracle.jsonl" '' 1
+
+    # A missing oracle is common during outages. Searching the full 500-row
+    # tail must stay cheap, and row 501 must never influence qualification.
+    slo_nulls="$st_tmp/slo_nulls.jsonl"
+    for ((i=0; i<500; i++)); do
+        printf '{"ts":%s,"oracle_height":null}\n' "$NOW"
+    done >"$slo_nulls"
+    oracle_case 'full tail without an oracle' "$slo_nulls" '' 1
+    printf '{"ts":%s,"oracle_height":3200000}\n' "$NOW" >"$slo_selection"
+    head -n 499 "$slo_nulls" >>"$slo_selection"
+    oracle_case 'oldest included row is selected' "$slo_selection" 3200000 0
+    run_case 'oldest included oracle still rejects a lagging fixture' "$modern_pass" LAGGING_FIXTURE 1 \
+        "ZCL_STOPWATCH_SLO_LEDGER=$slo_selection"
+    if [ "${2:-}" = "--bench-oracle" ]; then
+        # Timings are observations, never pass thresholds. All data is local;
+        # compare identical source/hardware/load with and without the change.
+        for ((i=0; i<3; i++)); do
+            TIMEFORMAT='stopwatch-judge: 500-row oracle scan %3R seconds'
+            time slo_freshest_oracle "$slo_selection" "$NOW" 3600 >/dev/null
+        done
+    fi
+    printf '{"ts":%s,"oracle_height":null}\n' "$NOW" >>"$slo_selection"
+    oracle_case 'row outside the 500-row tail is ignored' "$slo_selection" '' 1
 
     # 4. Missing SLO ledger entirely -> PASS, rule 1 only (hermetic CI box).
     run_case "missing SLO ledger tolerated" "$modern_pass" PASS 0 \

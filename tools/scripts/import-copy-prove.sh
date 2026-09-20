@@ -431,8 +431,15 @@ NODE_ISO_ARGS="-fsport=$FSPORT -httpsport=$HTTPSPORT $BOOT_PEER_ARGS -operator-l
 rpc() { HOME="$ISO_HOME" ZCL_DATADIR="$COPY_DIR" ZCL_RPCPORT="$RPCPORT" "$RPC_BIN" "$@" 2>/dev/null || true; }
 tip() {
     resp="$(rpc getblockcount)"
+    # Quit on the first matching line inside sed instead of spawning head
+    # for every poll. Keep the existing greedy, line-local extraction policy.
     printf '%s\n' "$resp" |
-        sed -n 's/.*"result"[[:space:]]*:[[:space:]]*\(-\{0,1\}[0-9][0-9]*\).*/\1/p' | head -1
+        sed -n 's/.*"result"[[:space:]]*:[[:space:]]*\(-\{0,1\}[0-9][0-9]*\).*/\1/
+            t found
+            b
+            :found
+            p
+            q'
 }
 
 # ── phase 1: the terminal install/import verb (mode-specific) ───────────

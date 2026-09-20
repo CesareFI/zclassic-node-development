@@ -16,6 +16,8 @@
 #   * The verdict math is a pure awk function fed the sample log; --selftest
 #     drives it with synthetic fixtures so the ruling itself is testable and
 #     cannot silently drift.
+#   * Frontier-reader regression and observer-cost benchmark (no node needed):
+#     bash tools/scripts/step1_refold_parser_selftest.sh --bench
 #   * Exit 0 is reserved for RATE=FLAT. DECAYING and NO_CLIMB exit non-zero.
 #
 # Verdict (computed over the CLIMB region — the samples from the last global-min
@@ -227,6 +229,8 @@ selftest() {
 }
 
 if [ "$DO_SELFTEST" = 1 ]; then
+    bash "$(dirname "${BASH_SOURCE[0]}")/step1_refold_parser_selftest.sh" || exit 1
+    bash "$(dirname "${BASH_SOURCE[0]}")/step1_refold_rpc_selftest.sh" || exit 1
     selftest
     exit $?
 fi
@@ -236,6 +240,7 @@ fi
 [ -n "$DATADIR" ] || die "missing --datadir (a COPY; never the live datadir)"
 [ -x "$BIN" ]     || die "binary not executable: $BIN"
 [ -d "$DATADIR" ] || die "datadir not a directory: $DATADIR"
+command -v timeout >/dev/null 2>&1 || die "missing timeout for bounded RPC observations"
 
 canon() { realpath -m -- "$1" 2>/dev/null || printf '%s' "$1"; }
 dd_canon="$(canon "$DATADIR")"
@@ -280,18 +285,42 @@ HTTPSPORT=$((PORT_BASE + 3))
 log() { printf '[%s] step1-refold-proof: %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$WORKDIR/run.log"; }
 
 rpc() {
+    local response rc
+    # A wedged observer must yield back to the sampling/deadline loop. Allow
+    # five seconds per CLI form, then one second before killing a client that
+    # ignores TERM. Only successful output may become frontier evidence.
     if [ "$RPCBIN" = "$BIN" ]; then
-        HOME="$ISO_HOME" "$RPCBIN" -datadir="$DATADIR" -rpcport="$RPCPORT" "$@" 2>/dev/null || true
+        if response=$(HOME="$ISO_HOME" timeout --kill-after=1 5 \
+            "$RPCBIN" -datadir="$DATADIR" -rpcport="$RPCPORT" "$@" 2>/dev/null); then
+            printf '%s' "$response"
+            return 0
+        else
+            rc=$?
+        fi
     else
-        HOME="$ISO_HOME" ZCL_DATADIR="$DATADIR" ZCL_RPCPORT="$RPCPORT" "$RPCBIN" "$@" 2>/dev/null || true
+        if response=$(HOME="$ISO_HOME" ZCL_DATADIR="$DATADIR" ZCL_RPCPORT="$RPCPORT" \
+            timeout --kill-after=1 5 "$RPCBIN" "$@" 2>/dev/null); then
+            printf '%s' "$response"
+            return 0
+        else
+            rc=$?
+        fi
     fi
+    printf 'step1-refold-proof: RPC observation unavailable rc=%s\n' "$rc" >&2
+    return 0
 }
 
 _hstar_from() {  # $1 = dumpstate output
-    local h
-    h="$(printf '%s' "$1" | grep -oE '"hstar"[[:space:]]*:[[:space:]]*-?[0-9]+' | grep -oE '\-?[0-9]+' | head -1)"
+    # Match the first integer without spawning three tools per field. Keep
+    # heights as text and preserve grep's line boundaries: whitespace between
+    # the key, colon and value may not include a newline.
+    local h="" space=$'[ \t\r\v\f]*' pattern
+    pattern="\"hstar\"$space:$space(-?[0-9]+)"
+    if [[ "$1" =~ $pattern ]]; then h="${BASH_REMATCH[1]}"; fi
     if [ -z "$h" ] || [ "$h" = "-1" ]; then
-        h="$(printf '%s' "$1" | grep -oE '"cached_provable_tip"[[:space:]]*:[[:space:]]*-?[0-9]+' | grep -oE '\-?[0-9]+' | head -1)"
+        h=""
+        pattern="\"cached_provable_tip\"$space:$space(-?[0-9]+)"
+        if [[ "$1" =~ $pattern ]]; then h="${BASH_REMATCH[1]}"; fi
     fi
     printf '%s' "$h"
 }

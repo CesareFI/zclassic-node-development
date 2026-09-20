@@ -705,18 +705,22 @@ cookie="$DEST/.cookie"
 rpc() { HOME="$ISO_HOME" ZCL_DATADIR="$DEST" ZCL_RPCPORT="$RPCPORT" "$RPC_BIN" "$@" 2>/dev/null || true; }
 tip()  {
     resp="$(rpc getblockcount)"
+    # One parser per sample: preserve the last integer result on the first
+    # matching line, or the first bare integer when no result key is present.
+    # Keep heights as text, including wide and leading-zero values.
+    # Regression/observer benchmark: sh tools/scripts/repro_copy_tip_selftest.sh --bench
     case "$resp" in
         *\"result\"*)
-            printf '%s\n' "$resp" |
-                sed -n 's/.*"result"[[:space:]]*:[[:space:]]*\(-\{0,1\}[0-9][0-9]*\).*/\1/p' |
-                head -1
+            tip_filter='s/.*"result"[[:space:]]*:[[:space:]]*\(-\{0,1\}[0-9][0-9]*\).*/\1/p'
             ;;
         *)
-            printf '%s\n' "$resp" |
-                sed -n 's/^[[:space:]]*\(-\{0,1\}[0-9][0-9]*\)[[:space:]]*$/\1/p' |
-                head -1
+            tip_filter='s/^[[:space:]]*\(-\{0,1\}[0-9][0-9]*\)[[:space:]]*$/\1/p'
             ;;
     esac
+    # A successful substitution prints and quits; unmatched lines continue.
+    # POSIX sed branching replaces head without changing the match policy.
+    printf '%s\n' "$resp" |
+        sed -n -e "$tip_filter" -e 't done' -e b -e ':done' -e q
 }
 
 static_spend_ready_now() {

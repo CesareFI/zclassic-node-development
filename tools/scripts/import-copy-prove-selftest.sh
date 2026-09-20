@@ -23,6 +23,7 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT="$REPO/tools/scripts/import-copy-prove.sh"
+sh "$REPO/tools/scripts/import_copy_tip_selftest.sh"
 SANDBOX="$(mktemp -d /tmp/zcl-import-copy-prove-selftest.XXXXXX)"
 chmod 700 "$SANDBOX"
 
