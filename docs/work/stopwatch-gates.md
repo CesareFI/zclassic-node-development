@@ -43,6 +43,13 @@ SIGCONTs it and times how long the client's `hstar` takes to re-catch
 a hard failure or Ctrl-C (an `EXIT`/`INT`/`TERM` trap) — the harness must
 never leave a peer parked STOPped.
 
+PROOF B's recovery budget and `wall_clock_seconds` start after the successful
+SIGCONT; `cut_seconds` records the separate deliberate outage. The final sample
+includes RPC/retry latency, and a tip first observed after the deadline cannot
+PASS. `make netdisrupt-stopwatch-timing-selftest` exercises this boundary with a
+deterministic clock, mock RPC and a disposable local signal target, without a
+node or network. This checks the instrument, not real-node recovery performance.
+
 ## Failure legibility
 
 On any non-PASS verdict, both harnesses additionally capture into the same

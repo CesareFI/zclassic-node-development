@@ -307,3 +307,163 @@ The shell SHA-256 inventory remains authoritative. These rows establish the
 native engine's shadow-mode latency and incrementality; they do not claim that
 the narrower public-C23 Merkle inventory is already a replacement for the
 shell oracle's full build-input policy.
+
+## 2026-09-18 — cold-start probe RPC observation time
+
+Worldstream baseline: `c1f7863d098e1efaa8deba240c580ae0559312a5`,
+`tools/scripts/cold_start_to_tip_probe.sh`. A hermetic run of the polling loop
+used a fake clock and a local shell RPC double returning equal block/header
+heights of 3,200,000. No node, chain data, or network was involved; these are
+simulated seconds, not a measured IBD speedup.
+
+With start=100, budget=500, poll entry=599 and RPC reply=601, the original
+loop reported `C3_TO_TIP_S=499` and accepted the late reply. After timestamping
+the observation when RPC returns, it records elapsed=501 and refuses that
+reply. The launch timestamp also now precedes the first node launch.
+
+Reproduce the regression checks with
+`bash tools/scripts/cold_start_to_tip_probe.sh --selftest`. They exercise the
+actual sampling function with replies before, at, and after the deadline.
+Moving the timestamp back before RPC in an isolated copy makes five assertions
+fail. The peer-height acceptance predicate and node validation are unchanged.
+This repairs timing evidence when RPC is slow during IBD; it does not bound RPC
+execution time or replace the probe's second-resolution wall clock.
+
+## 2026-09-18 — fold-profile stage readings and observer cost
+
+Worldstream baseline: `c1f7863d098e1efaa8deba240c580ae0559312a5`,
+`tools/scripts/fold_profile.sh`, Linux x86_64, AMD EPYC 7402P. The reducer's
+`drain_stage_totals` emitter includes `skips` after `adv`; the profiler's
+three-field-only pattern returned zero for all 24 stage columns. A local
+fixture using that current schema reproduced the failure, while the older
+three-field schema passed. This obscured the stage costs needed to select
+the next sync bottleneck.
+
+The sampler now reads each stage's three CSV counters together and accepts
+trailing fields. Both schema fixtures produce the exact expected 50-column
+row, preserving cumulative-over-last-batch selection, wide integer text and
+the existing missing-stage zero sentinel. No node, validation, consensus,
+peer scheduling or database behavior changes.
+
+| Measurement | Before | After |
+|---|---:|---:|
+| External parser tools per full sample | 138 | 82 |
+| Wall time, 20 fixture samples | 5.24 s | 2.94 s |
+| User + system CPU, 20 fixture samples | 8.59 s | 5.23 s |
+
+Timing covers actual sampling functions with shell RPC doubles, a fixed
+timestamp and an isolated temporary CSV. There is no network, node, sleep
+or cache flush; ordinary warm host caches and ambient load apply. A repeat
+through the Make target took 2.98 s. These figures measure observer overhead,
+not end-to-end IBD speed or time to tip. The deterministic process-count
+ceiling is the regression gate; elapsed time is informational.
+
+Reproduce with `make fold-profile-selftest ARGS=--bench` or
+`sh tools/scripts/fold_profile_selftest.sh --bench`. The test accepts a final
+script path for baseline comparison. Baseline script SHA-256:
+`3a3f2817fa816d73a18a814b0ed2efc7b71c77c8356ad68625e37870662f901a`;
+updated script SHA-256:
+`56d969333345a9107bb0d556c0ccc09000755cbcd581bb6a425923f785cae456`.
+Live fold attribution remains unmeasured here: required node build archives
+could not be downloaded because the dependency hostname did not resolve.
+
+## 2026-09-18 — fresh-sync benchmark log observation cost
+
+Worldstream baseline: `c1f7863d098e1efaa8deba240c580ae0559312a5`,
+`tools/bench_fresh_sync.c`, Linux x86_64, GCC 14.2, `-std=c23 -O2`.
+The phase observer spawned up to five `grep -c` processes per poll, each
+reading the entire growing log. Twenty polls of a warm 16 MiB local fixture
+with no phase markers launched 100 greps and took 1.193 seconds. All five
+searches were absent, so each grep consumed the whole file: 1,600 MiB total.
+This is isolated observer overhead, not a node or time-to-tip measurement.
+
+The observer now checks all five literal markers in one incremental pass.
+It retains partial markers across reads and polls, bounds each pass to the
+observed file size, and reads no bytes on unchanged polls. The same fixture
+workload took 0.017 seconds, reading exactly 16 MiB in 4,096 reads with no
+search subprocesses. Ordinary warm filesystem caches and ambient host load
+apply; elapsed time is informational, while byte/read counts are asserted.
+Polling stops once all log milestones have timestamps, as before.
+
+Reproduce with `make bench-fresh-sync-selftest` or directly with
+`bash tools/scripts/bench_fresh_sync_selftest.sh`. It compiles the actual
+scanner under C23 with `-Wall -Wextra -Werror`, checks every marker split
+across read and poll boundaries, and exercises append, empty/unchanged logs,
+binary bytes, truncation, replacement, failed reads and growth during a poll.
+Mutations removing retained suffixes or resetting the read cursor fail.
+Only benchmark observation changes; node consensus, validation, optional
+acceleration, peer scheduling and database behavior remain unchanged.
+
+## 2026-09-18 — tip-agreement observer cluster parsing
+
+Worldstream baseline: `c1f7863d098e1efaa8deba240c580ae0559312a5`,
+`tools/scripts/tip_agreement_probe.sh`, Linux x86_64, AMD EPYC 7402P,
+Bash 5.2.21. The external recorder parsed each cluster's height, hash and
+witness count with three `cut` processes in each of two loops. At the SQL
+query's 12-cluster limit, this launched 72 redundant field-splitting processes
+in addition to four used for address grouping. Bash's delimiter-aware `read`
+now splits the cluster columns together, preserving empty fields and ignoring
+trailing columns in the witness count.
+
+| Measurement | Before | After |
+|---|---:|---:|
+| `cut` processes per 12-cluster observation | 76 | 4 |
+| Wall time, 10 fixture runs | 7.75 s | 3.51 s |
+| User + system CPU, 10 fixture runs | 10.20 s | 5.18 s |
+
+The fixture drives the real recorder with shell responses for SQL, node state
+and block-hash RPC. It includes matching history, two rival clusters at/below
+our tip, and two clusters above our tip during catch-up. Winner selection,
+rival identities/counts and above-tip evidence remain unchanged. Timing includes
+fixture setup and process-count instrumentation with warm ordinary filesystem
+caches and ambient host load; it is informational. No node, network, or chain
+validation ran. These are observer costs, not measured IBD or time-to-tip gains.
+
+Reproduce the bounded-work regression with
+`bash tools/scripts/test_tip_agreement_evidence.sh --only observer`.
+An optional third argument selects an older probe (with its sibling
+`lib/evidence_sources.sh`); the baseline passes the evidence assertions and
+fails the four-process ceiling. The complete recorder/judge suite passes via
+`make tip-agreement-selftest`. Shell syntax and whitespace checks pass.
+The broader lint run remains red on pre-existing checkout/environment issues:
+root `.agents`/`.codex` entries, fresh-sync benchmark complexity, unrelated
+flag source-line pointers, and an unwritable Windows-check scratch root.
+
+This slice changes shell observation and its tests, plus five flag-catalog
+source-line references. Consensus, validation, optional acceleration, peer
+scheduling and database behavior are unchanged. Publication is blocked in this
+session by read-only Git metadata and unavailable GitHub DNS; these local
+measurements are not a published-commit claim.
+
+## 2026-09-18 — evidence string emission during sync observation
+
+Worldstream baseline: `c1f7863d098e1efaa8deba240c580ae0559312a5`,
+`tools/scripts/lib/evidence_sources.sh`, Linux x86_64, Bash 5.2.21.
+The shared string emitter used by the tip-agreement and SLO probes started
+`tr` and `sed` for each string. Bash substitutions now preserve the same
+transformations without those two external processes.
+
+A warm-cache fixture of 500 `evidence_jstr` calls with the same 41-byte
+input took 2.149 s before and 0.598 s after (user + system CPU: 3.438 s
+and 0.652 s). Ten complete 12-cluster observer fixtures took 3.511 s and
+3.220 s respectively; that comparison held the checkout's existing modified
+tip-agreement probe constant and changed only its reader library. Ambient
+host load applies. These are observer costs, not end-to-end IBD gains.
+
+Reproduce the string benchmark with
+`bash tools/scripts/evidence_sources_selftest.sh --bench`; an optional final
+argument selects the baseline library. The baseline passes byte checks and
+fails the zero-external-tool budget. Removing the escaping substitutions
+fails the quote regression. The test compares exact output bytes, including
+all non-NUL byte values, and runs through `make evidence-selftest`.
+It preserves existing control-byte behavior; it is not a broader JSON
+serializer or a change to evidence acceptance.
+
+Evidence, tip-agreement and SLO fixture suites pass both in the working tree
+and in an isolated checkout containing only this slice. Shell syntax,
+architecture, shell-host-assumption and whitespace checks pass. The node
+build cannot fetch required dependency archives because GitHub DNS is
+unavailable. Full lint was interrupted during its prerequisite dev rebuild
+after the same dependency failure; full publication evidence is incomplete.
+No node validation, consensus, optional acceleration, peer scheduling or
+database behavior changes.
