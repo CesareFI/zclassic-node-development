@@ -33,6 +33,31 @@ static int ex_environment_unset(const char *name)
 #endif
 }
 
+static int test_wallet_polling_bound(void)
+{
+    uint8_t out[65536];
+    size_t n = explorer_view_wallet_page(out, sizeof(out) - 1);
+    out[n < sizeof(out) ? n : sizeof(out) - 1] = '\0';
+    bool ok = n > 0 && n < sizeof(out) &&
+         strstr((char *)out,
+                "if(document.hidden||updating)return") != NULL &&
+         strstr((char *)out,
+                ".finally(function(){updating=false})") != NULL &&
+         strstr((char *)out,
+                "addEventListener('visibilitychange'") != NULL &&
+         strstr((char *)out,
+                "if(!document.hidden)update()") != NULL &&
+         strstr((char *)out, "setInterval(update,3000)") != NULL;
+
+    printf("explorer: wallet polling is bounded and visibility-aware... ");
+    if (ok) {
+        printf("OK\n");
+        return 0;
+    }
+    printf("FAIL\n");
+    return 1;
+}
+
 int test_explorer(void)
 {
     int failures = 0;
@@ -75,24 +100,7 @@ int test_explorer(void)
         else { printf("FAIL\n"); failures++; }
     }
 
-    printf("explorer: wallet polling is bounded and visibility-aware... ");
-    {
-        uint8_t out[65536];
-        size_t n = explorer_view_wallet_page(out, sizeof(out) - 1);
-        out[n < sizeof(out) ? n : sizeof(out) - 1] = '\0';
-        bool ok = n > 0 && n < sizeof(out) &&
-             strstr((char *)out,
-                    "if(document.hidden||updating)return") != NULL &&
-             strstr((char *)out,
-                    ".finally(function(){updating=false})") != NULL &&
-             strstr((char *)out,
-                    "addEventListener('visibilitychange'") != NULL &&
-             strstr((char *)out,
-                    "if(!document.hidden)update()") != NULL &&
-             strstr((char *)out, "setInterval(update,3000)") != NULL;
-        if (ok) printf("OK\n");
-        else { printf("FAIL\n"); failures++; }
-    }
+    failures += test_wallet_polling_bound();
 
     printf("explorer: projection status pages do not ask users to refresh... ");
     {

@@ -50,6 +50,12 @@ also run against baseline and candidate source: the baseline failed with exit
 - Architecture tree, file-purpose ratchet, controller-private-header boundary,
   pure-consensus include boundary, consensus-parity, sealed-core manifest, and
   hot-swap core-root mirror gates: PASS.
+- `make lint-fast`: 28/32 gates passed. The four failures are outside this
+  slice: environment-owned `.agents`/`.codex` root entries, unrelated dirty
+  benchmark/tool complexity and flag-registry findings, and a sandbox-denied
+  Windows acceptance scratch directory under `/root/.local/state`. After the
+  polling regression was extracted into its own helper, the complexity gate
+  no longer names `test_explorer`.
 
 The slice changes only the explorer wallet HTML/JavaScript renderer, its
 registered render regression, and this evidence record. It does not touch
