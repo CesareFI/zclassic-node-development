@@ -77,6 +77,44 @@ static int probe_ms_left(int64_t deadline_ms)
     return (int)left;
 }
 
+static bool probe_wait_connected(platform_socket_t fd, int64_t deadline_ms)
+{
+    int ready;
+    for (;;) {
+        int budget_ms = probe_ms_left(deadline_ms);
+        if (budget_ms <= 0)
+            return false;
+        ready = platform_socket_wait_writable(fd, budget_ms);
+        if (ready >= 0 || !platform_socket_error_interrupted(
+                platform_socket_last_error()))
+            break;
+    }
+    if (ready <= 0)
+        return false;
+    int pending = 0;
+    return platform_socket_pending_error(fd, &pending) == 0 && pending == 0;
+}
+
+static platform_socket_t probe_connect_one(const struct addrinfo *ai,
+                                           int64_t deadline_ms)
+{
+    platform_socket_t fd =
+        platform_socket_open(ai->ai_family, ai->ai_socktype,
+                             ai->ai_protocol, true, true);
+    if (fd == PLATFORM_SOCKET_INVALID)
+        return PLATFORM_SOCKET_INVALID;
+    int rc = platform_socket_connect(fd, ai->ai_addr,
+                                     (socklen_t)ai->ai_addrlen);
+    bool connected = rc == 0;
+    if (!connected && platform_socket_error_in_progress(
+            platform_socket_last_error()))
+        connected = probe_wait_connected(fd, deadline_ms);
+    if (connected)
+        return fd;
+    platform_socket_close(fd);
+    return PLATFORM_SOCKET_INVALID;
+}
+
 /* Connect to host:port within deadline_ms. Returns the connected socket,
  * or PLATFORM_SOCKET_INVALID (diagnostic already on stderr). */
 static platform_socket_t probe_connect(const char *host, const char *port,
@@ -104,55 +142,11 @@ static platform_socket_t probe_connect(const char *host, const char *port,
 
     platform_socket_t connected = PLATFORM_SOCKET_INVALID;
     for (struct addrinfo *ai = addresses; ai != NULL; ai = ai->ai_next) {
-        int budget_ms = probe_ms_left(deadline_ms);
-        if (budget_ms <= 0)
+        if (probe_ms_left(deadline_ms) <= 0)
             break;
-        platform_socket_t fd =
-            platform_socket_open(ai->ai_family, ai->ai_socktype,
-                                 ai->ai_protocol, true, true);
-        if (fd == PLATFORM_SOCKET_INVALID)
-            continue;
-        int rc = platform_socket_connect(fd, ai->ai_addr,
-                                         (socklen_t)ai->ai_addrlen);
-        if (rc != 0 &&
-            !platform_socket_error_in_progress(
-                platform_socket_last_error())) {
-            platform_socket_close(fd);
-            continue;
-        }
-        if (rc != 0) {
-            /* Socket setup/connect may consume the remaining budget under
-             * IBD load. Never give poll the stale pre-connect timeout. */
-            budget_ms = probe_ms_left(deadline_ms);
-            if (budget_ms <= 0) {
-                platform_socket_close(fd);
-                break;
-            }
-            int ready;
-            for (;;) {
-                ready = platform_socket_wait_writable(fd, budget_ms);
-                if (ready >= 0 || !platform_socket_error_interrupted(
-                        platform_socket_last_error()))
-                    break;
-                /* A signal does not invalidate the pending connection.
-                 * Retry that socket using only the original budget left. */
-                budget_ms = probe_ms_left(deadline_ms);
-                if (budget_ms <= 0)
-                    break;
-            }
-            if (ready <= 0) {
-                platform_socket_close(fd);
-                continue;
-            }
-            int pending = 0;
-            if (platform_socket_pending_error(fd, &pending) != 0 ||
-                pending != 0) {
-                platform_socket_close(fd);
-                continue;
-            }
-        }
-        connected = fd;
-        break;
+        connected = probe_connect_one(ai, deadline_ms);
+        if (connected != PLATFORM_SOCKET_INVALID)
+            break;
     }
     freeaddrinfo(addresses);
 

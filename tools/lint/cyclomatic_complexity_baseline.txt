@@ -4106,7 +4106,7 @@ tools/sim/simnet_trace_query.c:main:20
 tools/sim/simperf.c:main:28
 tools/simd_bench.c:bench_chacha_aead_row:38
 tools/simd_bench.c:main:28
-tools/snapshot_from_coinskv.c:main:17
+tools/snapshot_from_coinskv.c:main:16
 tools/soak/main.c:main:54
 tools/tor_provenance.c:run_selftest:19
 tools/verify_anchor_completeness.c:count_chainstate:16
