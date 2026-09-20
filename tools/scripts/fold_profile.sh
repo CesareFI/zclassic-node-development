@@ -42,6 +42,10 @@
 #   --out DIR         artifact dir (default
 #                     ~/.local/state/zclassic23-fold-profile/<slug>-<ts>)
 #   --                everything after is passed verbatim to the copy node
+#   Regression / observer-cost benchmark (no node or datadir required):
+#     sh tools/scripts/fold_profile_selftest.sh --bench
+#     sh tools/scripts/fold_profile_rpc_selftest.sh
+#     sh tools/scripts/fold_profile_counts_selftest.sh
 #
 # HONESTY RULES
 #   * Every number in the summary is a DIFFERENCE between two samples of a
@@ -51,8 +55,12 @@
 #     did not fold cannot price a block, and printing a divide-by-zero dash is
 #     the honest answer.
 #   * The CSV is kept next to the summary so any figure can be recomputed.
+#   * Failed or empty required RPC responses reject the whole sample; the
+#     previous usable row remains the summary's final observation.
+#   * Each telemetry client gets 5 seconds plus 1 second to terminate. A
+#     stalled observer cannot hold the sampler forever or publish partial data.
 #
-# bash-free: sh + awk + sed only.
+# bash-free: sh + awk + sed; timeout (or gtimeout) bounds RPC clients.
 set -u
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -91,6 +99,14 @@ done
     echo "              so there is nothing to sample without one." >&2
     exit 2
 }
+if command -v timeout >/dev/null 2>&1; then
+    RPC_TIMEOUT_CMD=timeout
+elif command -v gtimeout >/dev/null 2>&1; then
+    RPC_TIMEOUT_CMD=gtimeout
+else
+    echo 'fold_profile: timeout or gtimeout is required to bound telemetry RPCs' >&2
+    exit 2
+fi
 
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
 [ -n "$OUTDIR" ] || OUTDIR="$HOME/.local/state/zclassic23-fold-profile/$SLUG-$TS"
@@ -101,47 +117,217 @@ REPRO_LOG="$OUTDIR/repro_on_copy.log"
 SUMMARY="$OUTDIR/summary.txt"
 
 # ── sampling primitives ─────────────────────────────────────────────────────
-# Compact JSON, no jq (NO external dependencies is a project rule). Every
-# helper takes the whole response text and pulls ONE number out of it.
+# Compact JSON, no jq (NO external dependencies is a project rule).
 
-# jnum TEXT KEY — first "KEY":<int> in TEXT, 0 when absent or null.
-jnum() {
-    v="$(printf '%s' "$1" |
-         sed -n "s/.*\"$2\":\\(-\\{0,1\\}[0-9][0-9]*\\).*/\\1/p" | head -1)"
-    [ -n "$v" ] || v=0
-    printf '%s' "$v"
+# jnums TEXT 'KEY ...' ['STAGE ...'] — scalar CSV followed by stage triples.
+# Read drive counters and timings together from the same captured response.
+# Preserve the former greedy sed reader: last integer match on the first
+# matching line, zero when absent, and exact integer text (including wide counters).
+# Once all columns are found, drain later lines without revisiting the columns.
+# Match just the fields, retaining the last valid occurrence on the line.
+# A greedy leading .* also copied and rescanned every preceding diagnostic.
+# Skip regex scans for absent literal keys in sparse diagnostic responses.
+# Start each regex at the located key so a large diagnostic prefix is not
+# searched again. Keep the suffix for malformed and duplicate occurrences.
+# Scalar matches use a growing integer window; stage matches stop at the first
+# closing brace. Duplicate searches still inspect the entire line.
+jnums() {
+    printf '%s\n' "$1" | LC_ALL=C awk -v keys="$2" -v stages="${3:-}" '
+        BEGIN {
+            scalars = split(keys, key, " ")
+            for (i = 1; i <= scalars; i++) {
+                prefix[i] = "\"" key[i] "\":"
+                literal[i] = prefix[i]
+                pattern[i] = "^" prefix[i] "-?[0-9]+"
+            }
+            count = split(stages, stage, " ")
+            n = scalars + count
+            for (s = 1; s <= count; s++) {
+                i = scalars + s
+                literal[i] = "\"" stage[s] "\":"
+                prefix[i] = "\"" stage[s] "\":\\{\"us\":"
+                pattern[i] = prefix[i] "[0-9]+,\"calls\":[0-9]+,\"adv\":[0-9]+[,}]"
+            }
+        }
+        {
+            if (found == n) next
+            for (i = 1; i <= n && found < n; i++) {
+                if (i in value) continue
+                start = index($0, literal[i])
+                if (!start) continue
+                matched = 0
+                while (start) {
+                    # Scalars need only the key and integer, not the entire
+                    # diagnostic suffix. Grow for exact wide integer text.
+                    window = i <= scalars ? length(literal[i]) + 32 : 128
+                    rest = substr($0, start, window)
+                    if (i > scalars) {
+                        # A valid stage triple cannot cross a closing brace.
+                        # Stop at a complete triple too: later fields in the
+                        # same object do not contribute to this observation.
+                        # Still grow for wide integers or malformed prefixes.
+                        closing = index(rest, "}")
+                        while (!closing && !match(rest, pattern[i]) &&
+                               start + length(rest) <= length($0)) {
+                            window *= 2
+                            rest = substr($0, start, window)
+                            closing = index(rest, "}")
+                        }
+                        if (closing) rest = substr(rest, 1, closing)
+                    }
+                    while (match(rest, pattern[i])) {
+                        if (i <= scalars && RLENGTH == length(rest) &&
+                            start + RLENGTH <= length($0)) {
+                            window *= 2
+                            rest = substr($0, start, window)
+                            continue
+                        }
+                        v = substr(rest, RSTART, RLENGTH)
+                        matched = 1
+                        break
+                    }
+                    # Retry later keys after a malformed object; a match may
+                    # have skipped a malformed key within this same object.
+                    offset = start + length(literal[i])
+                    if (i > scalars && RSTART > 0)
+                        offset = start + RSTART + RLENGTH - 1
+                    # Try nearby duplicates before copying the full suffix.
+                    # Dense duplicate fields otherwise copy quadratic bytes.
+                    # Overlap by the key length so split keys remain visible.
+                    next_key = index(substr($0, offset, 256 + length(literal[i])), literal[i])
+                    if (!next_key) {
+                        next_key = index(substr($0, offset + 256), literal[i])
+                        if (next_key) next_key += 256
+                    }
+                    start = next_key ? offset + next_key - 1 : 0
+                }
+                if (matched) {
+                    sub("^" prefix[i], "", v)
+                    if (i > scalars) {
+                        gsub(/"calls":|"adv":/, "", v)
+                        sub(/[,}]$/, "", v)
+                    }
+                    value[i] = v
+                    found++
+                }
+            }
+        }
+        END {
+            for (i = 1; i <= n; i++)
+                printf "%s%s", (i == 1 ? "" : ","), (i in value ? value[i] : (i <= scalars ? "0" : "0,0,0"))
+            printf "\n"
+        }'
 }
 
-# jnum1 TEXT KEY — like jnum but takes the FIRST occurrence when the key
-# appears more than once. The stage-profile dump emits `cumulative` before
-# `last_batch` with identical field names, and the cumulative value is the one
-# an interval difference needs.
-jnum1() {
-    v="$(printf '%s' "$1" | tr ',' '\n' |
-         sed -n "s/^[^\"]*\"$2\":\\(-\\{0,1\\}[0-9][0-9]*\\).*/\\1/p" | head -1)"
-    [ -n "$v" ] || v=0
-    printf '%s' "$v"
+# jnums1 TEXT 'KEY ...' — ordered CSV of first matching integer values.
+# The compact stage-profile dump emits cumulative before last_batch. Read
+# each response once instead of starting three tools for each counter. Keep
+# the old comma/line field boundaries, missing-value zero and integer text
+# (awk arithmetic would round wide counters). Search each requested column
+# directly, without allocating every comma-delimited field in a diagnostic
+# tail. Skip regex scans for absent literal telemetry keys; incomplete profiles
+# otherwise rescan that entire tail for every missing counter. Once complete,
+# drain later lines; last_batch cannot replace values. Locate each literal key
+# before applying the numeric regex so diagnostic prefixes are not rescanned.
+jnums1() {
+    printf '%s\n' "$1" | LC_ALL=C awk -v keys="$2" '
+        BEGIN {
+            n = split(keys, key, " ")
+            for (i = 1; i <= n; i++) {
+                field[i] = "\"" key[i] "\":"
+                pattern[i] = "^" field[i] "-?[0-9]+"
+            }
+        }
+        {
+            if (found == n) next
+            for (i = 1; i <= n; i++) {
+                if (i in value) continue
+                start = index($0, field[i])
+                while (start) {
+                    # Preserve (^|,)[^",]*: no quote may intervene between
+                    # the key and its comma/line boundary, even on bad input.
+                    before = start - 1
+                    while (before > 0) {
+                        c = substr($0, before, 1)
+                        if (c == "\"" || c == ",") break
+                        # Skip delimiter-free spans in bulk. Long diagnostic
+                        # prefixes otherwise cost one awk step per byte.
+                        # Jump to the nearest delimiter within the final
+                        # span, retaining the exact quote/comma rule.
+                        left = before > 128 ? before - 128 : 0
+                        span = substr($0, left + 1, before - left)
+                        if (match(span, /[",][^",]*$/)) {
+                            before = left + RSTART
+                        } else {
+                            before = left
+                        }
+                    }
+                    if (before == 0 || c == ",") {
+                        # Ordinary counters fit without copying a diagnostic
+                        # tail. Expand only if the integer reaches the edge;
+                        # even unusually wide integer text stays exact.
+                        window = length(field[i]) + 32
+                        tail = substr($0, start, window)
+                        while (match(tail, pattern[i])) {
+                            if (RLENGTH == length(tail) &&
+                                start + RLENGTH <= length($0)) {
+                                window *= 2
+                                tail = substr($0, start, window)
+                                continue
+                            }
+                            v = substr(tail, length(field[i]) + 1,
+                                       RLENGTH - length(field[i]))
+                            value[i] = v
+                            found++
+                            break
+                        }
+                        if (i in value) break
+                    }
+                    offset = start + length(field[i])
+                    # As in jnums, retry nearby keys without copying the
+                    # entire suffix for each unavailable counter. Include
+                    # key-length overlap so boundary-spanning keys survive.
+                    next_key = index(substr($0, offset, 256 + length(field[i])), field[i])
+                    if (!next_key) {
+                        next_key = index(substr($0, offset + 256), field[i])
+                        if (next_key) next_key += 256
+                    }
+                    start = next_key ? offset + next_key - 1 : 0
+                }
+            }
+        }
+        END {
+            for (i = 1; i <= n; i++)
+                printf "%s%s", (i == 1 ? "" : ","), (i in value ? value[i] : "0")
+            printf "\n"
+        }'
 }
 
-# jstage TEXT STAGE FIELD — one field of one stage inside drain_stage_totals,
-# whose shape is "<stage>":{"us":N,"calls":N,"adv":N}. The same stage names
-# also appear in drain_last_stage_us as plain scalars, which this pattern
-# cannot match, so the object form is unambiguous.
-jstage() {
-    v="$(printf '%s' "$1" |
-         sed -n "s/.*\"$2\":{\"us\":\\([0-9]*\\),\"calls\":\\([0-9]*\\),\"adv\":\\([0-9]*\\)}.*/\\1 \\2 \\3/p" |
-         head -1)"
-    [ -n "$v" ] || v="0 0 0"
-    case "$3" in
-        us)    printf '%s' "$v" | cut -d' ' -f1 ;;
-        calls) printf '%s' "$v" | cut -d' ' -f2 ;;
-        adv)   printf '%s' "$v" | cut -d' ' -f3 ;;
-    esac
+# jstages TEXT 'STAGE ...' — ordered us,calls,adv CSV triples.
+# Batch the compact stage objects in one process. Preserve the former sed
+# reader's last match on the first matching line, missing-stage zeros and
+# exact integer text. Scalar drain_last_stage_us entries cannot match.
+jstages() {
+    jnums "$1" '' "$2"
 }
 
 STAGES="header_admit validate_headers body_fetch body_persist script_validate proof_validate utxo_apply tip_finalize"
 
-ask() { "$NODE_BIN" -datadir="$COPY" -rpcport="$PORT" "$@" 2>/dev/null; }
+ask() {
+    # Keep the timeout status: a client can print a plausible response prefix
+    # and then stall. sample_once rejects that entire observation. Kill after
+    # the grace period even if the client ignores TERM.
+    "$RPC_TIMEOUT_CMD" -k 1 5 "$NODE_BIN" -datadir="$COPY" -rpcport="$PORT" "$@" 2>/dev/null
+}
+
+# Command substitution removes trailing newlines, but leaves other blank RPC
+# output intact. Reject it before further RPCs or zero-default field parsing.
+has_sample_text() {
+    case "$1" in
+        *[![:space:]]*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
 
 write_header() {
     h="ts,h_star,rounds_total"
@@ -156,30 +342,39 @@ write_header() {
 }
 
 sample_once() {
-    drive="$(ask ops state --subsystem=reducer_drive)"
-    [ -n "$drive" ] || return 1
-    front="$(ask ops state --subsystem=reducer_frontier)"
-    pv="$(ask ops state --subsystem=reducer_stage_profile --key=proof_validate)"
-    tf="$(ask ops state --subsystem=reducer_stage_profile --key=tip_finalize)"
-    ua="$(ask ops state --subsystem=reducer_stage_profile --key=utxo_apply)"
+    # A failed command may still print a partial response. Check status and
+    # presence before polling further or turning absent counters into zeros.
+    if ! drive="$(ask ops state --subsystem=reducer_drive)" || ! has_sample_text "$drive"; then
+        echo 'fold_profile: sample rejected: reducer_drive RPC failed or empty' >&2
+        return 1
+    fi
+    if ! front="$(ask ops state --subsystem=reducer_frontier)" || ! has_sample_text "$front"; then
+        echo 'fold_profile: sample rejected: reducer_frontier RPC failed or empty' >&2
+        return 1
+    fi
+    if ! pv="$(ask ops state --subsystem=reducer_stage_profile --key=proof_validate)" || ! has_sample_text "$pv"; then
+        echo 'fold_profile: sample rejected: proof_validate RPC failed or empty' >&2
+        return 1
+    fi
+    if ! tf="$(ask ops state --subsystem=reducer_stage_profile --key=tip_finalize)" || ! has_sample_text "$tf"; then
+        echo 'fold_profile: sample rejected: tip_finalize RPC failed or empty' >&2
+        return 1
+    fi
+    if ! ua="$(ask ops state --subsystem=reducer_stage_profile --key=utxo_apply)" || ! has_sample_text "$ua"; then
+        echo 'fold_profile: sample rejected: utxo_apply RPC failed or empty' >&2
+        return 1
+    fi
 
-    row="$(date -u +%s),$(jnum "$front" provable_tip),$(jnum "$drive" drain_rounds_total)"
-    for s in $STAGES; do
-        row="$row,$(jstage "$drive" "$s" us),$(jstage "$drive" "$s" calls),$(jstage "$drive" "$s" adv)"
-    done
-    row="$row,$(jnum "$drive" batch_opened_total),$(jnum "$drive" batch_committed_total)"
-    row="$row,$(jnum "$drive" batch_rolled_back_total),$(jnum "$drive" batch_empty_total)"
-    row="$row,$(jnum "$drive" batch_commit_us_total)"
-    row="$row,$(jnum "$drive" fsync_flush_count),$(jnum "$drive" fsync_flush_us_total)"
-    row="$row,$(jnum1 "$pv" blocks),$(jnum1 "$pv" total_us)"
-    row="$row,$(jnum1 "$pv" pv_body_acquire_us),$(jnum1 "$pv" pv_verify_us)"
-    row="$row,$(jnum1 "$pv" pv_log_insert_us)"
-    row="$row,$(jnum1 "$pv" pv_sapling_spends),$(jnum1 "$pv" pv_sapling_outputs)"
-    row="$row,$(jnum1 "$pv" pv_sprout_groth16_joinsplits),$(jnum1 "$pv" pv_sprout_phgr13_joinsplits)"
-    row="$row,$(jnum1 "$pv" pv_binding_sigs)"
-    row="$row,$(jnum1 "$pv" pv_lookahead_hits),$(jnum1 "$pv" pv_lookahead_misses)"
-    row="$row,$(jnum1 "$tf" blocks),$(jnum1 "$tf" total_us)"
-    row="$row,$(jnum1 "$ua" blocks),$(jnum1 "$ua" total_us)"
+    row="$(date -u +%s),$(jnums "$front" provable_tip)"
+    # The final read variable retains all stage triples. Reorder the captured
+    # fields into the existing CSV schema using only shell builtins.
+    IFS=, read -r rounds opened committed rolled_back empty commit_us flush_count flush_us stages <<EOF
+$(jnums "$drive" 'drain_rounds_total batch_opened_total batch_committed_total batch_rolled_back_total batch_empty_total batch_commit_us_total fsync_flush_count fsync_flush_us_total' "$STAGES")
+EOF
+    row="$row,$rounds,$stages,$opened,$committed,$rolled_back,$empty,$commit_us,$flush_count,$flush_us"
+    row="$row,$(jnums1 "$pv" 'blocks total_us pv_body_acquire_us pv_verify_us pv_log_insert_us pv_sapling_spends pv_sapling_outputs pv_sprout_groth16_joinsplits pv_sprout_phgr13_joinsplits pv_binding_sigs pv_lookahead_hits pv_lookahead_misses')"
+    row="$row,$(jnums1 "$tf" 'blocks total_us')"
+    row="$row,$(jnums1 "$ua" 'blocks total_us')"
     printf '%s\n' "$row" >> "$CSV"
     return 0
 }
@@ -229,43 +424,47 @@ sample_once && samples=$((samples + 1))
 echo "[fold_profile] $samples samples -> $CSV (repro rc=$REPRO_RC)"
 
 # ── derive the table from the FIRST and LAST usable samples ─────────────────
+# A stage can exceed 2^31 microseconds in 36 minutes. Format durations and
+# cumulative counts as floating-point integers: some awk implementations
+# narrow %d to signed 32 bits, turning positive observations negative.
+# The sampler writes fixed-width CSV rows. Retain the endpoint records and
+# split them once; intermediate samples only contribute to the sample count.
 awk -F, -v OFS=' ' '
 NR == 1 { for (i = 1; i <= NF; i++) col[$i] = i; next }
-{ if (!have_first) { for (i = 1; i <= NF; i++) f[i] = $i; have_first = 1 }
-  for (i = 1; i <= NF; i++) l[i] = $i; n++ }
+{ if (!n) first = $0; last = $0; n++ }
 function d(name) { return l[col[name]] - f[col[name]] }
 END {
     if (n < 2) { print "fold_profile: fewer than 2 samples — nothing to difference"; exit 0 }
+    split(first, f, ","); split(last, l, ",")
     secs = d("ts")
-    printf "interval: %d s over %d samples\n\n", secs, n
+    printf "interval: %.0f s over %.0f samples\n\n", secs, n
     split("header_admit validate_headers body_fetch body_persist script_validate proof_validate utxo_apply tip_finalize", S, " ")
     tot = 0
     for (i = 1; i <= 8; i++) tot += d(S[i] "_us")
     print "STAGE                 delta_us      share%   calls   advances   us/advance"
     for (i = 1; i <= 8; i++) {
         us = d(S[i] "_us"); ca = d(S[i] "_calls"); ad = d(S[i] "_adv")
-        printf "%-18s %12d %9.2f %7d %10d %12s\n", S[i], us,
+        printf "%-18s %12.0f %9.2f %7.0f %10.0f %12s\n", S[i], us,
                (tot > 0 ? 100.0 * us / tot : 0), ca, ad,
                (ad > 0 ? sprintf("%.1f", us / ad) : "-")
     }
-    printf "%-18s %12d %9.2f %7d %10d\n\n", "TOTAL", tot, 100.0,
+    printf "%-18s %12.0f %9.2f %7.0f %10.0f\n\n", "TOTAL", tot, 100.0,
            d("rounds_total"), 0
     blocks = d("utxo_apply_adv")
     op = d("batch_opened"); cm = d("batch_committed"); em = d("batch_empty")
     printf "TRANSACTIONS\n"
-    printf "  batches opened        %d\n", op
-    printf "  batches committed     %d\n", cm
-    printf "  batches rolled back   %d\n", d("batch_rolled_back")
-    printf "  batches EMPTY         %d  (%.1f%% of opened)\n", em,
+    printf "  batches opened        %.0f\n", op
+    printf "  batches committed     %.0f\n", cm
+    printf "  batches rolled back   %.0f\n", d("batch_rolled_back")
+    printf "  batches EMPTY         %.0f  (%.1f%% of opened)\n", em,
            (op > 0 ? 100.0 * em / op : 0)
     printf "  us per commit         %s\n",
            (cm > 0 ? sprintf("%.1f", d("batch_commit_us_total") / cm) : "-")
-    printf "  durability barriers   %d\n", d("fsync_flush_count")
+    printf "  durability barriers   %.0f\n", d("fsync_flush_count")
     printf "  us per barrier        %s\n",
-           (d("fsync_flush_count") > 0 ?
-            sprintf("%.1f", d("fsync_flush_us_total") / d("fsync_flush_count")) : "-")
+           (d("fsync_flush_count") > 0 ? sprintf("%.1f", d("fsync_flush_us_total") / d("fsync_flush_count")) : "-")
     if (blocks > 0) {
-        printf "  blocks folded         %d\n", blocks
+        printf "  blocks folded         %.0f\n", blocks
         printf "  transactions/block    %.2f\n", op / blocks
         printf "  empty txns/block      %.2f\n", em / blocks
         printf "  barriers/block        %.2f\n", d("fsync_flush_count") / blocks
@@ -273,18 +472,18 @@ END {
         printf "  blocks folded         0  (no per-block figure: nothing folded)\n"
     }
     pvb = d("pv_blocks")
-    printf "\nPROOF_VALIDATE (blocks=%d)\n", pvb
+    printf "\nPROOF_VALIDATE (blocks=%.0f)\n", pvb
     if (pvb > 0) {
         printf "  total us/block        %.1f\n", d("pv_total_us") / pvb
         printf "    body acquire        %.1f\n", d("pv_body_acquire_us") / pvb
         printf "    proof sweep         %.1f\n", d("pv_verify_us") / pvb
         printf "    log insert          %.1f\n", d("pv_log_insert_us") / pvb
-        printf "  sapling spends        %d\n", d("pv_spends")
-        printf "  sapling outputs       %d\n", d("pv_outputs")
-        printf "  sprout groth16        %d\n", d("pv_sprout_groth16")
-        printf "  sprout phgr13         %d\n", d("pv_sprout_phgr13")
-        printf "  binding sigs          %d\n", d("pv_binding_sigs")
-        printf "  lookahead hit/miss    %d/%d\n", d("pv_lookahead_hits"),
+        printf "  sapling spends        %.0f\n", d("pv_spends")
+        printf "  sapling outputs       %.0f\n", d("pv_outputs")
+        printf "  sprout groth16        %.0f\n", d("pv_sprout_groth16")
+        printf "  sprout phgr13         %.0f\n", d("pv_sprout_phgr13")
+        printf "  binding sigs          %.0f\n", d("pv_binding_sigs")
+        printf "  lookahead hit/miss    %.0f/%.0f\n", d("pv_lookahead_hits"),
                d("pv_lookahead_misses")
     } else {
         printf "  no proof_validate advance in the interval\n"

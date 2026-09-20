@@ -43,6 +43,10 @@
  *
  * Usage: fs_handshake_probe <host> <port> [budget_ms]
  * (budget_ms defaults to 4000 and bounds connect AND handshake together).
+ * Deadline regression (no network):
+ *   bash tools/scripts/fs_handshake_probe_deadline_selftest.sh
+ *   bash tools/scripts/fs_handshake_probe_interrupt_selftest.sh
+ *   bash tools/scripts/fs_handshake_probe_resolver_selftest.sh
  * Prints one result line on stdout on success; diagnostics on stderr. */
 
 #include "net/file_service.h"
@@ -78,6 +82,14 @@ static int probe_ms_left(int64_t deadline_ms)
 static platform_socket_t probe_connect(const char *host, const char *port,
                                        int64_t deadline_ms)
 {
+    /* Runtime setup or descheduling may exhaust the budget before entry.
+     * Do not start a blocking resolver operation for an expired probe. */
+    if (probe_ms_left(deadline_ms) <= 0) {
+        fprintf(stderr,
+                "fs_handshake_probe: deadline expired before resolving %s:%s\n",
+                host, port);
+        return PLATFORM_SOCKET_INVALID;
+    }
     struct addrinfo hints;
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_UNSPEC;
@@ -109,7 +121,26 @@ static platform_socket_t probe_connect(const char *host, const char *port,
             continue;
         }
         if (rc != 0) {
-            if (platform_socket_wait_writable(fd, budget_ms) <= 0) {
+            /* Socket setup/connect may consume the remaining budget under
+             * IBD load. Never give poll the stale pre-connect timeout. */
+            budget_ms = probe_ms_left(deadline_ms);
+            if (budget_ms <= 0) {
+                platform_socket_close(fd);
+                break;
+            }
+            int ready;
+            for (;;) {
+                ready = platform_socket_wait_writable(fd, budget_ms);
+                if (ready >= 0 || !platform_socket_error_interrupted(
+                        platform_socket_last_error()))
+                    break;
+                /* A signal does not invalidate the pending connection.
+                 * Retry that socket using only the original budget left. */
+                budget_ms = probe_ms_left(deadline_ms);
+                if (budget_ms <= 0)
+                    break;
+            }
+            if (ready <= 0) {
                 platform_socket_close(fd);
                 continue;
             }

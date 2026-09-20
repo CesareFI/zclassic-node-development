@@ -1,19 +1,18 @@
 /* Copyright 2026 Rhett Creighton - Apache License 2.0
- * Z23 Network Sync Speed Run
+ * Z23 File-Service Startup Timing
  *
- * Measures end-to-end time from zero to chain tip via file service.
+ * Measures the app_init startup attempt with a file-service peer.
  * Connects to a RUNNING power node's file service over TCP.
  * No source node shutdown required.
+ * app_init may return while catch-up and validation continue in background;
+ * this tool does not measure time to tip or sovereign validation completion.
  *
  * Build: make speedrun
  * Usage: build/bin/speedrun [peer_address]
  *   Default peer: 127.0.0.1 (localhost power node)
  *
- * Phases:
- *   1. File service download (block files + block_index + consensus snapshot)
- *   2. Block index load (mmap flat file)
- *   3. UTXO import (from consensus_snapshot.db or replay)
- *   4. Delta block replay (snapshot height → tip)
+ * Exit: 0 means startup completed, 1 means startup failed. Neither proves
+ * completed synchronization. Report the startup duration even on failure.
  */
 
 #include "platform/time_compat.h"
@@ -46,19 +45,21 @@ int main(int argc, char *argv[])
     if (argc >= 2)
         peer = argv[1];
 
-    char dst_base[256];
-    snprintf(dst_base, sizeof(dst_base), "/tmp/zcl23-speedrun-%d", (int)getpid());
+    /* PID reuse must not turn a fresh-start measurement into a resume.
+     * Reserve an empty, private directory before starting the clock. */
+    char dst_base[256] = "/tmp/zcl23-speedrun-XXXXXX";
+    if (!mkdtemp(dst_base)) {
+        perror("speedrun: create fresh startup datadir");
+        return 1;
+    }
 
     printf("╔══════════════════════════════════════════════════════╗\n");
-    printf("║     Z23 Network Sync Speed Run                         ║\n");
+    printf("║     Z23 File-Service Startup Timing                   ║\n");
     printf("╚══════════════════════════════════════════════════════╝\n\n");
     printf("Peer:    %s:18034\n", peer);
     printf("Target:  %s\n\n", dst_base);
 
-    /* Create clean target */
-    mkdir(dst_base, 0755);
-
-    int64_t t_total = now_ms();
+    int64_t t_startup = now_ms();
 
     /* Boot with -fileservice= pointing to the power node.
      * The boot sequence will:
@@ -77,17 +78,19 @@ int main(int argc, char *argv[])
 
     bool ok = app_init(&ctx);
 
-    int64_t total_ms = now_ms() - t_total;
+    int64_t startup_ms = now_ms() - t_startup;
 
     printf("\n");
     printf("╔══════════════════════════════════════════════════════╗\n");
-    printf("║  SPEED RUN RESULT                                    ║\n");
+    printf("║  STARTUP RESULT                                      ║\n");
     printf("╠══════════════════════════════════════════════════════╣\n");
-    printf("║  TOTAL (zero to tip):  %6lldms  (%4.1fs)            ║\n",
-           (long long)total_ms, (double)total_ms / 1000.0);
-    printf("║  Status: %s                                    ║\n",
-           ok ? "SUCCESS" : "FAILED ");
+    printf("║  Startup attempt:     %6lldms  (%4.1fs)            ║\n",
+           (long long)startup_ms, (double)startup_ms / 1000.0);
+    printf("║  Startup status: %s                            ║\n",
+           ok ? "COMPLETE" : "FAILED  ");
     printf("╚══════════════════════════════════════════════════════╝\n");
+    printf("Time to tip: NOT MEASURED\n");
+    printf("Sovereign validation: NOT MEASURED\n");
 
     printf("\nTemp data at: %s\n", dst_base);
     printf("Clean up with: rm -rf %s\n", dst_base);

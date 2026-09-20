@@ -161,8 +161,11 @@ static void topo_probe(int cpu, struct cpu_topo *t)
             snprintf(seen[nseen], sizeof(seen[nseen]), "%s", cur);
             found = nseen++;
         }
-        if (strcmp(cur, t->l3_shared) == 0 && t->ccd_index < 0)
+        if (strcmp(cur, t->l3_shared) == 0) {
             t->ccd_index = found;
+            /* Later CPUs cannot change this first-seen domain's index. */
+            break;
+        }
     }
     t->known = (t->ccd_index >= 0);
 }
@@ -196,23 +199,41 @@ static bool corpus_load_file(const char *path)
     FILE *f = fopen(path, "r");
     if (!f) return false;
     static char line[1 << 22];
+    size_t line_number = 0;
+    bool complete = true;
     while (g_nblk < MAX_BLOCKS && fgets(line, sizeof line, f)) {
+        line_number++;
         size_t L = strlen(line);
         while (L && (line[L - 1] == '\n' || line[L - 1] == '\r')) line[--L] = 0;
-        if (L < 2 || (L & 1)) continue;
+        if (L == 0) continue;
+        /* A malformed record must not silently select a smaller workload. */
+        if (L & 1) { complete = false; break; }
         size_t cap = L / 2;
         unsigned char *b = zcl_malloc(cap, "serial_bench_block");
-        if (!b) break;
+        if (!b) { complete = false; break; }
         size_t got = 0;
         if (!zcl_hex_decode_n(line, b, cap, &got) || got != cap) {
             free(b);
-            continue;
+            complete = false;
+            break;
         }
         g_blk[g_nblk] = b;
         g_blk_len[g_nblk] = cap;
         g_nblk++;
     }
+    if (ferror(f)) complete = false;
     fclose(f);
+    if (!complete) {
+        fprintf(stderr, "serial_bench: corpus load failed near line %zu; "
+                "refusing a partial workload\n", line_number);
+        for (int i = 0; i < g_nblk; i++) {
+            free(g_blk[i]);
+            g_blk[i] = NULL;
+            g_blk_len[i] = 0;
+        }
+        g_nblk = 0;
+        return false;
+    }
     return g_nblk > 0;
 }
 
@@ -258,6 +279,28 @@ static bool corpus_synthesize(void)
 
 /* ── The observation under test ──────────────────────────────────── */
 
+/* Every corpus entry must contribute one complete parse to every variant.
+ * Equal failures are not parity evidence, and timing a rejected prefix as a
+ * whole block would inflate blocks/s. This checks benchmark framing only;
+ * it neither changes the parser nor asserts consensus validity. */
+static void parse_corpus_block(int i, struct block *b)
+{
+    struct byte_stream s;
+    stream_init_from_data(&s, g_blk[i], g_blk_len[i]);
+    /* Initialize ownership for cleanup after a partial parse. The parser
+     * overwrites header fields; avoid zeroing its unused solution tail in
+     * this allocator benchmark. */
+    b->vtx = NULL;
+    b->num_vtx = 0;
+    if (!block_deserialize(b, &s) || stream_remaining(&s) != 0) {
+        fprintf(stderr, "serial_bench: incomplete block parse at corpus entry %d "
+                "(%zu/%zu bytes consumed); refusing throughput\n",
+                i + 1, s.read_pos, g_blk_len[i]);
+        block_free(b);
+        exit(2);
+    }
+}
+
 /* Everything a consumer derives from a parsed block, folded into one
  * SHA-256: the header hash, the merkle root, every txid, and the full
  * re-serialized wire bytes. If a variant read one byte past a script's
@@ -269,14 +312,8 @@ static uint64_t observe_corpus(struct uint256 *digest)
     uint64_t ntx = 0;
 
     for (int i = 0; i < g_nblk; i++) {
-        struct byte_stream s;
-        stream_init_from_data(&s, g_blk[i], g_blk_len[i]);
         struct block b;
-        if (!block_deserialize(&b, &s)) {
-            unsigned char x = 'X';
-            sha256_write(&h, &x, 1);
-            continue;
-        }
+        parse_corpus_block(i, &b);
         struct uint256 bh;
         block_get_hash(&b, &bh);
         sha256_write(&h, bh.data, 32);
@@ -312,13 +349,10 @@ static uint64_t observe_corpus(struct uint256 *digest)
 static void parse_corpus_once(void)
 {
     for (int i = 0; i < g_nblk; i++) {
-        struct byte_stream s;
-        stream_init_from_data(&s, g_blk[i], g_blk_len[i]);
         struct block b;
-        if (block_deserialize(&b, &s)) {
-            g_sink += b.num_vtx;
-            block_free(&b);
-        }
+        parse_corpus_block(i, &b);
+        g_sink += b.num_vtx;
+        block_free(&b);
     }
 }
 
@@ -361,8 +395,14 @@ int main(int argc, char **argv)
     if (g_reps < 3) g_reps = 3;
     if (g_reps > BENCH_MAX_REPS) g_reps = BENCH_MAX_REPS;
 
-    if (!(corpus && corpus_load_file(corpus)) && !corpus_synthesize()) {
-        fprintf(stderr, "serial_bench: could not build a corpus\n");
+    /* A requested chain workload must not silently become synthetic work,
+     * especially in CSV mode, which has no corpus-description banner. */
+    if (corpus ? !corpus_load_file(corpus) : !corpus_synthesize()) {
+        if (corpus)
+            fprintf(stderr, "serial_bench: could not load requested corpus '%s'; "
+                    "refusing throughput\n", corpus);
+        else
+            fprintf(stderr, "serial_bench: could not build a synthetic corpus\n");
         return 1;
     }
 

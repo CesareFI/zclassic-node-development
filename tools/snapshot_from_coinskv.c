@@ -84,12 +84,8 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    /* Report what coins_kv holds before writing. */
-    int64_t num_txs = 0, count = 0, supply = 0;
-    if (coins_kv_setinfo(pdb, &num_txs, &count, &supply))
-        fprintf(stderr, "coins_kv: count=%lld supply=%lld\n",
-                (long long)count, (long long)supply);
-
+    /* The writer returns count/supply for the final report. A diagnostic
+     * setinfo here would scan the entire coins set again before export. */
     struct snapshot_shielded shielded;
     struct snapshot_shielded *shptr = NULL;
     if (want_shielded) {

@@ -53,75 +53,71 @@ for arg in "$@"; do
     esac
 done
 
-# float_le A B  -> exit 0 if A <= B
-float_le() { awk -v a="$1" -v b="$2" 'BEGIN{exit !(a <= b)}'; }
-float_lt() { awk -v a="$1" -v b="$2" 'BEGIN{exit !(a <  b)}'; }
-fmul()     { awk -v a="$1" -v b="$2" 'BEGIN{printf "%.4f", a*b}'; }
-fdiv()     { awk -v a="$1" -v b="$2" 'BEGIN{printf "%.4f", (b==0)?0:a/b}'; }
-
 # eval_row KEY MEAS C_BASE RUST MODE MARGIN
 # Echoes: "<verdict> <ratio>" where verdict in
 #   OK_BEAT | OK_BEHIND | FAIL_RATCHET | FAIL_BEAT | FAIL_CONFIG
 # Returns 0 for OK_*, 1 for FAIL_*. Pure arithmetic — shared by gate + selftest.
 eval_row() {
-    local key="$1" meas="$2" cbase="$3" rust="$4" mode="$5" margin="$6"
-    local ceiling ratio
-    ceiling=$(fmul "$cbase" "$(awk -v m="$margin" 'BEGIN{printf "%.4f", 1+m}')")
-    ratio=$(fdiv "$meas" "$rust")
-
-    # RATIO (beat rows): losing the lead vs Rust is the headline invariant —
-    # hard-FAIL the moment ratio >= 1. Checked first so the operator sees "lost
-    # lead" rather than a generic ratchet miss. (Under valid config this also
-    # implies a ratchet break, but the message matters.)
-    if [ "$mode" = "beat" ] && ! float_lt "$meas" "$rust"; then
-        echo "FAIL_BEAT $ratio"; return 1
-    fi
-
-    # RATCHET (always): meas must not exceed the baseline ceiling.
-    if ! float_le "$meas" "$ceiling"; then
-        echo "FAIL_RATCHET $ratio"; return 1
-    fi
-
-    if [ "$mode" = "beat" ]; then
-        # Config sanity: a beat row must keep ratchet headroom below rust so the
-        # ratchet makes the beat hard-fail flake-proof. Mis-pin => fail loudly.
-        if ! float_le "$ceiling" "$rust"; then
-            echo "FAIL_CONFIG $ratio"; return 1
-        fi
-        echo "OK_BEAT $ratio"; return 0
-    else
-        echo "OK_BEHIND $ratio"; return 0
-    fi
+    # Keep both historical four-decimal rounding steps at the ratchet boundary.
+    # Combining the arithmetic must not change a gate threshold or its verdict
+    # precedence: lost lead, self-regression, then mis-pinned headroom.
+    awk -v meas="$2" -v cbase="$3" -v rust="$4" -v mode="$5" -v margin="$6" '
+        BEGIN {
+            factor = sprintf("%.4f", 1 + margin)
+            ceiling = sprintf("%.4f", cbase * factor) + 0
+            ratio = sprintf("%.4f", (rust == 0) ? 0 : meas / rust)
+            if (mode == "beat" && !(meas < rust))
+                verdict = "FAIL_BEAT"
+            else if (!(meas <= ceiling))
+                verdict = "FAIL_RATCHET"
+            else if (mode == "beat" && !(ceiling <= rust))
+                verdict = "FAIL_CONFIG"
+            else
+                verdict = (mode == "beat") ? "OK_BEAT" : "OK_BEHIND"
+            print verdict " " ratio
+            exit (verdict ~ /^FAIL_/)
+        }'
 }
 
 # ── selftest: exercise the evaluator against synthetic rows ─────────────
 if [ "$SELFTEST" = 1 ]; then
     echo "check_crypto_perf --selftest (evaluator logic, no build)"
     fails=0
-    assert() { # DESC EXPECT KEY MEAS CBASE RUST MODE
+    checks=0
+    assert() { # DESC EXPECT KEY MEAS CBASE RUST MODE [MARGIN]
         local desc="$1" expect="$2"; shift 2
-        local out verdict
-        out=$(eval_row "$1" "$2" "$3" "$4" "$5" "0.20") || true
-        verdict="${out%% *}"
-        if [ "$verdict" = "$expect" ]; then
-            printf "  OK   %-42s -> %s\n" "$desc" "$verdict"
+        local out rc=0 expected_rc=0
+        out=$(eval_row "$1" "$2" "$3" "$4" "$5" "${6:-0.20}") || rc=$?
+        case "$expect" in FAIL_*) expected_rc=1 ;; esac
+        checks=$((checks+1))
+        if [ "$out" = "$expect" ] && [ "$rc" -eq "$expected_rc" ]; then
+            printf "  OK   %-42s -> %s\n" "$desc" "$out"
         else
-            printf "  FAIL %-42s -> %s (expected %s)\n" "$desc" "$verdict" "$expect"
+            printf "  FAIL %-42s -> %s rc=%s (expected %s rc=%s)\n" \
+                "$desc" "$out" "$rc" "$expect" "$expected_rc"
             fails=$((fails+1))
         fi
     }
     #      desc                                     expect        key  meas  cbase  rust    mode
-    assert "beat, at baseline, well under rust"     OK_BEAT       k 100    100   200     beat
-    assert "beat, +15% (within margin), under rust" OK_BEAT       k 115    100   200     beat
-    assert "beat, +25% self-regression"             FAIL_RATCHET  k 125    100   200     beat
-    assert "beat, faster than baseline"             OK_BEAT       k  80    100   200     beat
-    assert "beat, but lost lead (meas>=rust)"       FAIL_BEAT     k 125    100   120     beat
-    assert "beat, mis-pinned (no headroom vs rust)" FAIL_CONFIG   k 100    100   110     beat
-    assert "behind, within ratchet, slower than rust" OK_BEHIND   k 110    100    40     behind
-    assert "behind, self-regression beyond margin"  FAIL_RATCHET  k 130    100    40     behind
-    assert "behind, we happen to be ahead"          OK_BEHIND     k  90    100   200     behind
+    assert "beat, at baseline, well under rust"     'OK_BEAT 0.5000'      k 100 100 200 beat
+    assert "beat, +15% (within margin), under rust" 'OK_BEAT 0.5750'      k 115 100 200 beat
+    assert "beat, +25% self-regression"             'FAIL_RATCHET 0.6250' k 125 100 200 beat
+    assert "beat, faster than baseline"            'OK_BEAT 0.4000'      k  80 100 200 beat
+    assert "beat, but lost lead (meas>=rust)"       'FAIL_BEAT 1.0417'    k 125 100 120 beat
+    assert "beat, mis-pinned (no headroom vs rust)" 'FAIL_CONFIG 0.9091'  k 100 100 110 beat
+    assert "behind, within ratchet, slower than rust" 'OK_BEHIND 2.7500' k 110 100  40 behind
+    assert "behind, self-regression beyond margin" 'FAIL_RATCHET 3.2500' k 130 100  40 behind
+    assert "behind, we happen to be ahead"         'OK_BEHIND 0.4500'    k  90 100 200 behind
+    assert "ratchet equality passes"               'OK_BEAT 0.6000'      k 120 100 200 beat
+    assert "ratchet excess refuses"                'FAIL_RATCHET 0.6000' k 120.00001 100 200 beat
+    assert "equal Rust time loses lead"            'FAIL_BEAT 1.0000'    k 120 100 120 beat
+    assert "headroom equality passes"              'OK_BEAT 0.8333'      k 100 100 120 beat
+    assert "ratio display cannot lose lead"        'OK_BEAT 1.0000'      k 119.99999 100 120 beat
+    assert "rounded margin retains ceiling"        'FAIL_RATCHET 0.6000' k 120.001 100 200 behind 0.200049
+    assert "rounded product retains ceiling"       'OK_BEHIND 0.6000'    k 1.2001 1.00008 2 behind
+    assert "zero reference retains zero ratio"     'OK_BEHIND 0.0000'    k 100 100 0 behind
     if [ "$fails" -eq 0 ]; then
-        echo "check_crypto_perf selftest: OK (9/9)"
+        echo "check_crypto_perf selftest: OK ($checks/$checks)"
         exit 0
     fi
     echo "check_crypto_perf selftest: FAIL ($fails failing case(s))"

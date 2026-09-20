@@ -140,7 +140,23 @@ static int parse_path(const char *path)
 static bool decode_key(const char *text, const zjsonp_event *ev,
                        char *out, size_t cap, size_t *len_out)
 {
-    size_t n = zjsonp_str_decode(text, ev, out, cap);
+    /* The pull parser has already validated the token. Plain ASCII keys
+     * need no escape or Unicode conversion; keep other keys on the existing
+     * decoder so its output and capacity rules remain authoritative. */
+    const char *key = text + ev->off;
+    size_t plain = 0;
+    while (plain < ev->len && (unsigned char)key[plain] < 0x80 &&
+           key[plain] != '\\')
+        plain++;
+    size_t n;
+    if (plain == ev->len) {
+        n = ev->len;
+        if (n >= cap)
+            return false;
+        memcpy(out, key, n);
+    } else {
+        n = zjsonp_str_decode(text, ev, out, cap);
+    }
     if (n == SIZE_MAX || n >= cap)
         return false;
     out[n] = '\0';
