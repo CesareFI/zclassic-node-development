@@ -53,8 +53,9 @@ static const char *const k_phase_name[SYNC_BENCH_PHASE_COUNT] = {
     "artifact_verify", "install", "tail_download", "tail_fold",
 };
 
-static struct {
-    pthread_mutex_t lock;           /* guards every field below */
+/* Plain measurement state can be copied under the mutex. JSON construction
+ * then uses that one observation without excluding counter or phase writers. */
+struct sb_state {
     bool    initialized;
     char    datadir[512];
 
@@ -77,8 +78,10 @@ static struct {
     int     peer_count;
 
     char    artifact_id[80];        /* "" == null */
-} g_sb = {
-    .lock = PTHREAD_MUTEX_INITIALIZER,
+};
+
+static pthread_mutex_t g_sb_lock = PTHREAD_MUTEX_INITIALIZER;
+static struct sb_state g_sb = {
     .est_mbps = -1.0,
     .peer_count = -1,
 };
@@ -90,7 +93,7 @@ static int64_t sb_now_us(void)
     return platform_time_monotonic_us();
 }
 
-/* Sample VmRSS and fold it into the running peak. Called with g_sb.lock held.
+/* Sample VmRSS and fold it into the running peak. Called with g_sb_lock held.
  * Best-effort: an unreadable /proc leaves the peak untouched. */
 static void sb_sample_rss_locked(void)
 {
@@ -107,18 +110,18 @@ void sync_benchmark_phase_begin(enum sync_bench_phase phase)
 {
     if ((int)phase < 0 || phase >= SYNC_BENCH_PHASE_COUNT)
         return;
-    pthread_mutex_lock(&g_sb.lock);
+    pthread_mutex_lock(&g_sb_lock);
     g_sb.phase[phase].state    = SB_IN_PROGRESS;
     g_sb.phase[phase].begin_us = sb_now_us();
     sb_sample_rss_locked();
-    pthread_mutex_unlock(&g_sb.lock);
+    pthread_mutex_unlock(&g_sb_lock);
 }
 
 void sync_benchmark_phase_end(enum sync_bench_phase phase)
 {
     if ((int)phase < 0 || phase >= SYNC_BENCH_PHASE_COUNT)
         return;
-    pthread_mutex_lock(&g_sb.lock);
+    pthread_mutex_lock(&g_sb_lock);
     struct sb_phase *p = &g_sb.phase[phase];
     if (p->state == SB_IN_PROGRESS) {
         int64_t d_us = sb_now_us() - p->begin_us;
@@ -128,32 +131,32 @@ void sync_benchmark_phase_end(enum sync_bench_phase phase)
         p->state      = SB_DONE;
         sb_sample_rss_locked();
     }
-    pthread_mutex_unlock(&g_sb.lock);
+    pthread_mutex_unlock(&g_sb_lock);
 }
 
 void sync_benchmark_mark_ready(void)
 {
-    pthread_mutex_lock(&g_sb.lock);
+    pthread_mutex_lock(&g_sb_lock);
     int64_t d_us = sb_now_us() - g_sb.t0_us;
     g_sb.ready_ms = (d_us < 0) ? 0 : d_us / 1000;
-    pthread_mutex_unlock(&g_sb.lock);
+    pthread_mutex_unlock(&g_sb_lock);
 }
 
 void sync_benchmark_mark_sovereign(void)
 {
-    pthread_mutex_lock(&g_sb.lock);
+    pthread_mutex_lock(&g_sb_lock);
     int64_t d_us = sb_now_us() - g_sb.t0_us;
     g_sb.sovereign_ms = (d_us < 0) ? 0 : d_us / 1000;
-    pthread_mutex_unlock(&g_sb.lock);
+    pthread_mutex_unlock(&g_sb_lock);
 }
 
 static void sb_note(int64_t *counter, uint64_t bytes)
 {
-    pthread_mutex_lock(&g_sb.lock);
+    pthread_mutex_lock(&g_sb_lock);
     if (*counter < 0)
         *counter = 0;
     *counter += (int64_t)bytes;
-    pthread_mutex_unlock(&g_sb.lock);
+    pthread_mutex_unlock(&g_sb_lock);
 }
 
 void sync_benchmark_note_downloaded(uint64_t bytes)   { sb_note(&g_sb.bytes_downloaded, bytes); }
@@ -162,12 +165,12 @@ void sync_benchmark_note_redownloaded(uint64_t bytes) { sb_note(&g_sb.bytes_redo
 
 void sync_benchmark_set_artifact(const char *artifact_id)
 {
-    pthread_mutex_lock(&g_sb.lock);
+    pthread_mutex_lock(&g_sb_lock);
     if (artifact_id && artifact_id[0])
         snprintf(g_sb.artifact_id, sizeof(g_sb.artifact_id), "%s", artifact_id);
     else
         g_sb.artifact_id[0] = '\0';
-    pthread_mutex_unlock(&g_sb.lock);
+    pthread_mutex_unlock(&g_sb_lock);
 }
 
 /* ── Receipt builder ───────────────────────────────────────────── */
@@ -189,13 +192,13 @@ static void sb_push_int_or_null(struct json_value *obj, struct json_value *reaso
     }
 }
 
-/* Build the timings_ms object; append per-phase null reasons to `reasons`.
- * Called with g_sb.lock held. */
-static void sb_build_timings_locked(struct json_value *timings,
-                                    struct json_value *reasons, bool complete)
+/* Build timings and null reasons from the same captured observation. */
+static void sb_build_timings(struct json_value *timings,
+                             struct json_value *reasons, bool complete,
+                             const struct sb_state *state)
 {
     for (int i = 0; i < SYNC_BENCH_PHASE_COUNT; i++) {
-        const struct sb_phase *p = &g_sb.phase[i];
+        const struct sb_phase *p = &state->phase[i];
         if (p->state == SB_DONE) {
             json_push_kv_int(timings, k_phase_name[i], p->elapsed_ms);
         } else {
@@ -212,9 +215,9 @@ static void sb_build_timings_locked(struct json_value *timings,
         }
     }
     /* Derived milestones. */
-    sb_push_int_or_null(timings, reasons, "t_ready", g_sb.ready_ms,
+    sb_push_int_or_null(timings, reasons, "t_ready", state->ready_ms,
                         "assisted_readiness_not_reached");
-    sb_push_int_or_null(timings, reasons, "t_sovereign", g_sb.sovereign_ms,
+    sb_push_int_or_null(timings, reasons, "t_sovereign", state->sovereign_ms,
                         "sovereign_promotion_not_reached");
 }
 
@@ -227,7 +230,16 @@ bool sync_benchmark_build_receipt(struct json_value *out, bool complete,
 
     json_push_kv_str(out, "schema", "zcl.sync_benchmark.v1");
 
-    pthread_mutex_lock(&g_sb.lock);
+    /* Hardware observations are independent of the instrument's state.
+     * OS memory reads and topology discovery must not hold up download
+     * counter writers or phase stamps while a receipt is requested. */
+    int physical_cores = hw_profile_physical_cores();
+    struct os_proc_mem mem;
+    bool have_total_ram = os_proc_mem_read(&mem) && mem.sys_total_bytes > 0;
+
+    pthread_mutex_lock(&g_sb_lock);
+    const struct sb_state state = g_sb;
+    pthread_mutex_unlock(&g_sb_lock);
 
     /* source_epoch: the running binary's source identity (dev source epoch). */
     const char *epoch = zcl_build_source_id_sha256();
@@ -238,8 +250,8 @@ bool sync_benchmark_build_receipt(struct json_value *out, bool complete,
         json_push_kv(out, "source_epoch", &nul); json_free(&nul);
     }
 
-    if (g_sb.artifact_id[0])
-        json_push_kv_str(out, "artifact_id", g_sb.artifact_id);
+    if (state.artifact_id[0])
+        json_push_kv_str(out, "artifact_id", state.artifact_id);
     else {
         struct json_value nul = {0}; json_init(&nul); json_set_null(&nul);
         json_push_kv(out, "artifact_id", &nul); json_free(&nul);
@@ -258,9 +270,8 @@ bool sync_benchmark_build_receipt(struct json_value *out, bool complete,
     /* hardware */
     struct json_value hw = {0};
     json_set_object(&hw);
-    json_push_kv_int(&hw, "physical_cores", (int64_t)hw_profile_physical_cores());
-    struct os_proc_mem mem;
-    if (os_proc_mem_read(&mem) && mem.sys_total_bytes > 0)
+    json_push_kv_int(&hw, "physical_cores", (int64_t)physical_cores);
+    if (have_total_ram)
         json_push_kv_int(&hw, "total_ram_bytes", mem.sys_total_bytes);
     else {
         struct json_value nul = {0}; json_init(&nul); json_set_null(&nul);
@@ -278,22 +289,22 @@ bool sync_benchmark_build_receipt(struct json_value *out, bool complete,
     /* network */
     struct json_value net = {0};
     json_set_object(&net);
-    if (g_sb.est_mbps >= 0.0)
-        json_push_kv_real(&net, "estimated_mbps", g_sb.est_mbps);
+    if (state.est_mbps >= 0.0)
+        json_push_kv_real(&net, "estimated_mbps", state.est_mbps);
     else {
         struct json_value nul = {0}; json_init(&nul); json_set_null(&nul);
         json_push_kv(&net, "estimated_mbps", &nul); json_free(&nul);
         json_push_kv_str(&reasons, "estimated_mbps", "not_measured_on_this_path");
     }
     sb_push_int_or_null(&net, &reasons, "peer_count",
-                        g_sb.peer_count, "not_measured_on_this_path");
+                        state.peer_count, "not_measured_on_this_path");
     json_push_kv(out, "network", &net);
     json_free(&net);
 
     /* timings_ms */
     struct json_value timings = {0};
     json_set_object(&timings);
-    sb_build_timings_locked(&timings, &reasons, complete);
+    sb_build_timings(&timings, &reasons, complete, &state);
     json_push_kv(out, "timings_ms", &timings);
     json_free(&timings);
 
@@ -301,7 +312,7 @@ bool sync_benchmark_build_receipt(struct json_value *out, bool complete,
     struct json_value res = {0};
     json_set_object(&res);
     sb_push_int_or_null(&res, &reasons, "peak_rss_bytes",
-                        g_sb.peak_rss_bytes, "rss_never_sampled");
+                        state.peak_rss_bytes, "rss_never_sampled");
     /* The old reason here was "not_instrumented_on_this_path", which read as
      * "nobody counts bytes anywhere". Not true, and the vagueness cost real
      * time: sync_benchmark_note_downloaded() IS wired, but from exactly one
@@ -312,20 +323,18 @@ bool sync_benchmark_build_receipt(struct json_value *out, bool complete,
      * download_bytes_received). Name the actual scope so a reader looks in the
      * right place instead of concluding bytes are unmeasurable. */
     sb_push_int_or_null(&res, &reasons, "bytes_downloaded",
-                        g_sb.bytes_downloaded,
+                        state.bytes_downloaded,
                         "only_rom_bundle_fetch_records_this_"
                         "p2p_block_bytes_are_in_dumpstate_sync_monitor_"
                         "download_bytes_received");
     sb_push_int_or_null(&res, &reasons, "bytes_reused",
-                        g_sb.bytes_reused, "no_resume_journal_reuse_recorded");
+                        state.bytes_reused, "no_resume_journal_reuse_recorded");
     sb_push_int_or_null(&res, &reasons, "bytes_redownloaded",
-                        g_sb.bytes_redownloaded, "not_instrumented_on_this_path");
+                        state.bytes_redownloaded, "not_instrumented_on_this_path");
     sb_push_int_or_null(&res, &reasons, "disk_write_bytes",
-                        g_sb.disk_write_bytes, "not_instrumented_on_this_path");
+                        state.disk_write_bytes, "not_instrumented_on_this_path");
     json_push_kv(out, "resources", &res);
     json_free(&res);
-
-    pthread_mutex_unlock(&g_sb.lock);
 
     json_push_kv(out, "null_reasons", &reasons);
     json_free(&reasons);
@@ -336,11 +345,11 @@ bool sync_benchmark_build_receipt(struct json_value *out, bool complete,
 
 bool sync_benchmark_write_receipt(bool complete, const char *incomplete_reason)
 {
-    pthread_mutex_lock(&g_sb.lock);
+    pthread_mutex_lock(&g_sb_lock);
     bool armed = g_sb.initialized && g_sb.datadir[0];
     char datadir[sizeof(g_sb.datadir)];
     snprintf(datadir, sizeof(datadir), "%s", g_sb.datadir);
-    pthread_mutex_unlock(&g_sb.lock);
+    pthread_mutex_unlock(&g_sb_lock);
 
     if (!armed) {
         LOG_WARN(SB_SUBSYS, "write_receipt: no datadir armed; skipping");
@@ -436,7 +445,7 @@ bool sync_benchmark_write_receipt(bool complete, const char *incomplete_reason)
 
 void sync_benchmark_init(const char *datadir)
 {
-    pthread_mutex_lock(&g_sb.lock);
+    pthread_mutex_lock(&g_sb_lock);
     memset(g_sb.phase, 0, sizeof(g_sb.phase));
     for (int i = 0; i < SYNC_BENCH_PHASE_COUNT; i++)
         g_sb.phase[i].elapsed_ms = -1;
@@ -458,12 +467,12 @@ void sync_benchmark_init(const char *datadir)
         g_sb.datadir[0]  = '\0';
         g_sb.initialized = true;  /* armed for dump-only (no durable write) */
     }
-    pthread_mutex_unlock(&g_sb.lock);
+    pthread_mutex_unlock(&g_sb_lock);
 }
 
 void sync_benchmark_reset_for_test(void)
 {
-    pthread_mutex_lock(&g_sb.lock);
+    pthread_mutex_lock(&g_sb_lock);
     memset(g_sb.phase, 0, sizeof(g_sb.phase));
     for (int i = 0; i < SYNC_BENCH_PHASE_COUNT; i++)
         g_sb.phase[i].elapsed_ms = -1;
@@ -480,7 +489,7 @@ void sync_benchmark_reset_for_test(void)
     g_sb.est_mbps          = -1.0;
     g_sb.peer_count        = -1;
     g_sb.artifact_id[0]    = '\0';
-    pthread_mutex_unlock(&g_sb.lock);
+    pthread_mutex_unlock(&g_sb_lock);
 }
 
 bool sync_benchmark_dump_state_json(struct json_value *out, const char *key)
@@ -490,10 +499,10 @@ bool sync_benchmark_dump_state_json(struct json_value *out, const char *key)
         return false;
     /* Complete iff the final phase folded and sovereignty was reached — the
      * dump never claims a full sync the instrument did not observe. */
-    pthread_mutex_lock(&g_sb.lock);
+    pthread_mutex_lock(&g_sb_lock);
     bool complete = g_sb.phase[SYNC_BENCH_TAIL_FOLD].state == SB_DONE &&
                     g_sb.sovereign_ms >= 0;
-    pthread_mutex_unlock(&g_sb.lock);
+    pthread_mutex_unlock(&g_sb_lock);
     return sync_benchmark_build_receipt(out, complete,
                                         complete ? NULL : "sync_in_progress");
 }
