@@ -359,7 +359,17 @@ ZCL_WINDOWS_LAUNCHER_GOALS := windows-headless-run windows-headless-run-selftest
 	build/bin/z23-headless-run.exe
 # Read-only build queries link nothing and must not start a vendor configure.
 ZCL_BUILD_QUERY_GOALS := print-node-c23-srcs help doctor doctor-build timings agent-dev-status print-CFLAGS print-DEV-CFLAGS print-LDFLAGS print-DEV-LDFLAGS print-build-flags
-ZCL_BOOTSTRAP_HELPER_ONLY := $(if $(strip $(MAKECMDGOALS)),$(if $(strip $(filter-out $(ZCL_WINDOWS_LAUNCHER_GOALS) $(ZCL_TOR_PROVENANCE_GOALS) $(ZCL_BUILD_QUERY_GOALS),$(MAKECMDGOALS))),,1),)
+# The standalone fresh-sync driver links only platform clock/log helpers;
+# its isolated regressions compile their own fixtures. Neither needs vendor
+# archives. Keep bench-sync (which also builds the node) outside this list.
+# Fold-profile regressions run shell/awk fixtures without linking the node.
+# Exact names preserve bootstrap for mixed, default and unknown goals.
+ZCL_SYNC_BENCHMARK_STANDALONE_GOALS := bench_fresh_sync build/bin/bench_fresh_sync \
+	bench-fresh-sync-selftest bench-fresh-sync-height-selftest \
+	bench-sync-bootstrap-selftest sync-benchmark-receipt-lock-selftest \
+	fold-profile-selftest fold-profile-summary-selftest stopwatch-overlap-selftest \
+	crypto-perf-evaluator-selftest
+ZCL_BOOTSTRAP_HELPER_ONLY := $(if $(strip $(MAKECMDGOALS)),$(if $(strip $(filter-out $(ZCL_WINDOWS_LAUNCHER_GOALS) $(ZCL_TOR_PROVENANCE_GOALS) $(ZCL_BUILD_QUERY_GOALS) $(ZCL_SYNC_BENCHMARK_STANDALONE_GOALS),$(MAKECMDGOALS))),,1),)
 ifneq ($(ZCL_STANDALONE_CLEAN),1)
 ifneq ($(ZCL_WORKTREE_PRIME_ONLY),1)
 ifneq ($(ZCL_PORTABLE_FRONTDOOR_ONLY),1)
@@ -464,6 +474,11 @@ endif
 else ifeq ($(BUILD_EPOCH_CLEAN_ONLY),1)
 ZCL_EPOCH_PROFILES :=
 else ifeq ($(ZCL_WORKTREE_PRIME_ONLY),1)
+ZCL_EPOCH_PROFILES :=
+else ifeq ($(strip $(filter-out $(ZCL_SYNC_BENCHMARK_STANDALONE_GOALS),$(MAKECMDGOALS))),)
+# These recipes compile standalone fixtures directly; none consumes a cached
+# node/test object epoch. Exact allowlisting keeps mixed and unknown goals on
+# the conservative path. Source capture and node publication rules are unchanged.
 ZCL_EPOCH_PROFILES :=
 else ifeq ($(words $(MAKECMDGOALS)),1)
 ZCL_EPOCH_SINGLE_GOAL := $(firstword $(MAKECMDGOALS))
@@ -1406,7 +1421,7 @@ ZCL_TOR_SKIP_GOALS := clean distclean clean-% help tor-full tor-ready c3-mutex-p
 	vendor vendor-force vendor-ready vendor-provenance worktree-prime \
 	worktree-prime-selftest install-hooks setup \
 	check-% lint lint-% %-selftest docs docs-% $(ZCL_WINDOWS_LAUNCHER_GOALS) \
-	$(ZCL_TOR_PROVENANCE_GOALS) $(ZCL_BUILD_QUERY_GOALS)
+	$(ZCL_TOR_PROVENANCE_GOALS) $(ZCL_BUILD_QUERY_GOALS) $(ZCL_SYNC_BENCHMARK_STANDALONE_GOALS)
 ZCL_TOR_LINK_REQUESTED := $(if $(strip $(MAKECMDGOALS)),\
 	$(strip $(filter-out $(ZCL_TOR_SKIP_GOALS),$(MAKECMDGOALS))),default-goal)
 
@@ -5771,6 +5786,10 @@ $(eval $(call BUILD_NODE_TOOL,spec_zcl,tests/harness/spec_main.c $(SPEC_SRCS) te
 $(eval $(call BUILD_NODE_TOOL,wallet_dump,tools/wallet_dump.c))
 $(eval $(call BUILD_NODE_TOOL,snapshot_from_coinskv,tools/snapshot_from_coinskv.c))
 $(eval $(call BUILD_NODE_TOOL,mint_v2_snapshot,tools/mint_v2_snapshot.c))
+
+.PHONY: snapshot-export-scan-selftest
+snapshot-export-scan-selftest: vendor
+	@bash tools/scripts/snapshot_export_scan_selftest.sh
 GPU_MINER_SRCS = tools/z23_gpu_miner.c tools/miner/gpu_equihash.c \
 	core/modules/crypto/src/equihash.c \
 	core/modules/crypto/src/blake2b.c core/modules/crypto/src/blake2b_avx2.c \
@@ -6368,6 +6387,11 @@ $(WAL_CHECKPOINT_BIN): tools/wal_checkpoint.c
 
 $(eval $(call BUILD_NODE_TOOL,wallet-wireframes,tools/wallet_wireframes.c))
 $(eval $(call BUILD_NODE_TOOL,speedrun,tools/speedrun.c))
+
+.PHONY: speedrun-selftest
+speedrun-selftest:
+	@bash tools/scripts/speedrun_datadir_selftest.sh
+	@bash tools/scripts/speedrun_measurement_selftest.sh
 
 .PHONY: zcl-rpc
 zcl-rpc: $(ZCL_RPC_BIN) jsonq
@@ -7212,6 +7236,15 @@ bundle-bootstrap: $(BIN_DIR)/rom_bundle_sha3
 	    --sha3-tool="$(BIN_DIR)/rom_bundle_sha3" \
 	    $(if $(DATADIR),--datadir="$(DATADIR)",)
 
+.PHONY: bundle-bootstrap-selftest
+bundle-bootstrap-selftest:
+	@bash tools/scripts/bundle_bootstrap_flush_selftest.sh
+
+.PHONY: anchor-copy-selftest
+anchor-copy-selftest:
+	@bash tools/scripts/anchor_resume_preflight_selftest.sh
+	@sh tools/scripts/anchor_tip_selftest.sh
+
 # gen_utxo_snapshot: build-time tool that walks a legacy zclassicd
 # chainstate LevelDB and emits a canonical UTXO sidecar file ready
 # for runtime mmap+SHA3-verify+bulk-INSERT (Stage J of fast-sync
@@ -7637,6 +7670,10 @@ $(JSONQ_BIN): tools/jsonq.c \
 	    -o $@ tools/jsonq.c contexts/commons/packages/zjsonp/src/zjsonp.c \
 	    contexts/commons/packages/zutf8/src/zutf8.c
 
+.PHONY: jsonq-key-decode-selftest
+jsonq-key-decode-selftest:
+	@bash tools/scripts/jsonq_key_decode_selftest.sh
+
 # Native bridge over the existing private fleet JSONL projection.
 .PHONY: fleet-board-bridge
 fleet-board-bridge: $(BIN_DIR)/fleet-board-bridge
@@ -7920,6 +7957,7 @@ fingerprint-scan: $(FPSCAN_BIN) build-only
 # host-local pair ledger when present. Does not spawn nodes.
 .PHONY: check-onion-pair-watch
 check-onion-pair-watch: jsonq
+	@bash tools/scripts/onion_pair_rpc_selftest.sh
 	@tools/scripts/check_onion_pair_watch.sh
 
 # ── macOS .app bundle over any tool binary ───────────────────────────────
@@ -8387,8 +8425,15 @@ soak-ci: soak_runner zclassic23 zcl-rpc
 # no-op harness (crashed, killed, OOM, timed out, produced no sentinel) fails
 # loud and a STALE PASS left by a previous successful run can never be read
 # as this run's proof — never exit-0-as-proof, never stale-file-as-proof.
+.PHONY: replay-canary-selftest
+replay-canary-selftest:
+	@bash tools/scripts/replay_canary_amount_selftest.sh
+	@bash tools/scripts/replay_canary_string_selftest.sh
+	@bash tools/scripts/replay_canary_guard_selftest.sh
+	@bash tools/scripts/replay_canary_parser_selftest.sh
+
 .PHONY: replay-canary-anchor
-replay-canary-anchor: zclassic23 zcl-rpc
+replay-canary-anchor: zclassic23 zcl-rpc jsonq replay-canary-selftest
 	@bash -c 'set -uo pipefail; \
 	 vd="$${ZCL_CANARY_VERDICT_DIR:-$$HOME/.local/state/zclassic23-canary}"; \
 	 mkdir -p "$$vd"; \
@@ -8404,7 +8449,7 @@ replay-canary-anchor: zclassic23 zcl-rpc
 	 echo "replay-canary-anchor: PASS (fresh sentinel verdict=PASS)"'
 
 .PHONY: replay-canary-genesis
-replay-canary-genesis: zclassic23 zcl-rpc
+replay-canary-genesis: zclassic23 zcl-rpc jsonq replay-canary-selftest
 	@bash -c 'set -uo pipefail; \
 	 vd="$${ZCL_CANARY_VERDICT_DIR:-$$HOME/.local/state/zclassic23-canary}"; \
 	 mkdir -p "$$vd"; \
@@ -8551,6 +8596,16 @@ c3-stopwatch-report:
 	 fi; \
 	 exit "$$rc"'
 
+.PHONY: c3-stopwatch-selftest
+c3-stopwatch-selftest:
+	@bash tools/scripts/c3_stopwatch_scratch_selftest.sh
+	@bash tools/scripts/c3_stopwatch_tip_decode_selftest.sh
+	@bash tools/scripts/c3_stopwatch_tip_query_selftest.sh
+
+.PHONY: instant-on-tip-selftest
+instant-on-tip-selftest:
+	@sh tools/scripts/instant_on_tip_selftest.sh $(ARGS)
+
 # stopwatch-judge-selftest: hermetic regression guard for the stopwatch judge's
 # fixture-integrity gates — canned tmp ledgers, no live nodes/ledgers touched.
 # Proves a below-checkpoint tip is refused (THIN_FIXTURE), a fixture lagging a
@@ -8560,6 +8615,7 @@ c3-stopwatch-report:
 # targets (rc==0 AND a "selftest: PASS" line).
 .PHONY: stopwatch-judge-selftest
 stopwatch-judge-selftest:
+	@bash tools/scripts/stopwatch_judge_fields_selftest.sh
 	@bash -c 'set -uo pipefail; \
 	 set +e; out=$$(bash tools/scripts/stopwatch_evidence_judge.sh --selftest 2>&1); rc=$$?; set -e; \
 	 echo "$$out"; \
@@ -8568,6 +8624,11 @@ stopwatch-judge-selftest:
 	     exit 1; \
 	 fi; \
 	 echo "stopwatch-judge-selftest: PASS"'
+
+# Exact string bytes and bounded observer cost, with no node or peer.
+.PHONY: stopwatch-string-selftest
+stopwatch-string-selftest:
+	@bash tools/scripts/stopwatch_string_selftest.sh $(ARGS)
 
 # stopwatch-symmetry-selftest: hermetic mutation test of the artifact-symmetry
 # comparison (tools/scripts/stopwatch_artifact_symmetry_check.sh --selftest).
@@ -8585,7 +8646,7 @@ stopwatch-judge-selftest:
 # unattended aggregate; run it by hand after touching the harness's capture or
 # artifact code.
 .PHONY: stopwatch-symmetry-selftest
-stopwatch-symmetry-selftest:
+stopwatch-symmetry-selftest: stopwatch-string-selftest stopwatch-quote-selftest
 	@bash -c 'set -uo pipefail; \
 	 set +e; out=$$(bash tools/scripts/stopwatch_artifact_symmetry_check.sh --selftest 2>&1); rc=$$?; set -e; \
 	 echo "$$out"; \
@@ -8594,6 +8655,15 @@ stopwatch-symmetry-selftest:
 	     exit 1; \
 	 fi; \
 	 echo "stopwatch-symmetry-selftest: PASS"'
+
+.PHONY: stopwatch-quote-selftest
+stopwatch-quote-selftest:
+	@bash tools/scripts/stopwatch_quote_selftest.sh $(ARGS)
+	@bash tools/scripts/stopwatch_large_quote_selftest.sh $(ARGS)
+
+.PHONY: stopwatch-overlap-selftest
+stopwatch-overlap-selftest:
+	@bash tools/scripts/stopwatch_overlap_selftest.sh $(ARGS)
 
 .PHONY: stopwatch-symmetry-prove
 stopwatch-symmetry-prove:
@@ -8913,7 +8983,7 @@ mvp-onion-local: test_zcl
 # which would misclassify a real cold-start failure as "missing fixture".
 # Locally-verified; NOT a hermetic-✅.
 .PHONY: mvp-coldstart-local
-mvp-coldstart-local: zclassic23 zcl-rpc
+mvp-coldstart-local: zclassic23 zcl-rpc cold-start-timing-selftest
 	@bash -c 'set -uo pipefail; \
 	 echo "══ MVP C3 (real): snapshot-first cold boot >1M UTXOs <90s (fixture-gated) ══"; \
 	 bash tools/scripts/cold_start_test.sh; rc=$$?; \
@@ -8922,6 +8992,12 @@ mvp-coldstart-local: zclassic23 zcl-rpc
 	     exit 0; \
 	 fi; \
 	 exit $$rc'
+
+# Hermetic proof of startup observation timing; no node build or live fixture.
+.PHONY: cold-start-timing-selftest
+cold-start-timing-selftest:
+	@bash tools/scripts/cold_start_timing_selftest.sh
+	@bash tools/scripts/cold_start_log_idle_selftest.sh
 
 # ── mvp-coldstart-to-tip-local (C3 full fresh bundle -> at-tip proof) ─
 #
@@ -8934,7 +9010,14 @@ mvp-coldstart-local: zclassic23 zcl-rpc
 # harness --selftest first (no binary, no network, no datadir) so fixture
 # selection and self-respawn classification cannot rot between runs.
 .PHONY: mvp-coldstart-to-tip-local
-mvp-coldstart-to-tip-local: zclassic23 zcl-rpc
+.PHONY: cold-start-snapshot-metadata-selftest
+cold-start-snapshot-metadata-selftest:
+	@bash tools/scripts/cold_start_snapshot_metadata_selftest.sh $(ARGS)
+	@bash tools/scripts/cold_start_snapshot_metadata_selftest.sh --cold-start $(ARGS)
+	@bash tools/scripts/cold_start_bundle_name_selftest.sh
+	@bash tools/scripts/cold_start_bundle_height_selftest.sh
+
+mvp-coldstart-to-tip-local: zclassic23 zcl-rpc cold-start-snapshot-metadata-selftest
 	@bash -c 'set -uo pipefail; \
 	 echo "══ MVP C3 FULL (real): fresh operator bundle -> zclassic23 peer tip <10min ══"; \
 	 if ! bash tools/scripts/cold_start_to_tip_probe.sh --selftest >/dev/null 2>&1; then \
@@ -9065,7 +9148,7 @@ mvp-coldstart-to-tip-stopwatch: zclassic23 fs-handshake-probe
 # hash-confirmed; the printed table names which run and why.
 ZCL_RUNS ?= 3
 .PHONY: mvp-coldstart-to-tip-triple
-mvp-coldstart-to-tip-triple: zclassic23
+mvp-coldstart-to-tip-triple: zclassic23 c3-stopwatch-selftest
 	@bash -c 'set -uo pipefail; \
 	 echo "══ MVP C3 STOPWATCH x$(ZCL_RUNS) (real): wiped -> peer tip, hash-confirmed, per run ══"; \
 	 if ! bash tools/scripts/c3_stopwatch_triple_run.sh --selftest >/dev/null 2>&1; then \
@@ -9148,7 +9231,7 @@ mvp-coldstart-to-tip-remote: zclassic23
 # 4 (STALLED-NAMED) are both honest non-SKIP verdicts and propagate as a
 # failing recipe.
 .PHONY: mvp-netdisrupt-recovery-stopwatch
-mvp-netdisrupt-recovery-stopwatch: zclassic23
+mvp-netdisrupt-recovery-stopwatch: zclassic23 netdisrupt-stopwatch-timing-selftest
 	@bash -c 'set -uo pipefail; \
 	 echo "══ PROOF B STOPWATCH (real): upstream SIGSTOP -> SIGCONT -> client H* re-catches network_tip, real wall-clock ══"; \
 	 ZCL_ND_UPSTREAM_PID="$(ZCL_ND_UPSTREAM_PID)" \
@@ -9550,11 +9633,90 @@ soak-smoke: soak_runner zcl-rpc
 	    --warmup-sec=60
 
 .PHONY: bench-sync
+.PHONY: bench-sync-proxy-selftest
+bench-sync-proxy-selftest:
+	bash tools/scripts/bench_fresh_sync_proxy_selftest.sh
+
 bench-sync: zclassic23 bench_fresh_sync
 	$(BIN_DIR)/bench_fresh_sync
 
+.PHONY: bench-fresh-sync-http-error-selftest
+bench-fresh-sync-http-error-selftest:
+	@bash tools/scripts/bench_fresh_sync_http_error_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_rpc_http_selftest.sh
+bench_fresh_sync bench-fresh-sync-selftest: bench-fresh-sync-http-error-selftest
+
+.PHONY: bench-fresh-sync-curl-config-selftest
+bench-fresh-sync-curl-config-selftest:
+	@bash tools/scripts/bench_fresh_sync_curl_config_selftest.sh
+bench_fresh_sync: bench-fresh-sync-curl-config-selftest
+
 .PHONY: bench_fresh_sync
-bench_fresh_sync: $(BIN_DIR)/bench_fresh_sync
+bench_fresh_sync: $(BIN_DIR)/bench_fresh_sync bench-fresh-sync-output-selftest
+
+.PHONY: bench-fresh-sync-output-selftest
+bench-fresh-sync-output-selftest:
+	@bash tools/scripts/bench_fresh_sync_output_selftest.sh
+
+.PHONY: bench-sync-bootstrap-selftest
+bench-sync-bootstrap-selftest:
+	@bash tools/scripts/bench_sync_bootstrap_selftest.sh
+
+.PHONY: sync-benchmark-receipt-lock-selftest
+sync-benchmark-receipt-lock-selftest:
+	@bash tools/scripts/sync_benchmark_receipt_lock_selftest.sh
+	@bash tools/scripts/sync_benchmark_receipt_snapshot_selftest.sh
+
+bench_fresh_sync bench-fresh-sync-selftest: bench-sync-bootstrap-selftest sync-benchmark-receipt-lock-selftest
+
+.PHONY: bench-fresh-sync-selftest
+bench-fresh-sync-selftest:
+	@bash tools/scripts/bench_fresh_sync_cleanup_cadence_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_poll_wake_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_unavailable_rpc_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_summary_bounds_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_summary_window_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_datadir_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_summary_suffix_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_summary_fallback_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_latest_marker_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_small_append_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_summary_chunks_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_growth_io_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_expired_observers_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_poll_budget_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_summary_budget_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_summary_overlap_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_summary_io_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_scan_budget_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_cadence_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_buffer_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_idle_log_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_poll_interrupt_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_cleanup_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_binary_log_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_nul_scan_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_normalize_window_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_complete_log_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_startup_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_startup_budget_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_startup_late_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_startup_sleep_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_progress_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_tail_io_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_tail_position_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_summary_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_command_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_deadline_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_page_size_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_readiness_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_explorer_scan_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_sparse_marker_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_timing_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_outcome_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_report_demand_selftest.sh
+
 $(BIN_DIR)/bench_fresh_sync: tools/bench_fresh_sync.c \
 		platform/modules/platform/src/clock.c platform/modules/base/src/log_level.c
 	@mkdir -p $(dir $@)
@@ -9641,6 +9803,11 @@ bench-serial: $(BIN_DIR)/serial_bench
 	@$(BIN_DIR)/serial_bench $(if $(CORPUS),--corpus=$(CORPUS)) \
 	    $(if $(CPU),--cpu=$(CPU)) $(if $(REPS),--reps=$(REPS))
 
+.PHONY: bench-serial-selftest
+bench-serial-selftest: $(BIN_DIR)/serial_bench
+	@bash tools/scripts/serial_bench_observation_selftest.sh $(BIN_DIR)/serial_bench
+	@bash tools/scripts/serial_bench_partial_corpus_selftest.sh $(BIN_DIR)/serial_bench
+
 bench: zclassic23
 	@ZCL_BENCH_COMMIT="$(BUILD_COMMIT)" $(ZCLASSIC23_BIN) -bench
 
@@ -9708,7 +9875,7 @@ bench-regress: zclassic23
 # import path is silently dead. Skipped if no source snapshot is
 # available locally (~/.zclassic-c23{,-test}/consensus_snapshot.db).
 .PHONY: ci-coldstart
-ci-coldstart: zclassic23
+ci-coldstart: zclassic23 cold-start-timing-selftest
 	@bash tools/scripts/cold_start_test.sh
 
 .PHONY: ci-sync-smoke
@@ -10515,6 +10682,10 @@ ship:
 seed-anchor-snapshot:
 	@./tools/seed_anchor_snapshot.sh
 
+.PHONY: seed-anchor-snapshot-selftest
+seed-anchor-snapshot-selftest:
+	@bash tools/scripts/seed_anchor_snapshot_selftest.sh
+
 # Deploy the freshly-built binary to the DEV linger lane (isolated datadir
 # ~/.zclassic-c23-dev + ports 8053/18252) — where code-in-progress runs live
 # instead of rotting unrun in git. NEVER touches the operator-gated live node.
@@ -10710,6 +10881,9 @@ slo-probe-status:
 # summary reader, 72h hold judge, and external pager — fixture RPC commands /
 # fixture ledgers, no live nodes.
 slo-probe-selftest:
+	@bash tools/scripts/slo_rpc_heights_selftest.sh
+	@bash tools/scripts/slo_hold_order_selftest.sh
+	@bash tools/scripts/slo_page_order_selftest.sh
 	@$(MAKE) -s t-fast-exact ONLY=slo_ledger_summary
 	@bash -c 'set -uo pipefail; \
 	 set +e; out=$$(bash tools/scripts/node_slo_probe.sh --selftest 2>&1); rc=$$?; set -e; \
@@ -10759,6 +10933,8 @@ tip-agreement-status:
 # judge. Fixture node readers, no live node, no network. Gates on the PASS
 # token, not on an exit code alone.
 tip-agreement-selftest:
+	@bash tools/scripts/tip_agreement_rows_selftest.sh
+	@bash tools/scripts/tip_agreement_parser_selftest.sh
 	@bash -c 'set -uo pipefail; \
 	 set +e; out=$$(bash tools/scripts/test_tip_agreement_evidence.sh 2>&1); rc=$$?; set -e; \
 	 echo "$$out"; \
@@ -10785,9 +10961,20 @@ tip-agreement-selftest:
 # All fixture-driven: no live nodes, no systemd units, no network.
 .PHONY: evidence-selftest
 evidence-selftest:
+	@bash tools/scripts/evidence_string_poll_selftest.sh
+	@bash tools/scripts/evidence_bool_poll_selftest.sh
+	@bash tools/scripts/public_explorer_observer_selftest.sh
 	@bash -c 'set -uo pipefail; rc_all=0; \
-	 for s in tools/scripts/intervention_ledger.sh \
+	 for s in tools/scripts/evidence_sources_selftest.sh \
+	          tools/scripts/evidence_jstr_process_selftest.sh \
+	          tools/scripts/evidence_large_string_selftest.sh \
+	          tools/scripts/evidence_peer_count_selftest.sh \
+	          tools/scripts/evidence_systemd_field_selftest.sh \
+	          tools/scripts/evidence_rss_selftest.sh \
+	          tools/scripts/intervention_ledger.sh \
 	          tools/scripts/zcl_intervene.sh \
+	          tools/scripts/evidence_dir_bytes_selftest.sh \
+	          tools/scripts/evidence_json_readers_selftest.sh \
 	          tools/scripts/public_explorer_smoke.sh; do \
 	   set +e; out=$$(bash "$$s" --selftest 2>&1); rc=$$?; set -e; \
 	   echo "$$out"; \
@@ -12703,9 +12890,18 @@ check-read-leaf-no-boot-ceremony:
 # counts, its health rule, what a bad value implies, what to read next) in
 # platform/modules/util/include/util/telemetry_ontology.def. A new field with no meaning
 # fails here, named with its file:line.
-check-telemetry-ontology:
+check-telemetry-ontology: telemetry-lookup-selftest telemetry-observer-selftest
 	@echo "══ LINT: telemetry field ontology ══"
 	@./tools/lint/check_telemetry_ontology.sh
+
+.PHONY: telemetry-lookup-selftest
+telemetry-lookup-selftest:
+	@bash tools/scripts/telemetry_lookup_selftest.sh
+
+.PHONY: telemetry-observer-selftest
+telemetry-observer-selftest:
+	@bash tools/scripts/telemetry_evaluation_copy_selftest.sh
+	@bash tools/scripts/telemetry_sync_summary_selftest.sh
 
 # Gate — no NEW repair rung without a write-time-invariant test (RATCHET for
 # TENACITY I3). A new repair/reconcile/backfill/heal file in app/ must cite a
@@ -12887,6 +13083,7 @@ check-orient-facts:
 # nobody runs is the exact defect it exists to fix.
 check-stopwatch-skip-detector: $(LINTC_TOOL)
 	@echo "══ LINT: stopwatch skip-streak detector selftests ══"
+	@bash tools/scripts/stopwatch_skip_parser_selftest.sh
 	@./tools/lint/check_stopwatch_skip_detector.sh
 
 # Gate — the proof-server promotion binding stays self-recording. tools/ship.sh's
@@ -13028,8 +13225,10 @@ check-shell-host-assumptions: $(LINTC_TOOL) $(JSONQ_BIN)
 	@./tools/lint/check_shell_host_assumptions.sh --selftest
 	@./tools/scripts/port_probe.sh --selftest
 	@./tools/scripts/isolated_node_env_selftest.sh
+	@./tools/scripts/isolated_mainnet_env_selftest.sh
 	@./tools/scripts/service_args_selftest.sh
 	@bash tools/scripts/two_node_peer_tip_selftest.sh
+	@bash tools/scripts/two_node_peer_tip_deadline_selftest.sh
 	@./tools/lint/check_shell_host_assumptions.sh
 
 # Sibling of the gate above, for two more shapes where the shell throws a
@@ -14318,6 +14517,34 @@ doctor-selftest:
 timings-selftest:
 	@tools/scripts/timings.sh --self-test
 
+# Cross-awk long-running IBD stage-duration summaries; no node required.
+fold-profile-selftest fold-profile-summary-selftest: bench-sync-bootstrap-selftest
+.PHONY: fold-profile-summary-selftest
+fold-profile-summary-selftest:
+	@sh tools/scripts/fold_profile_summary_selftest.sh
+	@sh tools/scripts/fold_profile_counts_selftest.sh
+	@sh tools/scripts/fold_profile_history_selftest.sh $(ARGS)
+
+# Exact fold-profile CSV and bounded parser work; no node or peer required.
+.PHONY: fold-profile-selftest
+fold-profile-selftest:
+	@sh tools/scripts/fold_profile_boundary_selftest.sh $(ARGS)
+	@sh tools/scripts/fold_profile_boundary_jump_selftest.sh $(ARGS)
+	@sh tools/scripts/fold_profile_duplicate_cost_selftest.sh $(ARGS)
+	@sh tools/scripts/fold_profile_retry_cost_selftest.sh $(ARGS)
+	@sh tools/scripts/fold_profile_selftest.sh $(ARGS)
+	@sh tools/scripts/fold_profile_rpc_selftest.sh
+	@sh tools/scripts/fold_profile_rpc_deadline_selftest.sh
+	@sh tools/scripts/fold_profile_scan_selftest.sh $(ARGS)
+	@sh tools/scripts/fold_profile_missing_keys_selftest.sh $(ARGS)
+	@sh tools/scripts/fold_profile_drive_selftest.sh $(ARGS)
+	@sh tools/scripts/fold_profile_drive_sparse_selftest.sh $(ARGS)
+	@sh tools/scripts/fold_profile_drive_window_selftest.sh $(ARGS)
+	@sh tools/scripts/fold_profile_stage_object_selftest.sh $(ARGS)
+	@sh tools/scripts/fold_profile_stage_window_selftest.sh $(ARGS)
+	@sh tools/scripts/fold_profile_stage_tail_selftest.sh $(ARGS)
+	@sh tools/scripts/fold_profile_prefix_selftest.sh $(ARGS)
+
 first-build-timing-selftest:
 	@tools/scripts/first_build_timing.sh --self-test
 
@@ -14390,3 +14617,41 @@ c3-tip-seam: $(BIN_DIR)/c3-tip-seam-probe.o
 $(BIN_DIR)/c3-tip-seam-probe.o: tests/harness/fixtures/c3_tip_seam_probe.c
 	@mkdir -p $(dir $@)
 	$(CC) -std=c23 -O2 -Wall -Wextra -Werror -pedantic -c $< -o $@
+
+# Hermetic timing proof: fake clock/RPC, private /tmp signal target, no node.
+.PHONY: netdisrupt-stopwatch-timing-selftest
+netdisrupt-stopwatch-timing-selftest:
+	@bash tools/scripts/netdisrupt_stopwatch_timing_selftest.sh
+
+# Hermetic copy-profiler height parsing and observer-cost regression.
+.PHONY: repro-copy-tip-selftest
+repro-copy-tip-selftest:
+	@sh tools/scripts/repro_copy_tip_selftest.sh $(ARGS)
+
+# Hermetic serial-benchmark topology output and startup read budget.
+.PHONY: bench-serial-topology-selftest bench-serial-selftest
+bench-serial-topology-selftest:
+	@bash tools/scripts/serial_bench_topology_selftest.sh
+bench-serial-selftest: bench-serial-topology-selftest
+
+# Height observations are needed only for displayed cold-start transitions.
+.PHONY: bench-fresh-sync-height-selftest
+bench-fresh-sync-height-selftest:
+	@bash tools/scripts/bench_fresh_sync_height_selftest.sh
+	@bash tools/scripts/bench_fresh_sync_integer_selftest.sh
+bench_fresh_sync: bench-fresh-sync-height-selftest
+
+.PHONY: crypto-perf-evaluator-selftest
+crypto-perf-evaluator-selftest:
+	@bash tools/scripts/crypto_perf_evaluator_selftest.sh
+
+# Hermetic stage-counter parsing and diagnostic-prefix observer budget.
+.PHONY: fold-profile-counter-prefix-selftest
+fold-profile-counter-prefix-selftest:
+	@sh tools/scripts/fold_profile_counter_prefix_selftest.sh $(ARGS)
+fold-profile-selftest: fold-profile-counter-prefix-selftest
+
+.PHONY: fresh-boot-observer-selftest
+fresh-boot-observer-selftest:
+	@bash tools/scripts/fresh_boot_fields_selftest.sh
+	@bash tools/scripts/fresh_boot_log_max_selftest.sh
