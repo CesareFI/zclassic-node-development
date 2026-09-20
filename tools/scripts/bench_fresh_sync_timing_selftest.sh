@@ -112,7 +112,7 @@ static int run_fixture(int mode, int latency, const char *logfile)
     const char *cookie = "fixture";
 C
 awk '/^    \/\* Phase timestamps \*\// { copy = 1 }
-     copy && /^    printf\("\\n"\);/ { exit }
+     copy && /^    benchmark_results\(/ { exit }
      copy { print }' "$SOURCE" >> "$TMP/test.c"
 cat >> "$TMP/test.c" <<'C'
     printf("fixture=%d height_latency=%d height_calls=%d tip=%.1f explorer=%.1f done=%.1f phase=%.1f\n",

@@ -79,8 +79,8 @@ static FILE *fixture_fopen(const char *path, const char *mode)
 }
 #define fopen fixture_fopen
 C
-awk '/^static bool wait_for_cookie\(/ { copy = 1; starts++ }
-     /^int main\(/ { copy = 0; ends++ }
+awk '/^static void startup_progress\(/ { copy = 1; starts++ }
+     /^static bool benchmark_paths\(|^int main\(/ { if (copy) ends++; copy = 0 }
      copy { print }
      END { if (starts != 1 || ends != 1) exit 1 }' \
     "$source_file" >> "$fixture/test.c"

@@ -92,6 +92,29 @@ static double now_sec(void)
  * This is display-only evidence, never a snapshot-validation predicate.
  * The chunk buffer is writable and NUL-terminated at want; temporary search
  * boundaries are restored before returning. */
+static off_t snapshot_log_bisect(char *buf, size_t want, size_t first,
+                                 const char *marker, size_t marker_len,
+                                 off_t match)
+{
+    size_t low = (size_t)match + 1, high = first;
+    while (low < high) {
+        size_t mid = low + (high - low) / 2;
+        size_t limit = want - high < marker_len - 1 ?
+            want : high + marker_len - 1;
+        char saved = buf[limit];
+        buf[limit] = '\0';
+        const char *p = strstr(buf + mid, marker);
+        buf[limit] = saved;
+        if (p) {
+            match = (off_t)(p - buf);
+            low = (size_t)match + 1;
+        } else {
+            high = mid;
+        }
+    }
+    return match;
+}
+
 static off_t snapshot_log_chunk(char *buf, size_t want,
                                 const char *marker, size_t marker_len)
 {
@@ -130,26 +153,9 @@ static off_t snapshot_log_chunk(char *buf, size_t want,
      * match or excludes every start in that suffix: bisect the remaining
      * start positions. The short reverse walk already excluded first..end.
      * Sparse buffers return from the small linear search above. */
-    size_t low = (size_t)match + 1, high = first;
-    while (low < high) {
-        size_t mid = low + (high - low) / 2;
-        /* Excluded starts need not be searched again. Retain enough bytes
-         * for a match starting at high - 1, then restore the borrowed text
-         * before using the result. This keeps long unrelated suffixes from
-         * being scanned once per bisection step. */
-        size_t limit = want - high < marker_len - 1 ? want : high + marker_len - 1;
-        char saved = buf[limit];
-        buf[limit] = '\0';
-        p = strstr(buf + mid, marker);
-        buf[limit] = saved;
-        if (p) {
-            match = (off_t)(p - buf);
-            low = (size_t)match + 1;
-        } else {
-            high = mid;
-        }
-    }
-    return match;
+    /* Excluded starts need not be searched again. The helper restores every
+     * borrowed text boundary before returning. */
+    return snapshot_log_bisect(buf, want, first, marker, marker_len, match);
 }
 
 static off_t snapshot_log_match(FILE *f, off_t end)
@@ -445,6 +451,21 @@ static void phase_log_normalize(char *buf, size_t n)
     }
 }
 
+static bool phase_log_scan_chunk(struct phase_log *log, char *buf, size_t n)
+{
+    phase_log_normalize(buf, n);
+    buf[n] = '\0';
+    bool complete = true;
+    for (int i = 0; i < LOG_PHASE_COUNT; i++) {
+        if (!log->seen[i] && strstr(buf, phase_markers[i]))
+            log->seen[i] = true;
+        complete &= log->seen[i];
+    }
+    log->tail_len = n < sizeof(log->tail) ? n : sizeof(log->tail);
+    memcpy(log->tail, buf + n - log->tail_len, log->tail_len);
+    return complete;
+}
+
 static bool phase_log_poll(FILE *f, struct phase_log *log)
 {
     struct stat st;
@@ -491,19 +512,9 @@ static bool phase_log_poll(FILE *f, struct phase_log *log)
         }
         log->offset += (off_t)n;
         n += log->tail_len;
-        phase_log_normalize(buf, n);
-        buf[n] = '\0';
-        bool complete = true;
-        for (int i = 0; i < LOG_PHASE_COUNT; i++) {
-            if (!log->seen[i] && strstr(buf, phase_markers[i]))
-                log->seen[i] = true;
-            complete &= log->seen[i];
-        }
-        log->tail_len = n < sizeof(log->tail) ? n : sizeof(log->tail);
-        memcpy(log->tail, buf + n - log->tail_len, log->tail_len);
         /* The caller stops polling once every milestone is observed. Avoid
          * scanning the remaining startup history after that final match. */
-        if (complete) return true;
+        if (phase_log_scan_chunk(log, buf, n)) return true;
     }
     return true;
 }
@@ -586,6 +597,82 @@ static int explorer_page_size(const char *path)
     return atoi(buf);
 }
 
+static void startup_progress(const char *logfile, double t0,
+                             double observed, double *next_progress)
+{
+    if (observed < *next_progress) return;
+    char line[256] = "";
+    startup_log_tail(logfile, line, sizeof(line));
+    char *nl = strchr(line, '\n');
+    if (nl) *nl = '\0';
+    printf("  [%.0fs] %s\n", observed - t0, line);
+    *next_progress = now_sec() + 10.0;
+}
+
+static bool startup_pause(double deadline)
+{
+    double sleep_start = now_sec();
+    double remaining = deadline - sleep_start;
+    if (remaining <= 0) return true;
+    double wake_at = sleep_start + (remaining < 0.5 ? remaining : 0.5);
+    do {
+        unsigned int delay_us = remaining < 0.5 ?
+            (unsigned int)(remaining * 1000000.0) : 500000;
+        if (usleep(delay_us > 0 ? delay_us : 1) == 0) return true;
+        if (errno != EINTR) {
+            perror("bench-sync: sleep during startup");
+            return false;
+        }
+        remaining = wake_at - now_sec();
+    } while (remaining > 0);
+    return true;
+}
+
+static bool startup_child_alive(const char *logfile)
+{
+    int st;
+    pid_t waited;
+    do {
+        waited = waitpid(g_child, &st, WNOHANG);
+    } while (waited < 0 && errno == EINTR);
+    if (waited == 0) return true;
+    fprintf(stderr, "ERROR: Node died during startup\n");
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "tail -10 '%s'", logfile);
+    system(cmd);
+    g_child = 0;
+    return false;
+}
+
+static bool read_cookie(const char *cookie_path, double deadline,
+                        char *cookie, size_t cookie_size)
+{
+    FILE *f = fopen(cookie_path, "r");
+    if (!f) {
+        perror("bench-sync: open RPC cookie");
+        return false;
+    }
+    size_t n = fread(cookie, 1, cookie_size - 1, f);
+    bool oversized = fgetc(f) != EOF;
+    bool read_failed = ferror(f) != 0;
+    fclose(f);
+    if (now_sec() > deadline) {
+        fprintf(stderr, "bench-sync: RPC cookie read exceeded startup budget (300s timeout)\n");
+        cookie[0] = '\0';
+        return false;
+    }
+    cookie[n] = '\0';
+    char *nl = strchr(cookie, '\n');
+    if (nl) *nl = '\0';
+    if (oversized || read_failed || cookie[0] == '\0') {
+        fprintf(stderr, "bench-sync: RPC cookie rejected (oversized=%d read_error=%d empty=%d)\n",
+                oversized, read_failed, cookie[0] == '\0');
+        cookie[0] = '\0';
+        return false;
+    }
+    return true;
+}
+
 /* Wait for RPC startup independently of the phase-observation loop. */
 static bool wait_for_cookie(const char *cookie_path, const char *logfile, double t0,
                             char *cookie, size_t cookie_size)
@@ -606,49 +693,11 @@ static bool wait_for_cookie(const char *cookie_path, const char *logfile, double
             break;
         }
         if (observed >= deadline) break;
-        /* Print progress from log every 10s */
-        if (observed >= next_progress) {
-            double e = observed - t0;
-            char line[256] = "";
-            startup_log_tail(logfile, line, sizeof(line));
-            char *nl = strchr(line, '\n'); if (nl) *nl = '\0';
-            printf("  [%.0fs] %s\n", e, line);
-            next_progress = now_sec() + 10.0;
-        }
+        startup_progress(logfile, t0, observed, &next_progress);
         /* Interrupted sleeps do not consume a full poll interval, and log
          * observation consumes real time. Charge both to the same deadline. */
-        double sleep_start = now_sec();
-        double remaining = deadline - sleep_start;
-        if (remaining <= 0) break;
-        double wake_at = sleep_start + (remaining < 0.5 ? remaining : 0.5);
-        /* Signals must not multiply cookie and child-status polls. Retry
-         * only until this observation's wake time, never a fresh interval. */
-        do {
-            unsigned int delay_us = remaining < 0.5 ?
-                (unsigned int)(remaining * 1000000.0) : 500000;
-            if (usleep(delay_us > 0 ? delay_us : 1) == 0) break;
-            if (errno != EINTR) {
-                perror("bench-sync: sleep during startup");
-                return false;
-            }
-            remaining = wake_at - now_sec();
-        } while (remaining > 0);
-        /* Check child still alive */
-        int st;
-        pid_t waited;
-        /* A signal interrupted the observation, not the node. Retry without
-         * another polling sleep so a valid startup measurement is retained. */
-        do {
-            waited = waitpid(g_child, &st, WNOHANG);
-        } while (waited < 0 && errno == EINTR);
-        if (waited != 0) {
-            fprintf(stderr, "ERROR: Node died during startup\n");
-            char cmd[512];
-            snprintf(cmd, sizeof(cmd), "tail -10 '%s'", logfile);
-            system(cmd);
-            g_child = 0;
+        if (!startup_pause(deadline) || !startup_child_alive(logfile))
             return false;
-        }
     }
     if (!cookie_ready) {
         fprintf(stderr, "ERROR: RPC cookie not observed within startup budget (300s timeout)\n");
@@ -657,107 +706,173 @@ static bool wait_for_cookie(const char *cookie_path, const char *logfile, double
         system(cmd);
         return false;
     }
-    FILE *f = fopen(cookie_path, "r");
-    if (!f) {
-        perror("bench-sync: open RPC cookie");
+    return read_cookie(cookie_path, deadline, cookie, cookie_size);
+}
+
+static bool benchmark_paths(char *datadir, size_t datadir_size,
+                            char *binary, size_t binary_size,
+                            char *logfile, size_t logfile_size)
+{
+    const char *bench_home = getenv("HOME");
+    if (!bench_home || !bench_home[0]) {
+        fprintf(stderr, "bench-sync: HOME is required for an isolated datadir\n");
         return false;
     }
-    size_t n = fread(cookie, 1, cookie_size - 1, f);
-    bool oversized = fgetc(f) != EOF;
-    bool read_failed = ferror(f) != 0;
-    fclose(f);
-    /* Opening and reading can also cross the deadline under IBD I/O load.
-     * Do not start the RPC phase with a credential obtained after expiry. */
-    if (now_sec() > deadline) {
-        fprintf(stderr, "bench-sync: RPC cookie read exceeded startup budget (300s timeout)\n");
-        cookie[0] = '\0';
+    time_t t = platform_time_wall_time_t();
+    struct tm *tm = localtime(&t);
+    if (!tm) {
+        perror("bench-sync: format datadir timestamp");
         return false;
     }
-    cookie[n] = '\0';
-    char *nl = strchr(cookie, '\n');
-    if (nl) *nl = '\0';
-    /* An unreadable/partial credential cannot yield useful RPC observations.
-     * Refuse setup now instead of consuming the remaining benchmark budget.
-     * Never include credential bytes in diagnostics. */
-    if (oversized || read_failed || cookie[0] == '\0') {
-        fprintf(stderr, "bench-sync: RPC cookie rejected (oversized=%d read_error=%d empty=%d)\n",
-                oversized, read_failed, cookie[0] == '\0');
-        cookie[0] = '\0';
+    int n = snprintf(datadir, datadir_size,
+        "%s/.zclassic-c23-bench-%04d%02d%02d-%02d%02d%02d-XXXXXX",
+        bench_home, tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
+        tm->tm_hour, tm->tm_min, tm->tm_sec);
+    if (n < 0 || (size_t)n >= datadir_size) {
+        fprintf(stderr, "bench-sync: datadir path is too long\n");
         return false;
     }
+    if (access("build/bin/zclassic23", X_OK) == 0)
+        snprintf(binary, binary_size, "build/bin/zclassic23");
+    else
+        snprintf(binary, binary_size, "%s/zclassic23/build/bin/zclassic23", bench_home);
+    if (access(binary, X_OK) != 0) {
+        fprintf(stderr, "ERROR: Binary not found at %s\n", binary);
+        return false;
+    }
+    if (!mkdtemp(datadir)) {
+        perror("bench-sync: create fresh datadir");
+        return false;
+    }
+    snprintf(logfile, logfile_size, "%s/node.log", datadir);
     return true;
+}
+
+static void benchmark_copy_ssl(const char *datadir)
+{
+    const char *bench_home = getenv("HOME");
+    char src[512], dst[512], ssldir[512];
+    snprintf(ssldir, sizeof(ssldir), "%s/ssl", datadir);
+    mkdir(ssldir, 0755);
+    snprintf(src, sizeof(src), "%s/.zclassic-c23/ssl/fullchain.pem", bench_home);
+    snprintf(dst, sizeof(dst), "%s/ssl/fullchain.pem", datadir);
+    if (access(src, R_OK) != 0) return;
+    char cp[1024];
+    snprintf(cp, sizeof(cp), "cp '%s' '%s'", src, dst);
+    system(cp);
+    snprintf(src, sizeof(src), "%s/.zclassic-c23/ssl/privkey.pem", bench_home);
+    snprintf(dst, sizeof(dst), "%s/ssl/privkey.pem", datadir);
+    snprintf(cp, sizeof(cp), "cp '%s' '%s'", src, dst);
+    system(cp);
+}
+
+static bool benchmark_spawn(const char *binary, const char *datadir,
+                            const char *logfile)
+{
+    g_child = fork();
+    if (g_child == 0) {
+        FILE *log = fopen(logfile, "w");
+        if (log) {
+            dup2(fileno(log), STDOUT_FILENO);
+            dup2(fileno(log), STDERR_FILENO);
+            fclose(log);
+        }
+        char dd[300], pp[32], rp[32], hp[32];
+        snprintf(dd, sizeof(dd), "-datadir=%s", datadir);
+        snprintf(pp, sizeof(pp), "-port=%d", PORT);
+        snprintf(rp, sizeof(rp), "-rpcport=%d", RPCPORT);
+        snprintf(hp, sizeof(hp), "-httpsport=%d", HTTPSPORT);
+        execlp(binary, "zclassic23", dd, pp, rp, hp,
+            "-connect=127.0.0.1:8033", "-listen=0", "-txindex",
+            "-showmetrics=0", (char *)NULL);
+        _exit(127);
+    }
+    if (g_child < 0) {
+        perror("fork");
+        return false;
+    }
+    atexit(cleanup);
+    return true;
+}
+
+static void benchmark_results(double t_filesync, double t_filesync_done,
+                              double t_fc, double t_snap_start,
+                              double t_snap_end, double t_tip,
+                              double t_explorer, double t_done)
+{
+    printf("\n================================================================\n");
+    printf("  RESULTS\n");
+    printf("================================================================\n\n");
+    if (t_filesync > 0 && t_filesync_done > 0)
+        printf("  File sync:           %5.1fs  (%.1fs download)\n",
+               t_filesync_done, t_filesync_done - t_filesync);
+    if (t_fc > 0) printf("  FlyClient + MMB:     %5.1fs\n", t_fc);
+    if (t_snap_start > 0 && t_snap_end > 0)
+        printf("  SHA3 snapshot:       %5.1fs  (%.1fs transfer + verify)\n",
+               t_snap_end, t_snap_end - t_snap_start);
+    if (t_tip > 0) printf("  Synced to tip:       %5.1fs\n", t_tip);
+    if (t_explorer > 0) printf("  Explorer serving:    %5.1fs\n", t_explorer);
+    if (t_done > 0) printf("  Total cold->live:    %5.1fs\n", t_done);
+}
+
+static void benchmark_pages(double t_explorer, double t_done)
+{
+    if (t_explorer <= 0 || t_done <= 0) {
+        printf("\n  Explorer Pages: not probed (benchmark did not complete)\n");
+        return;
+    }
+    static const char *const paths[] = {
+        "/explorer", "/explorer/factoids", "/explorer/hodl", "/explorer/stats"
+    };
+    printf("\n  Explorer Pages:\n");
+    for (size_t i = 0; i < sizeof(paths) / sizeof(paths[0]); i++) {
+        int size = explorer_page_size(paths[i]);
+        printf("    %-18s %d bytes %s\n", paths[i], size,
+               size > 1000 ? "OK" : "EMPTY");
+    }
+}
+
+static bool benchmark_progress_output(void)
+{
+    if (setvbuf(stdout, NULL, _IOLBF, 0) == 0) return true;
+    fprintf(stderr, "bench-sync: cannot configure progress output\n");
+    return false;
+}
+
+static void benchmark_validation(const char *cookie, char *rpc_buf,
+                                 size_t rpc_buf_size)
+{
+    if (!rpc_call(cookie, "validationstatus", rpc_buf, (int)rpc_buf_size))
+        return;
+    char state[64] = "";
+    json_get_str(rpc_buf, "state", state, sizeof(state));
+    long height = json_get_int(rpc_buf, "verified_height");
+    long proofs = json_get_int(rpc_buf, "proofs_verified");
+    printf("\n  Background validation: %s (height %ld, %ld proofs)\n",
+           state, height, proofs);
+}
+
+static int benchmark_outcome(double t_done)
+{
+    if (t_done > 0) return 0;
+    fprintf(stderr,
+            "bench-sync: incomplete within %ds; phase observations are partial results\n",
+            TIMEOUT);
+    return 1;
 }
 
 int main(void)
 {
     /* Supervisors and redirected logs need each progress line during IBD,
      * even when stdout is not a terminal. Configure before the first write. */
-    if (setvbuf(stdout, NULL, _IOLBF, 0) != 0) {
-        fprintf(stderr, "bench-sync: cannot configure progress output\n");
-        return 1;
-    }
+    if (!benchmark_progress_output()) return 1;
 
-    /* Build datadir path */
     char datadir[256];
-    const char *bench_home = getenv("HOME");
-    if (!bench_home || !bench_home[0]) {
-        fprintf(stderr, "bench-sync: HOME is required for an isolated datadir\n");
-        return 1;
-    }
-    time_t t = platform_time_wall_time_t();
-    struct tm *tm = localtime(&t);
-    if (!tm) {
-        perror("bench-sync: format datadir timestamp");
-        return 1;
-    }
-    int datadir_len = snprintf(datadir, sizeof(datadir),
-        "%s/.zclassic-c23-bench-%04d%02d%02d-%02d%02d%02d-XXXXXX",
-        bench_home, tm->tm_year+1900, tm->tm_mon+1, tm->tm_mday,
-        tm->tm_hour, tm->tm_min, tm->tm_sec);
-    if (datadir_len < 0 || (size_t)datadir_len >= sizeof(datadir)) {
-        fprintf(stderr, "bench-sync: datadir path is too long\n");
-        return 1;
-    }
-
     char binary[256];
-    /* Find binary relative to the repo root or in known locations. */
-    if (access("build/bin/zclassic23", X_OK) == 0)
-        snprintf(binary, sizeof(binary), "build/bin/zclassic23");
-    else
-        snprintf(binary, sizeof(binary), "%s/zclassic23/build/bin/zclassic23", getenv("HOME") ?: ".");
-
-    if (access(binary, X_OK) != 0) {
-        fprintf(stderr, "ERROR: Binary not found at %s\n", binary);
-        return 1;
-    }
-
-    /* Reserve a fresh directory atomically. Same-second launches and clock
-     * rollback must not reuse a prior run's chain state, cookie or log. */
-    if (!mkdtemp(datadir)) {
-        perror("bench-sync: create fresh datadir");
-        return 1;
-    }
-
-    /* Copy SSL certs if available */
-    {
-        char src[512], dst[512], ssldir[512];
-        snprintf(ssldir, sizeof(ssldir), "%s/ssl", datadir);
-        mkdir(ssldir, 0755);
-        snprintf(src, sizeof(src), "%s/.zclassic-c23/ssl/fullchain.pem", getenv("HOME"));
-        snprintf(dst, sizeof(dst), "%s/ssl/fullchain.pem", datadir);
-        if (access(src, R_OK) == 0) {
-            char cp[1024];
-            snprintf(cp, sizeof(cp), "cp '%s' '%s'", src, dst);
-            system(cp);
-            snprintf(src, sizeof(src), "%s/.zclassic-c23/ssl/privkey.pem", getenv("HOME"));
-            snprintf(dst, sizeof(dst), "%s/ssl/privkey.pem", datadir);
-            snprintf(cp, sizeof(cp), "cp '%s' '%s'", src, dst);
-            system(cp);
-        }
-    }
-
     char logfile[300];
-    snprintf(logfile, sizeof(logfile), "%s/node.log", datadir);
+    if (!benchmark_paths(datadir, sizeof(datadir), binary, sizeof(binary),
+                         logfile, sizeof(logfile))) return 1;
+    benchmark_copy_ssl(datadir);
 
     printf("\n");
     printf("================================================================\n");
@@ -770,35 +885,7 @@ int main(void)
 
     double t0 = now_sec();
 
-    /* Fork and exec the node */
-    g_child = fork();
-    if (g_child == 0) {
-        /* Child: redirect stdout/stderr to log, exec node */
-        FILE *log = fopen(logfile, "w");
-        if (log) {
-            dup2(fileno(log), STDOUT_FILENO);
-            dup2(fileno(log), STDERR_FILENO);
-            fclose(log);
-        }
-        char dd[300], pp[32], rp[32], hp[32];
-        snprintf(dd, sizeof(dd), "-datadir=%s", datadir);
-        snprintf(pp, sizeof(pp), "-port=%d", PORT);
-        snprintf(rp, sizeof(rp), "-rpcport=%d", RPCPORT);
-        snprintf(hp, sizeof(hp), "-httpsport=%d", HTTPSPORT);
-        execlp(binary, "zclassic23",
-            dd, pp, rp, hp,
-            "-connect=127.0.0.1:8033",
-            "-listen=0",
-            "-txindex",
-            "-showmetrics=0",
-            (char *)NULL);
-        _exit(127);
-    }
-    if (g_child < 0) {
-        perror("fork");
-        return 1;
-    }
-    atexit(cleanup);
+    if (!benchmark_spawn(binary, datadir, logfile)) return 1;
 
     printf("Started PID=%d\n\n", g_child);
 
@@ -993,63 +1080,21 @@ int main(void)
         }
     }
 
-    printf("\n");
-    printf("================================================================\n");
-    printf("  RESULTS\n");
-    printf("================================================================\n\n");
-
-    if (t_filesync > 0 && t_filesync_done > 0)
-        printf("  File sync:           %5.1fs  (%.1fs download)\n",
-               t_filesync_done, t_filesync_done - t_filesync);
-    if (t_fc > 0)
-        printf("  FlyClient + MMB:     %5.1fs\n", t_fc);
-    if (t_snap_start > 0 && t_snap_end > 0)
-        printf("  SHA3 snapshot:       %5.1fs  (%.1fs transfer + verify)\n",
-               t_snap_end, t_snap_end - t_snap_start);
-    if (t_tip > 0)
-        printf("  Synced to tip:       %5.1fs\n", t_tip);
-    if (t_explorer > 0)
-        printf("  Explorer serving:    %5.1fs\n", t_explorer);
-    if (t_done > 0)
-        printf("  Total cold->live:    %5.1fs\n", t_done);
+    benchmark_results(t_filesync, t_filesync_done, t_fc, t_snap_start,
+                      t_snap_end, t_tip, t_explorer, t_done);
 
     /* Test explorer pages */
     /* A historical readiness observation does not make an incomplete run
      * worth four more page fetches (up to eight seconds of HTTP waits).
      * Keep these diagnostics for completed trials; validation status below
      * remains independently observable even when the benchmark times out. */
-    if (t_explorer > 0 && t_done > 0) {
-        printf("\n  Explorer Pages:\n");
-        int sz;
-        sz = explorer_page_size("/explorer");
-        printf("    /explorer          %d bytes %s\n", sz, sz > 1000 ? "OK" : "EMPTY");
-        sz = explorer_page_size("/explorer/factoids");
-        printf("    /explorer/factoids %d bytes %s\n", sz, sz > 1000 ? "OK" : "EMPTY");
-        sz = explorer_page_size("/explorer/hodl");
-        printf("    /explorer/hodl     %d bytes %s\n", sz, sz > 1000 ? "OK" : "EMPTY");
-        sz = explorer_page_size("/explorer/stats");
-        printf("    /explorer/stats    %d bytes %s\n", sz, sz > 1000 ? "OK" : "EMPTY");
-    } else {
-        printf("\n  Explorer Pages: not probed (benchmark did not complete)\n");
-    }
+    benchmark_pages(t_explorer, t_done);
 
     /* Validation status */
-    if (rpc_call(cookie, "validationstatus", rpc_buf, sizeof(rpc_buf))) {
-        char vstate[64] = "";
-        json_get_str(rpc_buf, "state", vstate, sizeof(vstate));
-        long vh = json_get_int(rpc_buf, "verified_height");
-        long proofs = json_get_int(rpc_buf, "proofs_verified");
-        printf("\n  Background validation: %s (height %ld, %ld proofs)\n",
-               vstate, vh, proofs);
-    }
+    benchmark_validation(cookie, rpc_buf, sizeof(rpc_buf));
 
     printf("\n  Datadir: %s\n", datadir);
     printf("  Log:     %s\n\n", logfile);
 
-    if (t_done == 0) {
-        fprintf(stderr, "bench-sync: incomplete within %ds; phase observations are partial results\n",
-                TIMEOUT);
-        return 1;
-    }
-    return 0;
+    return benchmark_outcome(t_done);
 }

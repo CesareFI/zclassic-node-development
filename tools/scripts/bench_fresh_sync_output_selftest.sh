@@ -44,29 +44,30 @@ static void fixture_hold(void)
     CHECK(write(ready_fd, "r", 1) == 1);
     CHECK(read(release_fd, &token, 1) == 1);
 }
-#define main benchmark_main
 C
-# Compile the actual entry-point output configuration, then its actual banner.
-# Omit datadir/certificate setup and all node/network code. Require both source
-# boundaries so an empty extraction cannot claim a passing observation.
+# Compile the actual output configuration helper, then the entry-point banner.
+# Omit datadir/certificate setup and all node/network code. Require every
+# boundary so an empty extraction cannot claim a passing observation.
 awk '
-    /^int main\(void\)/ { prelude = 1; entry++ }
-    /\/\* Build datadir path/ {
-        prelude = 0; boundary++
+    /^static bool benchmark_progress_output\(/ { helper = 1; helpers++ }
+    /^static void benchmark_validation\(/ { helper = 0; helper_ends++ }
+    /^int main\(void\)/ {
+        entry++
+        print "static int benchmark_main(void)"
+        print "{"
+        print "    if (!benchmark_progress_output()) return 1;"
         print "    const char *binary = \"fixture\", *datadir = \"/unused-fixture\";"
         print "    enum { PORT = 8047, RPCPORT = 18247, HTTPSPORT = 8447 };"
     }
     /^    printf\("\\n"\);/ && !banner_done { banner = 1 }
     /^    double t0 = now_sec\(\);/ { banner = 0; banner_done = 1; finish++ }
-    prelude || banner { print }
-    END { if (entry != 1 || boundary != 1 || finish != 1) exit 1 }
+    helper || banner { print }
+    END { if (helpers != 1 || helper_ends != 1 || entry != 1 || finish != 1) exit 1 }
 ' "$source_file" >> "$scratch/test.c"
 cat >> "$scratch/test.c" <<'C'
     fixture_hold();
     return 0;
 }
-#undef main
-
 static void observe(bool baseline, bool regular_file)
 {
     int output[2], ready[2], release[2];

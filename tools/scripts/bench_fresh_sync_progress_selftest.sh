@@ -57,7 +57,7 @@ static void observe(const char *logfile, char *out)
 {
     requested_bytes = 0;
 C
-awk '/^static bool wait_for_cookie\(/ { startup = 1 }
+awk '/^static void startup_progress\(/ { startup = 1 }
      startup && /char line\[256\]/ { copy = 1 }
      copy && /printf\("  \[%.0fs\]/ { exit }
      copy { print }' "$SOURCE" >> "$TMP/test.c"

@@ -28,9 +28,9 @@ C
 awk '/^static int run_cmd\(/ { copy = 1 }
      /^\/\* Extract a string/ { copy = 0 }
      /^static void phase_log_normalize\(/ { copy = 1 }
-     /^static bool phase_log_poll\(/ { copy = 0 }
+     /^static bool phase_log_scan_chunk\(|^static bool phase_log_poll\(/ { copy = 0 }
      /^static bool explorer_responding\(/ { copy = 1 }
-     /^\/\* Wait for RPC startup/ { copy = 0 }
+     /^static void startup_progress\(/ { copy = 0 }
      /^int main\(/ { copy = 0 }
      copy { print }' "$SOURCE" >> "$TMP/test.c"
 cat >> "$TMP/test.c" <<'C'

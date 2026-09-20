@@ -44,7 +44,7 @@ C
 awk '/^static int run_cmd\(/ { copy = 1 }
      /^\/\* RPC call/ { copy = 0 }
      /^static int explorer_page_size\(/ { copy = 1 }
-     /^\/\* Wait for RPC startup/ { copy = 0 }
+     /^static void startup_progress\(/ { copy = 0 }
      copy { print }' "$SOURCE" >> "$TMP/test.c"
 cat >> "$TMP/test.c" <<'C'
 /* Model curl's body/output-counter separation and nonzero transfer status.
@@ -113,14 +113,14 @@ fi
 ln -s "$TMP/test" "$TMP/curl"
 # Count the redundant tools without relying on strace or wall-time thresholds.
 for tool in bash wc; do
-    printf '#!/bin/sh\nprintf "%%s\\n" %s >> "$ZCL_PAGE_CALLS"\nexec %s "$@"\n' \
+    printf '#!/bin/sh\nprintf "%%s\\n" %s >> "$SELFTEST_PAGE_CALLS"\nexec %s "$@"\n' \
         "$tool" "$(command -v "$tool")" > "$TMP/$tool"
     chmod +x "$TMP/$tool"
 done
-export ZCL_PAGE_CALLS="$TMP/calls"
-: > "$ZCL_PAGE_CALLS"
+export SELFTEST_PAGE_CALLS="$TMP/calls"
+: > "$SELFTEST_PAGE_CALLS"
 PATH="$TMP:$PATH" timeout 10 "$TMP/test"
-calls=$(wc -l < "$ZCL_PAGE_CALLS")
+calls=$(wc -l < "$SELFTEST_PAGE_CALLS")
 printf 'six observations: redundant bash/wc invocations=%s\n' "$calls"
 if (( bench )); then
     for ((i=0;i<3;i++)); do PATH="$TMP:$PATH" timeout 20 "$TMP/test" --bench; done

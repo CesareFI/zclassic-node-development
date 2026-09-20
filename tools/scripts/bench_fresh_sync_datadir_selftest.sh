@@ -52,15 +52,28 @@ static int fixture_access(const char *path, int mode)
 #define getenv fixture_getenv
 #define localtime fixture_localtime
 #define access fixture_access
+C
+if grep -q '^static bool benchmark_paths(' "$source_file"; then
+    sed -n '/^static bool benchmark_paths(/,/^}/p' "$source_file" >> "$fixture/test.c"
+    cat >> "$fixture/test.c" <<'C'
+static int setup(char *output, size_t size)
+{
+    char datadir[256], binary[256], logfile[300];
+    if (!benchmark_paths(datadir, sizeof(datadir), binary, sizeof(binary),
+                         logfile, sizeof(logfile))) return 1;
+C
+else
+    cat >> "$fixture/test.c" <<'C'
 static int setup(char *output, size_t size)
 {
 C
-awk '
-    /\/\* Build datadir path/ { copy = 1; starts++ }
-    /\/\* Copy SSL certs/ { copy = 0; ends++ }
-    copy { print }
-    END { if (starts != 1 || ends != 1) exit 1 }
-' "$source_file" >> "$fixture/test.c"
+    awk '
+        /\/\* Build datadir path/ { copy = 1; starts++ }
+        /\/\* Copy SSL certs/ { copy = 0; ends++ }
+        copy { print }
+        END { if (starts != 1 || ends != 1) exit 1 }
+    ' "$source_file" >> "$fixture/test.c"
+fi
 cat >> "$fixture/test.c" <<'C'
     CHECK(snprintf(output, size, "%s", datadir) < (int)size);
     return 0;

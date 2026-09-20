@@ -110,7 +110,7 @@ static int observe(int mode, bool baseline, const char *logfile)
     const char *cookie = "fixture";
 C
 awk '/^    \/\* Phase timestamps \*\// { copy = 1 }
-     copy && /^    printf\("\\n"\);/ { exit }
+     copy && (/^    benchmark_results\(/ || /^    printf\("\\n"\);/) { exit }
      copy { print }' "$source_file" >> "$fixture/test.c"
 cat >> "$fixture/test.c" <<'C'
     printf("scenario=%d start=%.1f height=%d scans=%d pages=%d finish=%.1f\n",

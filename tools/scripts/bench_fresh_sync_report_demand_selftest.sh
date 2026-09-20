@@ -52,15 +52,19 @@ C
 awk '/^static bool json_get_str\(/ { copy = 1 }
      /^enum log_phase/ { copy = 0 }
      copy { print }' "$SOURCE" >> "$TMP/test.c"
+sed -n '/^static void benchmark_pages(/,/^}/p' "$SOURCE" >> "$TMP/test.c"
+sed -n '/^static void benchmark_validation(/,/^}/p' "$SOURCE" >> "$TMP/test.c"
+sed -n '/^static int benchmark_outcome(/,/^}/p' "$SOURCE" >> "$TMP/test.c"
 cat >> "$TMP/test.c" <<'C'
 static int report(double t_explorer, double t_done)
 {
-    const char *cookie = "fixture", *datadir = "fixture", *logfile = "fixture";
+    const char *cookie = "fixture";
     char rpc_buf[4096];
-C
-awk '/^    \/\* Test explorer pages \*\// { copy = 1 }
-     copy { print }' "$SOURCE" >> "$TMP/test.c"
-cat >> "$TMP/test.c" <<'C'
+    benchmark_pages(t_explorer, t_done);
+    benchmark_validation(cookie, rpc_buf, sizeof(rpc_buf));
+    return benchmark_outcome(t_done);
+}
+
 int main(int argc, char **argv)
 {
     CHECK(argc == 2);

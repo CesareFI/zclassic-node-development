@@ -31,7 +31,7 @@ C
 awk '/^static int run_cmd\(/ { copy = 1 }
      /^\/\* RPC call/ { copy = 0 }
      /^static void phase_log_normalize\(/ { copy = 1 }
-     /^static bool phase_log_poll\(/ { copy = 0 }
+     /^static bool phase_log_scan_chunk\(/ { copy = 0 }
      /^static bool explorer_responding\(/ { copy = 1 }
      /^static int explorer_page_size\(/ { copy = 0 }
      copy { print }' "$SOURCE" >> "$TMP/test.c"
@@ -115,14 +115,14 @@ fi
 ln -s "$TMP/test" "$TMP/curl"
 # Count actual redundant commands; timing is descriptive, never a pass gate.
 for tool in bash grep; do
-    printf '#!/bin/sh\nprintf "%%s\\n" %s >> "$ZCL_READY_CALLS"\nexec %s "$@"\n' \
+    printf '#!/bin/sh\nprintf "%%s\\n" %s >> "$SELFTEST_READY_CALLS"\nexec %s "$@"\n' \
         "$tool" "$(command -v "$tool")" > "$TMP/$tool"
     chmod +x "$TMP/$tool"
 done
-export ZCL_READY_CALLS="$TMP/calls"
-: > "$ZCL_READY_CALLS"
+export SELFTEST_READY_CALLS="$TMP/calls"
+: > "$SELFTEST_READY_CALLS"
 PATH="$TMP:$PATH" timeout 10 "$TMP/test"
-calls=$(wc -l < "$ZCL_READY_CALLS")
+calls=$(wc -l < "$SELFTEST_READY_CALLS")
 printf '20 readiness observations: redundant bash/grep invocations=%s\n' "$calls"
 if (( bench )); then
     for ((i=0;i<3;i++)); do PATH="$TMP:$PATH" timeout 20 "$TMP/test" --bench; done

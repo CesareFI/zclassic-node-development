@@ -78,7 +78,7 @@ static inline char *counted_search(const char *text, const char *marker)
 #define memcmp counted_compare
 C
 awk '/^static void phase_log_normalize\(/ { copy = 1; sub(/static void/, "static inline void") }
-     /^static bool phase_log_poll\(/ { copy = 0 }
+     /^static bool phase_log_scan_chunk\(|^static bool phase_log_poll\(/ { copy = 0 }
      /^static bool explorer_responding\(/ { copy = 1 }
      /^static int explorer_page_size\(/ { copy = 0 }
      copy { print }' "$SOURCE" >> "$TMP/test.c"

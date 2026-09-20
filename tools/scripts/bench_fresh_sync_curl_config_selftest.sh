@@ -17,9 +17,9 @@ done
 SOURCE=${1:-$ROOT/tools/bench_fresh_sync.c}
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/zcl-bench-curl-config.XXXXXX")
 trap 'rm -rf "$TMP"' EXIT
-export ZCL_FIXTURE_CURL
-ZCL_FIXTURE_CURL=$(command -v curl)
-export ZCL_CURL_FIXTURE_DIR="$TMP"
+export SELFTEST_FIXTURE_CURL
+SELFTEST_FIXTURE_CURL=$(command -v curl)
+export SELFTEST_CURL_FIXTURE_DIR="$TMP"
 mkdir "$TMP/bin" "$TMP/config"
 export CURL_HOME="$TMP/config"
 printf '{"state":"at_tip"}' > "$TMP/rpc"
@@ -33,13 +33,13 @@ set -euo pipefail
 args=()
 for arg in "$@"; do
     case "$arg" in
-        http://127.0.0.1:18247/) arg="file://$ZCL_CURL_FIXTURE_DIR/rpc" ;;
-        https://127.0.0.1:8447/explorer*) arg="file://$ZCL_CURL_FIXTURE_DIR/page" ;;
+        http://127.0.0.1:18247/) arg="file://$SELFTEST_CURL_FIXTURE_DIR/rpc" ;;
+        https://127.0.0.1:8447/explorer*) arg="file://$SELFTEST_CURL_FIXTURE_DIR/page" ;;
         http://*|https://*) echo 'unexpected observer URL' >&2; exit 1 ;;
     esac
     args+=("$arg")
 done
-exec "$ZCL_FIXTURE_CURL" "${args[@]}"
+exec "$SELFTEST_FIXTURE_CURL" "${args[@]}"
 SH
 chmod +x "$TMP/bin/curl"
 cat > "$TMP/test.c" <<'C'

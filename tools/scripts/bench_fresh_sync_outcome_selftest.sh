@@ -122,6 +122,12 @@ awk '/^static bool json_get_str\(/ { copy = 1 }
      /^struct phase_log \{/ { copy = 1 }
      /^\/\* One bounded pass/ { copy = 0 }
      copy { print }' "$SOURCE" >> "$TMP/test.c"
+awk '/^static void benchmark_results\(/ { copy = 1; starts++ }
+     /^static bool benchmark_progress_output\(/ { copy = 0; ends++ }
+     copy { print }
+     END { if (starts != 1 || ends != 1) exit 1 }' "$SOURCE" >> "$TMP/test.c"
+sed -n '/^static void benchmark_validation(/,/^}/p' "$SOURCE" >> "$TMP/test.c"
+sed -n '/^static int benchmark_outcome(/,/^}/p' "$SOURCE" >> "$TMP/test.c"
 cat >> "$TMP/test.c" <<'C'
 static bool phase_log_poll(FILE *f, struct phase_log *log)
 {

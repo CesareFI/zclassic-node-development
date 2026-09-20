@@ -35,7 +35,7 @@ static char *counted_search(const char *text, const char *marker)
 }
 #define strstr counted_search
 C
-awk '/^static off_t snapshot_log_(chunk|match)\(/ { if (!copy) starts++; copy = 1 }
+awk '/^static off_t snapshot_log_(bisect|chunk|match)\(/ { if (!copy) starts++; copy = 1 }
      /^\/\* A displayable line/ { copy = 0; ends++ }
      copy { print }
      END { if (starts != 1 || ends != 1) exit 1 }' "$source_file" >> "$fixture/test.c"

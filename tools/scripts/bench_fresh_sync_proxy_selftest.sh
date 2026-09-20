@@ -17,8 +17,8 @@ done
 SOURCE=${1:-$ROOT/tools/bench_fresh_sync.c}
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/zcl-bench-proxy.XXXXXX")
 trap 'rm -rf "$TMP"' EXIT
-export ZCL_PROXY_CURL ZCL_PROXY_FIXTURE="$TMP"
-ZCL_PROXY_CURL=$(command -v curl)
+export SELFTEST_PROXY_CURL SELFTEST_PROXY_FIXTURE="$TMP"
+SELFTEST_PROXY_CURL=$(command -v curl)
 mkdir "$TMP/bin" "$TMP/config"
 export CURL_HOME="$TMP/config"
 printf '{"state":"at_tip"}' > "$TMP/rpc"
@@ -31,18 +31,18 @@ for arg in "$@"; do
     case "$arg" in
         http://127.0.0.1:18247/)
             arg=http://127.0.0.1:0/
-            if [[ ${ZCL_PROXY_SUCCESS:-0} == 1 ]]; then arg="file://$ZCL_PROXY_FIXTURE/rpc"; fi ;;
+            if [[ ${SELFTEST_PROXY_SUCCESS:-0} == 1 ]]; then arg="file://$SELFTEST_PROXY_FIXTURE/rpc"; fi ;;
         https://127.0.0.1:8447/explorer*)
             arg=https://127.0.0.1:0/
-            if [[ ${ZCL_PROXY_SUCCESS:-0} == 1 ]]; then arg="file://$ZCL_PROXY_FIXTURE/page"; fi ;;
+            if [[ ${SELFTEST_PROXY_SUCCESS:-0} == 1 ]]; then arg="file://$SELFTEST_PROXY_FIXTURE/page"; fi ;;
         http://*|https://*) echo 'unexpected observer destination' >&2; exit 1 ;;
     esac
     args+=("$arg")
 done
 # Preserve production options, including any proxy bypass. Port zero has no
 # listener. Bound even old source versions that had no observer deadline.
-exec "$ZCL_PROXY_CURL" "${args[@]}" --verbose --max-time 0.1 \
-    2> "$ZCL_PROXY_FIXTURE/trace.$$"
+exec "$SELFTEST_PROXY_CURL" "${args[@]}" --verbose --max-time 0.1 \
+    2> "$SELFTEST_PROXY_FIXTURE/trace.$$"
 SH
 chmod +x "$TMP/bin/curl"
 cat > "$TMP/test.c" <<'C'
@@ -90,7 +90,7 @@ export http_proxy=socks5h://127.0.0.1:0 https_proxy=socks5h://127.0.0.1:0
 export all_proxy=socks5h://127.0.0.1:0 ALL_PROXY=socks5h://127.0.0.1:0
 export HTTP_PROXY=socks5h://127.0.0.1:0 HTTPS_PROXY=socks5h://127.0.0.1:0
 export no_proxy= NO_PROXY=
-export ZCL_PROXY_SUCCESS=0
+export SELFTEST_PROXY_SUCCESS=0
 timeout 5 "$TMP/test"
 traces=("$TMP"/trace.*)
 [[ ${#traces[@]} == 3 ]] || { echo 'FAIL: expected three HTTP observations' >&2; exit 1; }
@@ -105,5 +105,5 @@ printf 'Three observers: %d inherited proxy routes\n' "$proxied"
 expected=0
 if "$baseline"; then expected=3; fi
 [[ $proxied == "$expected" ]] || { echo 'FAIL: unexpected proxy routing' >&2; exit 1; }
-ZCL_PROXY_SUCCESS=1 timeout 5 "$TMP/test" success
+SELFTEST_PROXY_SUCCESS=1 timeout 5 "$TMP/test" success
 echo 'PASS: observer routing and missing-evidence contract'

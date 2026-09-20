@@ -25,7 +25,7 @@ static void *counted_memchr(const void *buf, int value, size_t size)
 #define memchr counted_memchr
 C
 awk '/^static void phase_log_normalize\(/ { copy = 1 }
-     /^static bool phase_log_poll\(/ { copy = 0 }
+     /^static bool phase_log_scan_chunk\(|^static bool phase_log_poll\(/ { copy = 0 }
      copy { print }' "$source_file" >> "$fixture/test.c"
 cat >> "$fixture/test.c" <<'C'
 #undef memchr

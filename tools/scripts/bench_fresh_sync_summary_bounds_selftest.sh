@@ -29,6 +29,7 @@ static char *search(const char *s, const char *marker)
 }
 #define strstr search
 C
+sed -n '/^static off_t snapshot_log_bisect(/,/^}/p' "$subject" >> "$fixture/test.c"
 sed -n '/^static off_t snapshot_log_chunk(/,/^}/p' "$subject" >> "$fixture/test.c"
 cat >> "$fixture/test.c" <<'C'
 #undef strstr

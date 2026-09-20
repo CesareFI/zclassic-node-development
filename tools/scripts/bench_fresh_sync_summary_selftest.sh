@@ -47,7 +47,7 @@ FILE *counted_open(const char *cmd, const char *mode)
 #define fread counted_read
 #define popen counted_open
 C
-awk '/^static off_t snapshot_log_(chunk|match)\(/ { copy = 1 }
+awk '/^static off_t snapshot_log_(bisect|chunk|match)\(/ { copy = 1 }
      /^\/\* Startup progress/ { copy = 0 }
      /^static int run_cmd\(/ { copy = 1; sub(/^static /, "") }
      /^\/\* RPC call/ { copy = 0 }

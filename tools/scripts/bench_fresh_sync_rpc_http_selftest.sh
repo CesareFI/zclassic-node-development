@@ -16,7 +16,7 @@ done
 source_file=${1:-$root/tools/bench_fresh_sync.c}
 fixture=$(mktemp -d /tmp/zcl-rpc-http.XXXXXX)
 trap 'rm -rf "$fixture"' EXIT
-export ZCL_RPC_HTTP_CALLS="$fixture/calls"
+export SELFTEST_RPC_HTTP_CALLS="$fixture/calls"
 cat > "$fixture/curl" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -31,7 +31,7 @@ for arg in "$@"; do
     esac
 done
 [[ -n $method ]]
-printf '%s\n' "$method" >> "$ZCL_RPC_HTTP_CALLS"
+printf '%s\n' "$method" >> "$SELFTEST_RPC_HTTP_CALLS"
 if (( fail && ZCL_RPC_HTTP_STATUS >= 400 )); then exit 22; fi
 # Error documents can contain state-looking fields. HTTP success is required
 # before these bytes may establish a timed observation, whatever their shape.
@@ -76,7 +76,7 @@ cat >> "$fixture/test.c" <<'C'
 }
 static int count_calls(void)
 {
-    FILE *f = fopen(getenv("ZCL_RPC_HTTP_CALLS"), "r");
+    FILE *f = fopen(getenv("SELFTEST_RPC_HTTP_CALLS"), "r");
     CHECK(f != NULL);
     int count = 0, c;
     while ((c = fgetc(f)) != EOF) if (c == '\n') count++;
@@ -93,7 +93,7 @@ int main(int argc, char **argv)
         char text[16], last_state[64] = "syncing";
         CHECK(snprintf(text, sizeof(text), "%d", statuses[i]) > 0);
         CHECK(setenv("ZCL_RPC_HTTP_STATUS", text, 1) == 0);
-        FILE *f = fopen(getenv("ZCL_RPC_HTTP_CALLS"), "w");
+        FILE *f = fopen(getenv("SELFTEST_RPC_HTTP_CALLS"), "w");
         CHECK(f != NULL && fclose(f) == 0);
         long height = observe(last_state);
         int calls = count_calls();

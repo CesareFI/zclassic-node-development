@@ -28,7 +28,7 @@ cat > "$fixture/test.c" <<'C'
     fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #x); exit(1); \
 } } while (0)
 C
-awk '/^static off_t snapshot_log_(chunk|match)\(/ { if (!copy) starts++; copy = 1 }
+awk '/^static off_t snapshot_log_(bisect|chunk|match)\(/ { if (!copy) starts++; copy = 1 }
      /^\/\* Startup progress/ { copy = 0; ends++ }
      copy { print }
      END { if (starts != 1 || ends != 1) exit 1 }' \

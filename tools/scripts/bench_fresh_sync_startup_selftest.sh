@@ -97,8 +97,8 @@ int fixture_fgetc(FILE *f) { return mode == 12 ? EOF : fgetc(f); }
 #define fgetc fixture_fgetc
 C
 if grep -q '^static bool wait_for_cookie(' "$SOURCE"; then
-    awk '/^static bool wait_for_cookie\(/ { copy = 1 }
-         /^int main\(/ { copy = 0 }
+    awk '/^static void startup_progress\(/ { copy = 1 }
+         /^static bool benchmark_paths\(|^int main\(/ { copy = 0 }
          copy { print }' "$SOURCE" >> "$TMP/test.c"
 else
     # Adapt the old inline block to the same caller contract for comparison.

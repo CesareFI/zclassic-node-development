@@ -29,7 +29,7 @@ static size_t counted_read(void *buf, size_t size, size_t count, FILE *f)
 }
 #define fread counted_read
 C
-awk '/^static off_t snapshot_log_(chunk|match)\(/ { copy = 1 }
+awk '/^static off_t snapshot_log_(bisect|chunk|match)\(/ { copy = 1 }
      /^\/\* A displayable line/ { copy = 0 }
      copy { print }' "$source_file" >> "$fixture/test.c"
 cat >> "$fixture/test.c" <<'C'
