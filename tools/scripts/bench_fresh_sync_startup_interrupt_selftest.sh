@@ -66,7 +66,7 @@ static FILE *fixture_fopen(const char *path, const char *flags)
     CHECK(strcmp(path, "fixture.cookie") == 0 && strcmp(flags, "r") == 0);
     FILE *f = tmpfile();
     CHECK(f != NULL);
-    CHECK(fputs("fixture:fixture\n", f) >= 0);
+    CHECK(fputs("__cookie__:0123456789abcdef0123456789abcdef\n", f) >= 0);
     rewind(f);
     return f;
 }
@@ -93,7 +93,8 @@ int main(void)
             CHECK(waits == sleeps + signals && interruptions == signals);
             CHECK(g_child == (mode == 0 ? 42 : 0));
             CHECK(diagnostics == (mode == 0 ? 0 : 1));
-            CHECK(strcmp(cookie, mode == 0 ? "fixture:fixture" : "") == 0);
+            CHECK(strcmp(cookie, mode == 0 ?
+                         "__cookie__:0123456789abcdef0123456789abcdef" : "") == 0);
         }
     }
     puts("PASS: 12 startup cases; interruptions add no polling delay, death/errors still refuse");

@@ -78,7 +78,7 @@ static FILE *fixture_fopen(const char *path, const char *flags)
     CHECK(strcmp(path, "fixture.cookie") == 0 && strcmp(flags, "r") == 0);
     FILE *f = tmpfile();
     CHECK(f != NULL);
-    CHECK(fputs("fixture:fixture\n", f) >= 0);
+    CHECK(fputs("__cookie__:0123456789abcdef0123456789abcdef\n", f) >= 0);
     rewind(f);
     return f;
 }
@@ -108,7 +108,8 @@ int main(int argc, char **argv)
         CHECK(shortest_progress_us >= 10000000);
         CHECK(diagnostics == (ready ? 0 : 1));
         CHECK(g_child == 42);
-        CHECK(strcmp(cookie, ready ? "fixture:fixture" : "") == 0);
+        CHECK(strcmp(cookie, ready ?
+                     "__cookie__:0123456789abcdef0123456789abcdef" : "") == 0);
     }
     puts(baseline ? "BASELINE observations only" :
          "PASS: interrupted sleeps, observer cost, deadline cookie and ten-second progress cadence");

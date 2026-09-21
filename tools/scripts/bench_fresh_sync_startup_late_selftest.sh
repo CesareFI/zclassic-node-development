@@ -72,7 +72,8 @@ static FILE *fixture_fopen(const char *path, const char *mode)
 {
     CHECK(strcmp(path, "fixture.cookie") == 0 && strcmp(mode, "r") == 0);
     FILE *f = tmpfile();
-    CHECK(f != NULL && fputs("fixture:fixture\n", f) >= 0);
+    CHECK(f != NULL && fputs(
+        "__cookie__:0123456789abcdef0123456789abcdef\n", f) >= 0);
     rewind(f);
     opens++;
     return f;
@@ -108,7 +109,8 @@ int main(int argc, char **argv)
         printf("scenario=%d ready=%d elapsed_seconds=%.6f cookie_opens=%d\n",
                scenario, ready, now_sec(), opens);
         CHECK(ready == (baseline || scenario < 3));
-        CHECK(strcmp(cookie, ready ? "fixture:fixture" : "") == 0);
+        CHECK(strcmp(cookie, ready ?
+                     "__cookie__:0123456789abcdef0123456789abcdef" : "") == 0);
         CHECK(g_child == 42);
         if (scenario >= 3 && ready) accepted_late++;
         if (!baseline && (scenario == 3 || scenario == 4 || scenario == 6))

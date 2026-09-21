@@ -22,6 +22,8 @@ cat > "$TMP/test.c" <<'C'
 #define R_OK 4
 #define WNOHANG 1
 static int g_child, mode, sleeps, waits, progress, diagnostics, opens;
+static const char valid_cookie[] =
+    "__cookie__:0123456789abcdef0123456789abcdef";
 static double now_sec(void) { return 100.0 + sleeps * 0.5; }
 static int access(const char *path, int flags)
 {
@@ -77,9 +79,25 @@ static FILE *fixture_fopen(const char *path, const char *flags)
     if (mode == 10 || mode == 11) {
         for (int i = 0; i < (mode == 10 ? 256 : 255); i++)
             CHECK(fputc('x', f) != EOF);
+    } else if (mode == 18) {
+        CHECK(fputs("__cookie__:0123456789abcde", f) >= 0);
+        CHECK(fputc('\t', f) != EOF);
+        CHECK(fputs("0123456789abcdef\n", f) >= 0);
+    } else if (mode == 19) {
+        CHECK(fputs("__cookie__:0123456789abcdef0123456789abcdef\ntrailing", f) >= 0);
+    } else if (mode == 20) {
+        CHECK(fputs("__cookie__:0123456789abcde", f) >= 0);
+        CHECK(fputc('\0', f) != EOF);
+        CHECK(fputs("0123456789abcdef", f) >= 0);
     } else {
         CHECK(fputs(mode == 8 ? "" : mode == 9 ? "\n" :
-                    mode == 6 ? "fixture:fixture" : "fixture:fixture\n", f) >= 0);
+                    mode == 6 ? valid_cookie : mode == 13 ?
+                    "__cookie__:0123456789abcdef'$(printf nope)" :
+                    mode == 14 ? "other:0123456789abcdef0123456789abcdef\n" :
+                    mode == 15 ? "__cookie__:0123456789ABCDEF0123456789ABCDEF\n" :
+                    mode == 16 ? "__cookie__:0123456789abcdef0123456789abcde\n" :
+                    mode == 17 ? "__cookie__:0123456789abcdef0123456789abcdef0\n" :
+                    "__cookie__:0123456789abcdef0123456789abcdef\n", f) >= 0);
     }
     rewind(f);
     return f;
@@ -119,7 +137,7 @@ fi
 cat >> "$TMP/test.c" <<'C'
 int main(void)
 {
-    for (mode = 0; mode < 13; mode++) {
+    for (mode = 0; mode < 21; mode++) {
         g_child = 42;
         sleeps = waits = progress = diagnostics = opens = 0;
         char cookie[256] = "";
@@ -127,7 +145,8 @@ int main(void)
                                   cookie, sizeof(cookie));
         bool reached_cookie = mode != 2 && mode != 3 && mode != 5;
         bool expected = reached_cookie && mode != 7 && mode != 8 &&
-                        mode != 9 && mode != 10 && mode != 12;
+                        mode != 9 && mode != 10 && mode != 11 &&
+                        mode != 12 && mode < 13;
         int expected_sleeps = mode == 1 ? 21 : mode == 2 || mode == 4 ? 600 :
                               mode == 3 ? 3 : mode == 5 ? 1 : 0;
         CHECK(ok == expected);
@@ -136,12 +155,7 @@ int main(void)
         CHECK(diagnostics == (reached_cookie ? 0 : 1));
         CHECK(opens == (reached_cookie ? 1 : 0));
         CHECK(g_child == (mode == 3 || mode == 5 ? 0 : 42));
-        if (mode == 11) {
-            CHECK(strlen(cookie) == 255);
-            for (int i = 0; i < 255; i++) CHECK(cookie[i] == 'x');
-        } else {
-            CHECK(strcmp(cookie, expected ? "fixture:fixture" : "") == 0);
-        }
+        CHECK(strcmp(cookie, expected ? valid_cookie : "") == 0);
         printf("PASS: startup mode=%d ready=%d sleeps=%d progress=%d child=%d\n",
                mode, ok, sleeps, progress, g_child);
     }

@@ -12,6 +12,7 @@ TMP="$(mktemp -d /tmp/zcl-bench-deadline.XXXXXX)"
 trap 'rm -rf "$TMP"' EXIT
 cat > "$TMP/test.c" <<'C'
 #include <stdbool.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -72,6 +73,29 @@ static int mock_curl(int argc, char **argv)
     return deadline > 0 && deadline < 6 ? 28 : 18;
 }
 
+static void run_deadline_case(int mode)
+{
+    char buf[256];
+    const char *fixture = mode >= 4 ? "partial-page" :
+                          mode == 1 ? "partial" : "silent";
+    CHECK(setenv("ZCL_BENCH_HTTP_FIXTURE", fixture, 1) == 0);
+    int64_t begin = platform_time_monotonic_us();
+    bool observed;
+    if (mode < 2) {
+        observed = rpc_call("fixture:fixture", "syncstate", buf, sizeof(buf));
+        CHECK(buf[0] == '\0');
+    } else if (mode == 2 || mode == 4) {
+        observed = explorer_responding();
+    } else {
+        observed = explorer_page_size("/explorer") != 0;
+    }
+    double elapsed = (double)(platform_time_monotonic_us() - begin) / 1e6;
+    printf("mode=%d elapsed=%.3fs observed=%d\n", mode, elapsed, observed);
+    CHECK(!observed);
+    /* Wide scheduling tolerance around the production two-second deadline. */
+    CHECK(elapsed >= 1.0 && elapsed < 4.0);
+}
+
 int main(int argc, char **argv)
 {
     if (argc > 1) return mock_curl(argc, argv);
@@ -84,26 +108,36 @@ int main(int argc, char **argv)
     CHECK(explorer_responding());
     CHECK(explorer_page_size("/explorer") == 13);
     puts("PASS: successful explorer readiness and size remain observable");
+    CHECK(fflush(NULL) == 0);
+    pid_t children[6];
+    int failures = 0;
     for (int mode = 0; mode < 6; mode++) {
-        const char *fixture = mode >= 4 ? "partial-page" :
-                              mode == 1 ? "partial" : "silent";
-        CHECK(setenv("ZCL_BENCH_HTTP_FIXTURE", fixture, 1) == 0);
-        int64_t begin = platform_time_monotonic_us();
-        bool observed;
-        if (mode < 2) {
-            observed = rpc_call("fixture:fixture", "syncstate", buf, sizeof(buf));
-            CHECK(buf[0] == '\0');
-        } else if (mode == 2 || mode == 4) {
-            observed = explorer_responding();
-        } else {
-            observed = explorer_page_size("/explorer") != 0;
+        children[mode] = fork();
+        if (children[mode] < 0) {
+            perror("fork deadline fixture");
+            failures++;
+            continue;
         }
-        double elapsed = (double)(platform_time_monotonic_us() - begin) / 1e6;
-        printf("mode=%d elapsed=%.3fs observed=%d\n", mode, elapsed, observed);
-        CHECK(!observed);
-        /* Wide scheduling tolerance; the baseline blocks for six seconds. */
-        CHECK(elapsed >= 1.0 && elapsed < 4.0);
+        if (children[mode] == 0) {
+            run_deadline_case(mode);
+            return 0;
+        }
     }
+    for (int mode = 0; mode < 6; mode++) {
+        if (children[mode] < 0) continue;
+        int status;
+        pid_t waited;
+        do {
+            waited = waitpid(children[mode], &status, 0);
+        } while (waited < 0 && errno == EINTR);
+        if (waited != children[mode] || !WIFEXITED(status) ||
+            WEXITSTATUS(status) != 0) {
+            fprintf(stderr, "FAIL: deadline mode %d child status=%d\n",
+                    mode, waited == children[mode] ? status : -1);
+            failures++;
+        }
+    }
+    CHECK(failures == 0);
     puts("PASS: silent and partial RPC, explorer readiness and page-size calls are bounded");
     return 0;
 }

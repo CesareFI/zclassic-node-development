@@ -644,6 +644,26 @@ static bool startup_child_alive(const char *logfile)
     return false;
 }
 
+/* This benchmark launches the node without explicit RPC credentials, so its
+ * private datadir must contain the node-owned cookie-mode token. rpc_call()
+ * passes that token to curl through a shell command; refuse every byte outside
+ * the exact producer format before it can acquire shell syntax. */
+static bool benchmark_cookie_valid(const char *cookie, size_t cookie_len)
+{
+    static const char prefix[] = "__cookie__:";
+    if (cookie_len != sizeof(prefix) - 1 + 32 ||
+        memcmp(cookie, prefix, sizeof(prefix) - 1) != 0)
+        return false;
+    const char *secret = cookie + sizeof(prefix) - 1;
+    for (size_t i = 0; i < 32; i++) {
+        unsigned char byte = (unsigned char)secret[i];
+        if (!((byte >= '0' && byte <= '9') ||
+              (byte >= 'a' && byte <= 'f')))
+            return false;
+    }
+    return true;
+}
+
 static bool read_cookie(const char *cookie_path, double deadline,
                         char *cookie, size_t cookie_size)
 {
@@ -662,11 +682,12 @@ static bool read_cookie(const char *cookie_path, double deadline,
         return false;
     }
     cookie[n] = '\0';
-    char *nl = strchr(cookie, '\n');
-    if (nl) *nl = '\0';
-    if (oversized || read_failed || cookie[0] == '\0') {
-        fprintf(stderr, "bench-sync: RPC cookie rejected (oversized=%d read_error=%d empty=%d)\n",
-                oversized, read_failed, cookie[0] == '\0');
+    if (n > 0 && cookie[n - 1] == '\n')
+        cookie[--n] = '\0';
+    bool malformed = n > 0 && !benchmark_cookie_valid(cookie, n);
+    if (oversized || read_failed || cookie[0] == '\0' || malformed) {
+        fprintf(stderr, "bench-sync: RPC cookie rejected (oversized=%d read_error=%d empty=%d malformed=%d)\n",
+                oversized, read_failed, cookie[0] == '\0', malformed);
         cookie[0] = '\0';
         return false;
     }

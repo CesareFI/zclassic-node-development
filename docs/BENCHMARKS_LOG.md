@@ -467,3 +467,47 @@ unavailable. Full lint was interrupted during its prerequisite dev rebuild
 after the same dependency failure; full publication evidence is incomplete.
 No node validation, consensus, optional acceleration, peer scheduling or
 database behavior changes.
+
+## 2026-09-20 — fresh-sync RPC-cookie command boundary
+
+Worldstream baseline: `0b29bec272fd4b2b674e98022f6c4bd524ca3b1f`,
+`tools/bench_fresh_sync.c`. The fresh-sync observer passed the private RPC
+cookie to curl through a shell command but admitted arbitrary nonempty bytes.
+Its startup fixture reproduced this by accepting `fixture:fixture`; shell
+metacharacters followed the same path. This was a benchmark-runner safety
+defect, not a node-authentication defect or IBD throughput measurement.
+
+The benchmark itself launches cookie mode, whose producer contract is exactly
+`__cookie__:` plus 32 lowercase hexadecimal digits. The reader now enforces
+that contract and clears malformed input before any RPC command is built. The
+startup regression accepts the production shape with and without a newline
+and rejects wrong users, lengths, uppercase hex, command syntax, control
+bytes, embedded NULs, data after a newline, empty content, oversized content,
+and read errors. Focused startup
+timing, interruption, deadline, static-analysis, standalone-build, and full
+fresh-sync aggregate commands are recorded in
+`docs/experiments/2026-09-20-worldstream-cookie-command-boundary.md`.
+
+Only benchmark credential admission changes. Consensus, validation, network
+scheduling, database behavior, wallet behavior, and node authentication are
+unchanged.
+
+## 2026-09-20 — parallel fresh-sync deadline fixture
+
+Worldstream baseline: `0b29bec272fd4b2b674e98022f6c4bd524ca3b1f`,
+`tools/scripts/bench_fresh_sync_deadline_selftest.sh`. Six independent stalled
+HTTP-observer cases ran serially and each intentionally consumed the production
+two-second deadline. The fixture measured 12.29 seconds wall time and the full
+fresh-sync self-test measured 36.66 seconds.
+
+The fixture now forks one bounded child per case and checks every child status.
+Each child retains the production observer call, deadline, result assertion,
+and scheduling tolerance. On this Linux x86_64 host the focused fixture measured
+2.31 seconds (81% less wall time), while all six cases still measured
+2.003--2.004 seconds and rejected their silent or partial response. The full
+fresh-sync self-test measured 26.74 seconds (27% less wall time). Reproduction
+and validation commands are recorded in
+`docs/experiments/2026-09-20-worldstream-deadline-fixture-parallel.md`.
+
+Only hermetic regression scheduling changes. No node, peer, datadir, consensus,
+validation, database, wallet, or optional-acceleration behavior changes.

@@ -73,7 +73,8 @@ static FILE *fixture_fopen(const char *path, const char *mode)
 {
     CHECK(strcmp(path, "fixture.cookie") == 0 && strcmp(mode, "r") == 0);
     FILE *f = tmpfile();
-    CHECK(f != NULL && fputs("fixture:fixture\n", f) >= 0);
+    CHECK(f != NULL && fputs(
+        "__cookie__:0123456789abcdef0123456789abcdef\n", f) >= 0);
     rewind(f);
     return f;
 }
@@ -100,7 +101,8 @@ int main(int argc, char **argv)
         CHECK(ready == (scenario < 2));
         CHECK(elapsed_us == (scenario < 2 ? 10000000 :
                             scenario == 2 ? 300000000 : 0));
-        CHECK(strcmp(cookie, ready ? "fixture:fixture" : "") == 0);
+        CHECK(strcmp(cookie, ready ?
+                     "__cookie__:0123456789abcdef0123456789abcdef" : "") == 0);
         CHECK(g_child == 42 && diagnostics == (scenario == 2 ? 1 : 0));
         CHECK(progress == (scenario == 2 ? 29 : 0));
         if (baseline) continue;
