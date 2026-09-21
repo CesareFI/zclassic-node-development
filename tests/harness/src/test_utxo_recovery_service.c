@@ -9,6 +9,7 @@
 #include "services/recovery_policy.h"
 #include "services/chain_state_service.h"
 #include "services/chain_activation_service.h"
+#include "services/chain_restore_repair.h"
 #include "storage/utxo_reimport_flag.h"
 #include "storage/progress_store.h"
 #include "storage/coins_kv.h"
@@ -19,11 +20,23 @@
 #include "storage/coins_view_sqlite.h"
 #include "util/ar_step_readonly.h"
 #include "util/blocker.h"
+#include "primitives/block.h"
+#include "primitives/transaction.h"
+#include "storage/disk_block_io.h"
+#include "core/amount.h"
 #include <stdio.h>
+#include <limits.h>
+#include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/stat.h>
+
+/* Private test-build observation from chain_restore_repair.c.  Keeping this
+ * outside the production header makes the regression incapable of becoming a
+ * runtime control surface. */
+extern void chain_restore_test_reset_rebuild_calls(void);
+extern uint64_t chain_restore_test_rebuild_calls(void);
 
 #define URS_HEX32(byte) \
     #byte #byte #byte #byte #byte #byte #byte #byte \
@@ -78,6 +91,158 @@ static void urs_build_chain(struct main_state *ms, int n)
             &ms->map_block_index, &hashes[limit - 1]);
         if (tip) active_chain_move_window_tip(&ms->chain_active, tip);
     }
+}
+
+/* Make the same on-disk body shape the restore admission path consumes; the
+ * regression must not mistake synthetic in-memory block-index entries for a
+ * restartable chain. */
+static bool urs_write_restore_block(const char *datadir,
+                                    struct disk_block_pos *pos,
+                                    const struct uint256 *prev,
+                                    uint32_t nbits, uint32_t ntime,
+                                    struct uint256 *hash_out)
+{
+    struct block block;
+    block_init(&block);
+    block.header.nVersion = 4;
+    if (prev)
+        block.header.hashPrevBlock = *prev;
+    block.header.nTime = ntime;
+    block.header.nBits = nbits;
+    block.num_vtx = 1;
+    block.vtx = calloc(1, sizeof(*block.vtx)); // raw-alloc-ok:test-fixture
+    if (!block.vtx)
+        return false;
+    transaction_init(&block.vtx[0]);
+    transaction_alloc(&block.vtx[0], 1, 1);
+    block.vtx[0].vin[0].sequence = 0xffffffff;
+    block.vtx[0].vout[0].value = 10 * COIN;
+    block_get_hash(&block, hash_out);
+    const unsigned char msg_start[4] = {0x24, 0xe9, 0x27, 0x64};
+    bool ok = write_block_to_disk(&block, pos, datadir, msg_start);
+    block_free(&block);
+    return ok;
+}
+
+static bool urs_next_restore_pos(const char *datadir,
+                                 struct disk_block_pos *pos)
+{
+    char path[320];
+    int n = snprintf(path, sizeof(path), "%s/blocks/blk00000.dat", datadir);
+    if (n < 0 || (size_t)n >= sizeof(path))
+        return false;
+    struct stat st;
+    if (stat(path, &st) != 0 || st.st_size < 0 ||
+        (uintmax_t)st.st_size > UINT_MAX)
+        return false;
+    pos->nFile = 0;
+    pos->nPos = (unsigned)st.st_size;
+    return true;
+}
+
+static struct block_index *urs_build_restore_disk_chain(struct main_state *ms,
+                                                        const char *datadir,
+                                                        int blocks)
+{
+    char blocks_dir[320];
+    int n = snprintf(blocks_dir, sizeof(blocks_dir), "%s/blocks", datadir);
+    if (n < 0 || (size_t)n >= sizeof(blocks_dir) || mkdir(datadir, 0755) != 0 ||
+        mkdir(blocks_dir, 0755) != 0)
+        return NULL;
+    struct disk_block_pos pos = {.nFile = 0, .nPos = 0};
+    struct uint256 prev;
+    memset(&prev, 0, sizeof(prev));
+    struct block_index *tip = NULL;
+    for (int h = 0; h < blocks; h++) {
+        if (h > 0 && !urs_next_restore_pos(datadir, &pos))
+            return NULL;
+        struct uint256 hash;
+        uint32_t bits = 0x1e14f400u + (uint32_t)h;
+        if (!urs_write_restore_block(datadir, &pos, h ? &prev : NULL, bits,
+                                     1700000000u + (uint32_t)h, &hash))
+            return NULL;
+        struct block_index *bi = chainstate_insert_block_index(
+            (struct chainstate *)ms, &hash);
+        if (!bi)
+            return NULL;
+        bi->nHeight = h;
+        bi->nBits = bits;
+        bi->nStatus = BLOCK_VALID_SCRIPTS | BLOCK_HAVE_DATA;
+        bi->nFile = pos.nFile;
+        bi->nDataPos = pos.nPos;
+        bi->nTx = 1;
+        bi->nChainTx = (unsigned)(h + 1);
+        if (h > 0)
+            bi->pprev = block_map_find(&ms->map_block_index, &prev);
+        if (h > 0 && !bi->pprev)
+            return NULL;
+        prev = hash;
+        tip = bi;
+    }
+    return tip;
+}
+
+static int test_coins_restore_rebuilds_once(void)
+{
+    int failures = 0;
+    char datadir[256];
+    char db_path[256];
+    snprintf(datadir, sizeof(datadir), "./test-tmp/%d_urs_one_rebuild",
+             (int)getpid());
+    snprintf(db_path, sizeof(db_path), "./test-tmp/%d_urs_one_rebuild.db",
+             (int)getpid());
+    mkdir("./test-tmp", 0755);
+
+    struct main_state ms;
+    main_state_init(&ms);
+    struct node_db ndb;
+    memset(&ndb, 0, sizeof(ndb));
+    struct coins_view view;
+    struct coins_view_cache cache;
+    coins_view_cache_init(&cache, &view);
+    chain_params_select(CHAIN_MAIN);
+    const struct chain_params *params = chain_params_get();
+    struct block_index *tip = urs_build_restore_disk_chain(&ms, datadir, 4);
+    bool db_open = node_db_open(&ndb, db_path);
+    bool setup = tip && db_open && params && tip->phashBlock;
+    if (setup)
+        coins_view_cache_set_best_block(&cache, tip->phashBlock);
+    struct chain_state_repository *csr = csr_instance();
+    if (setup)
+        csr_init(csr, &ms.map_block_index, &ms.chain_active,
+                 &ms.pindex_best_header, &cache, &ndb, NULL);
+
+    struct chain_restore_result rr = {0};
+    if (setup) {
+        struct utxo_recovery_ctx uctx = {
+            .state = &ms,
+            .coins_sqlite = NULL,
+            .coins_tip = &cache,
+            .ndb = &ndb,
+            .datadir = datadir,
+            .params = params,
+            .activation_ctl = NULL,
+            .db_service = NULL,
+        };
+        chain_restore_test_reset_rebuild_calls();
+        rr = utxo_recovery_restore_chain_tip(&uctx, NULL);
+    }
+    struct block_index *active = active_chain_tip(&ms.chain_active);
+    uint64_t rebuild_calls = chain_restore_test_rebuild_calls();
+    URS_CHECK("urs: disk-backed coins restore rebuilds active chain once",
+              setup && rr.status.ok && rr.restored &&
+              rr.restored_height == 3 && active == tip &&
+              rebuild_calls == 1);
+
+    if (setup)
+        csr_free(csr);
+    coins_view_cache_free(&cache);
+    if (db_open)
+        node_db_close(&ndb);
+    main_state_free(&ms);
+    test_cleanup_tmpdir(datadir);
+    unlink(db_path);
+    return failures;
 }
 
 static int64_t urs_count_sql(struct node_db *ndb, const char *sql)
@@ -1962,6 +2127,11 @@ int test_utxo_recovery_service(void)
             urs_frontier_fixture_teardown(&fx);
         }
     }
+
+    /* A real interrupted-IBD restart has durable bodies plus a coins-best
+     * cursor. Keep the fixture disk-backed so restore admission, pointer
+     * ownership, parsing, and cleanup remain on production paths. */
+    failures += test_coins_restore_rebuilds_once();
 
     printf("--- utxo_recovery_service: %d failure(s) ---\n", failures);
     return failures;

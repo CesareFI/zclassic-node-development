@@ -38,6 +38,23 @@
 /* Tier-2 P2 fast restart (see header). Boot-time toggle. */
 static _Atomic bool g_trust_index_fastpath = false;
 
+#ifdef ZCL_TESTING
+static _Atomic uint64_t g_chain_restore_test_rebuild_calls = 0;
+
+void chain_restore_test_reset_rebuild_calls(void);
+uint64_t chain_restore_test_rebuild_calls(void);
+
+void chain_restore_test_reset_rebuild_calls(void)
+{
+    atomic_store(&g_chain_restore_test_rebuild_calls, 0);
+}
+
+uint64_t chain_restore_test_rebuild_calls(void)
+{
+    return atomic_load(&g_chain_restore_test_rebuild_calls);
+}
+#endif
+
 void chain_restore_set_trust_index_fastpath(bool on)
 {
     atomic_store(&g_trust_index_fastpath, on);
@@ -188,6 +205,9 @@ int chain_restore_rebuild_active_chain(struct main_state *ms,
                                        struct block_index *tip,
                                        const char *datadir)
 {
+#ifdef ZCL_TESTING
+    atomic_fetch_add(&g_chain_restore_test_rebuild_calls, 1);
+#endif
     if (!ms || !tip || tip->nHeight < 0)
         return 0;
 

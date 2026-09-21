@@ -714,7 +714,6 @@ struct chain_restore_result utxo_recovery_restore_chain_tip(
          * everything below (active-chain rebuild, event, result fields)
          * must describe what was actually INSTALLED. */
         restore_tip = committed;
-        (void)chain_restore_rebuild_active_chain(ctx->state, restore_tip, NULL);
         printf("Restored chain tip from coins DB: height=%d\n",
                restore_tip->nHeight);
         event_emitf(EV_BOOT_CHAIN_RESTORED, 0, "height=%d",
@@ -724,13 +723,17 @@ struct chain_restore_result utxo_recovery_restore_chain_tip(
         if (restore_tip->phashBlock)
             res.restored_hash = *restore_tip->phashBlock;
 
-        /* populate active_chain.chain from pprev +
+        /* This is the one authoritative post-commit rebuild: populate
+         * active_chain.chain from pprev +
          * block_map, and backfill nBits from on-disk block headers for
          * any pindex entry whose nBits is still zero. Without this, the
          * anchor-restore path leaves `getblockhash <h>` broken for every
          * h below the tip and GetNextWorkRequired trips `bad-diffbits`
          * on the first real-difficulty header whose pprev window
-         * includes an nBits==0 entry. */
+         * includes an nBits==0 entry. The former direct rebuild immediately
+         * before this call traversed the same ancestry again with no
+         * intervening mutation, adding one O(chain height) memory walk to
+         * every coins-tip restore. */
         snapsync_set_anchor(NULL);
         (void)chain_restore_finalize(ctx->state, ctx->datadir);
 
