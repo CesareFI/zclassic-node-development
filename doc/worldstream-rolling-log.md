@@ -1,5 +1,17 @@
 # Worldstream rolling log
 
+## 2026-09-24T20:42:58Z
+
+- Measured problem: POSIX startup PID-file creation ignored open, write, and close failures.
+- Baseline: `CreatePidFile()` returned no status and `AppInit2()` continued without process-ownership metadata.
+- Root cause: PID-file durability was outside the startup error path.
+- Files changed: `src/util.h`, `src/util.cpp`, `src/init.cpp`, `src/test/util_tests.cpp`, `doc/storage-reliability.md`.
+- Validation: daemon and test binary rebuilt; utility tests passed 26 cases including `/dev/full` close failure; main, coins, database-wrapper, PoW, and transaction groups passed; `git diff --check` passed; no consensus code or networking code changed.
+- Consensus impact: NONE.
+- Commit SHA: `aeb52c062b70aa00939628c2831e07060304d48d`.
+- Remote SHA: `aeb52c062b70aa00939628c2831e07060304d48d` on `development/dev/ibd-performance-20260918`.
+- Next investigation: measure startup cleanup and stale block-file removal failures during interrupted reindex; refresh Hetzner first.
+
 ## 2026-09-24T19:31:48Z
 
 - Measured problem: block and undo file pre-allocation failures were discarded.
