@@ -1,5 +1,15 @@
 # Storage reliability
 
+## PID-file failure propagation (2026-09-24)
+
+Startup previously ignored failures while creating, writing, or closing the
+POSIX PID file. The daemon could therefore continue without durable process
+ownership metadata. `CreatePidFile()` now returns its combined result and
+initialization fails with a clear error when the PID file cannot be completed.
+A Linux `/dev/full` regression covers close failure. This changes startup
+error handling only; consensus, chain history, transaction validity, PoW,
+monetary policy, and upgrade behavior are unchanged.
+
 ## Pre-allocation failure propagation (2026-09-24)
 
 Block and undo growth asked `AllocateFileRange()` to reserve the next file

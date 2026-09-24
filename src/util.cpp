@@ -643,14 +643,14 @@ boost::filesystem::path GetPidFile()
     return pathPidFile;
 }
 
-void CreatePidFile(const boost::filesystem::path &path, pid_t pid)
+bool CreatePidFile(const boost::filesystem::path &path, pid_t pid)
 {
     FILE* file = fopen(path.string().c_str(), "w");
-    if (file)
-    {
-        fprintf(file, "%d\n", pid);
-        fclose(file);
-    }
+    if (!file)
+        return false;
+    const bool written = fprintf(file, "%d\n", pid) >= 0;
+    const bool closed = fclose(file) == 0;
+    return written && closed;
 }
 #endif
 

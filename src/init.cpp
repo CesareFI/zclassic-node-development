@@ -1974,7 +1974,8 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     }
 
 #ifndef WIN32
-    CreatePidFile(GetPidFile(), getpid());
+    if (!CreatePidFile(GetPidFile(), getpid()))
+        return InitError(strprintf("Unable to create or write pidfile %s", GetPidFile().string()));
 #endif
     // if (GetBoolArg("-shrinkdebugfile", !fDebug))
     //     ShrinkDebugFile();

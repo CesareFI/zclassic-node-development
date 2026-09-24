@@ -57,6 +57,11 @@ BOOST_AUTO_TEST_CASE(util_allocate_file_range_failure)
     BOOST_CHECK(!AllocateFileRange(file, 0, 4096));
     fclose(file);
 }
+
+BOOST_AUTO_TEST_CASE(util_pidfile_close_failure)
+{
+    BOOST_CHECK(!CreatePidFile(boost::filesystem::path("/dev/full"), 1234));
+}
 #endif
 
 BOOST_AUTO_TEST_CASE(util_renameover)
