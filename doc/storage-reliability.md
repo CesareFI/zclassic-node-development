@@ -1,5 +1,20 @@
 # Storage reliability
 
+## Pre-allocation failure propagation (2026-09-24)
+
+Block and undo growth asked `AllocateFileRange()` to reserve the next file
+chunk, but the helper discarded every platform error. A failed
+`posix_fallocate`, Windows file-extension call, macOS allocation/truncation, or
+fallback write was therefore followed by dirty file metadata and continued
+block processing.
+
+The helper now returns success only when the platform reservation completes.
+`FindBlockPos()` and `FindUndoPos()` also require the file open and close to
+succeed before recording the allocation. A Linux `/dev/full` utility regression
+proves the failure is observable. This changes local disk-failure handling only;
+block bytes, serialization, transaction validation, chain selection, PoW,
+monetary policy, upgrade activation, and all consensus behavior are unchanged.
+
 ## Block and undo file flush failures (2026-09-19)
 
 Block-index durability depends on block and undo data reaching stable storage

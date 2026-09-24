@@ -49,6 +49,14 @@ BOOST_AUTO_TEST_CASE(util_autofile_close_failure)
     BOOST_CHECK(file.IsNull());
     BOOST_CHECK(file.fclose());
 }
+
+BOOST_AUTO_TEST_CASE(util_allocate_file_range_failure)
+{
+    FILE* file = fopen("/dev/full", "wb");
+    BOOST_REQUIRE(file != NULL);
+    BOOST_CHECK(!AllocateFileRange(file, 0, 4096));
+    fclose(file);
+}
 #endif
 
 BOOST_AUTO_TEST_CASE(util_renameover)
