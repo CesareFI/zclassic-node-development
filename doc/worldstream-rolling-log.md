@@ -1,5 +1,17 @@
 # Worldstream rolling log
 
+## 2026-09-24T20:55:34Z
+
+- Measured problem: `-reindex -prune` ignored stale `blk*.dat` and `rev*.dat` deletion failures.
+- Baseline: `CleanupBlockRevFiles()` was `void` and reindex continued after unsuccessful cleanup.
+- Root cause: filesystem removal results were discarded, leaving possible stale files outside rebuilt metadata.
+- Files changed: `src/init.cpp`, `src/util.h`, `src/util.cpp`, `src/test/util_tests.cpp`, `doc/storage-reliability.md`.
+- Validation: daemon and Boost test binary rebuilt; utility suite passed 27 cases including successful stale-file removal and deterministic `/proc` removal failure; main, coins, DB-wrapper, and PoW groups passed; `git diff --check` passed; cleanup McCabe complexity is 10 and `RemoveFile` is 2.
+- Consensus impact: NONE.
+- Commit SHA: `ba1e6ac2daaa0a663929a8a9d5b52ae9bab6d231`.
+- Remote SHA: `ba1e6ac2daaa0a663929a8a9d5b52ae9bab6d231` on `development/dev/ibd-performance-20260918`.
+- Next investigation: measure shutdown-time PID-file removal and block-prune deletion handling; refresh Hetzner before implementation.
+
 ## 2026-09-24T20:42:58Z
 
 - Measured problem: POSIX startup PID-file creation ignored open, write, and close failures.
