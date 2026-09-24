@@ -1,5 +1,17 @@
 # Worldstream rolling log
 
+## 2026-09-24T21:34:36Z
+
+- Measured problem: live pruning ignored failures deleting either file in a `blk`/`rev` pair.
+- Baseline: `UnlinkPrunedFiles()` returned `void` after the block-index batch and callers continued regardless of deletion status.
+- Root cause: prune state accounting had no failure result from filesystem deletion.
+- Files changed: `src/main.cpp`, `src/main.h`, `doc/storage-reliability.md`.
+- Validation: daemon and Boost test binaries rebuilt; utility suite passed 27 cases with deterministic checked-delete failure coverage; main, coins, DB-wrapper, and PoW groups passed; `git diff --check` passed; no networking or consensus code changed.
+- Consensus impact: NONE.
+- Commit SHA: `d67069fa9b1f7f89d69455932f2f7196bb68c363`.
+- Remote SHA: `d67069fa9b1f7f89d69455932f2f7196bb68c363` on `development/dev/ibd-performance-20260918`.
+- Next investigation: measure shutdown and prune retry behavior after a failed deletion; refresh Hetzner first.
+
 ## 2026-09-24T20:55:34Z
 
 - Measured problem: `-reindex -prune` ignored stale `blk*.dat` and `rev*.dat` deletion failures.
