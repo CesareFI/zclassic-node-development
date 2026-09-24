@@ -1,5 +1,15 @@
 # Storage reliability
 
+## Live prune deletion failures (2026-09-24)
+
+`UnlinkPrunedFiles()` previously ignored failures deleting either member of a
+`blk`/`rev` pair after the block-index batch was written. The node could then
+continue with stale disk data and an inaccurate storage target. Deletion now
+returns a checked result and the existing flush path aborts on failure. The
+checked removal seam has deterministic Linux failure coverage. This changes
+only local pruning failure handling; consensus, validation, chain history,
+PoW, monetary policy, and upgrade behavior are unchanged.
+
 ## Reindex stale-file removal failures (2026-09-24)
 
 `-reindex -prune` previously ignored every stale `blk*.dat` and `rev*.dat`

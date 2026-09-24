@@ -2939,8 +2939,8 @@ bool static FlushStateToDisk(CValidationState &state, FlushStateMode mode) {
             }
         }
         // Finally remove any pruned files
-        if (fFlushForPrune)
-            UnlinkPrunedFiles(setFilesToPrune);
+        if (fFlushForPrune && !UnlinkPrunedFiles(setFilesToPrune))
+            return AbortNode(state, "Failed to remove pruned block files");
         nLastWrite = nNow;
     }
     // Flush best chain related state. This can only be done if the blocks / block index write was also done.
@@ -4812,14 +4812,18 @@ void PruneOneBlockFile(const int fileNumber)
 }
 
 
-void UnlinkPrunedFiles(std::set<int>& setFilesToPrune)
+bool UnlinkPrunedFiles(std::set<int>& setFilesToPrune)
 {
     for (set<int>::iterator it = setFilesToPrune.begin(); it != setFilesToPrune.end(); ++it) {
         CDiskBlockPos pos(*it, 0);
-        boost::filesystem::remove(GetBlockPosFilename(pos, "blk"));
-        boost::filesystem::remove(GetBlockPosFilename(pos, "rev"));
+        if (!RemoveFile(GetBlockPosFilename(pos, "blk")) ||
+            !RemoveFile(GetBlockPosFilename(pos, "rev"))) {
+            LogPrintf("Prune: failed to delete blk/rev (%05u)\n", *it);
+            return false;
+        }
         LogPrintf("Prune: %s deleted blk/rev (%05u)\n", __func__, *it);
     }
+    return true;
 }
 
 /* Calculate the block/rev files that should be deleted to remain under target*/

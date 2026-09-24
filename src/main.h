@@ -260,7 +260,7 @@ void FindFilesToPrune(std::set<int>& setFilesToPrune);
 /**
  *  Actually unlink the specified files
  */
-void UnlinkPrunedFiles(std::set<int>& setFilesToPrune);
+bool UnlinkPrunedFiles(std::set<int>& setFilesToPrune);
 
 /** Create a new block index entry for a given block hash */
 CBlockIndex * InsertBlockIndex(uint256 hash);
