@@ -1,5 +1,17 @@
 # Storage reliability
 
+## Reindex stale-file removal failures (2026-09-24)
+
+`-reindex -prune` previously ignored every stale `blk*.dat` and `rev*.dat`
+deletion result. A failed removal could leave files that were absent from the
+rebuilt metadata, wasting disk space and invalidating the storage assumptions
+used by the resumed import. Cleanup now uses a checked removal helper and
+fails startup before reindexing if the directory scan or any deletion fails.
+The Linux regression covers successful block/undo removal and a deterministic
+filesystem removal failure. This path performs no rename or fsync; those
+failure paths are not involved. Consensus, chain history, validation, PoW,
+monetary policy, and upgrade behavior are unchanged.
+
 ## PID-file failure propagation (2026-09-24)
 
 Startup previously ignored failures while creating, writing, or closing the

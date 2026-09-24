@@ -62,6 +62,28 @@ BOOST_AUTO_TEST_CASE(util_pidfile_close_failure)
 {
     BOOST_CHECK(!CreatePidFile(boost::filesystem::path("/dev/full"), 1234));
 }
+
+BOOST_AUTO_TEST_CASE(util_remove_file_failure)
+{
+    const boost::filesystem::path root = boost::filesystem::temp_directory_path() /
+        boost::filesystem::unique_path("zclassic-reindex-cleanup-%%%%-%%%%");
+    boost::filesystem::create_directories(root);
+    const boost::filesystem::path gap = root / "blk00002.dat";
+    const boost::filesystem::path undo = root / "rev00000.dat";
+    FILE* gapFile = fopen(gap.string().c_str(), "wb");
+    FILE* undoFile = fopen(undo.string().c_str(), "wb");
+    BOOST_REQUIRE(gapFile != NULL);
+    BOOST_REQUIRE(undoFile != NULL);
+    BOOST_REQUIRE_EQUAL(fclose(gapFile), 0);
+    BOOST_REQUIRE_EQUAL(fclose(undoFile), 0);
+    BOOST_CHECK(RemoveFile(gap));
+    BOOST_CHECK(RemoveFile(undo));
+    BOOST_CHECK(!boost::filesystem::exists(gap));
+    BOOST_CHECK(!boost::filesystem::exists(undo));
+
+    BOOST_CHECK(!RemoveFile(boost::filesystem::path("/proc/1")));
+    boost::filesystem::remove_all(root);
+}
 #endif
 
 BOOST_AUTO_TEST_CASE(util_renameover)

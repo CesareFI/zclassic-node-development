@@ -626,24 +626,33 @@ struct CImportingNow
 // rev files since they'll be rewritten by the reindex anyway.  This ensures that vinfoBlockFile
 // is in sync with what's actually on disk by the time we start downloading, so that pruning
 // works correctly.
-void CleanupBlockRevFiles()
+static bool CleanupBlockRevFiles(const boost::filesystem::path& blocksdir)
 {
     using namespace boost::filesystem;
     map<string, path> mapBlockFiles;
+
+    if (!exists(blocksdir) || !is_directory(blocksdir)) {
+        LogPrintf("Unable to scan block directory %s\n", blocksdir.string());
+        return false;
+    }
 
     // Glob all blk?????.dat and rev?????.dat files from the blocks directory.
     // Remove the rev files immediately and insert the blk file paths into an
     // ordered map keyed by block file index.
     LogPrintf("Removing unusable blk?????.dat and rev?????.dat files for -reindex with -prune\n");
-    path blocksdir = GetDataDir() / "blocks";
     for (directory_iterator it(blocksdir); it != directory_iterator(); it++) {
         if (!is_regular_file(*it))
             continue;
         const string filename = it->path().filename().string();
         if (IsNumberedBlockFile(filename, "blk"))
             mapBlockFiles[filename.substr(3, 5)] = it->path();
-        else if (IsNumberedBlockFile(filename, "rev"))
-            remove(it->path());
+        else if (IsNumberedBlockFile(filename, "rev")) {
+            if (!RemoveFile(it->path())) {
+                LogPrintf("Unable to remove stale undo file %s\n",
+                          it->path().string());
+                return false;
+            }
+        }
     }
 
     // Remove all block files that aren't part of a contiguous set starting at
@@ -656,8 +665,13 @@ void CleanupBlockRevFiles()
             nContigCounter++;
             continue;
         }
-        remove(item.second);
+        if (!RemoveFile(item.second)) {
+            LogPrintf("Unable to remove non-contiguous block file %s\n",
+                      item.second.string());
+            return false;
+        }
     }
+    return true;
 }
 
 static void ArchiveBootstrapFile(const boost::filesystem::path& source,
@@ -2681,7 +2695,8 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
                     pblocktree->WriteReindexing(true);
                     //If we're reindexing in prune mode, wipe away unusable block files and all undo data files
                     if (fPruneMode)
-                        CleanupBlockRevFiles();
+                        if (!CleanupBlockRevFiles(GetDataDir() / "blocks"))
+                            return InitError("Unable to remove stale block files before reindex");
                 }
 
                 if (!LoadBlockIndex()) {

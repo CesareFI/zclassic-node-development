@@ -665,6 +665,13 @@ bool RenameOver(boost::filesystem::path src, boost::filesystem::path dest)
 #endif /* WIN32 */
 }
 
+bool RemoveFile(const boost::filesystem::path& path)
+{
+    boost::system::error_code ec;
+    const bool removed = boost::filesystem::remove(path, ec);
+    return removed && !ec;
+}
+
 bool IsNumberedBlockFile(const std::string& filename, const std::string& prefix)
 {
     return filename.size() == 12 &&
