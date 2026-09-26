@@ -856,6 +856,64 @@ BOOST_AUTO_TEST_CASE(transaction_reject_uses_single_byte_wire_code)
     BOOST_CHECK_EQUAL(mempool.size(), 0);
 }
 
+BOOST_AUTO_TEST_CASE(invalid_foreign_block_preserves_request_ownership)
+{
+    CNode owner(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "owner", true);
+    CNode other(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "other", true);
+    Headers(owner);
+    Headers(other);
+    BOOST_REQUIRE(SendMessages(&owner, false));
+    const auto before = Stats(owner);
+    BOOST_REQUIRE_EQUAL(before.nBlocksInFlight, 128);
+
+    CBlock invalid = blocks[1];
+    CMutableTransaction coinbase(invalid.vtx[0]);
+    ++coinbase.vout[0].nValue;
+    invalid.vtx[0] = CTransaction(coinbase);
+    BOOST_REQUIRE(invalid.GetHash() == blocks[1].GetHash());
+    CDataStream payload(SER_NETWORK, PROTOCOL_VERSION);
+    payload << invalid;
+    BOOST_REQUIRE(ProcessMessage(&other, "block", payload, GetTime()));
+    CheckReject(other, "block", "bad-txnmrklroot", invalid.GetHash());
+
+    const auto after = Stats(owner);
+    BOOST_CHECK_EQUAL(after.nBlocksInFlight, before.nBlocksInFlight);
+    BOOST_CHECK_EQUAL(after.nGlobalValidatedBlocksInFlight, before.nGlobalValidatedBlocksInFlight);
+    BOOST_CHECK_EQUAL(after.nDownloadDeadline, before.nDownloadDeadline);
+    BOOST_CHECK(after.hashOldestRequest == before.hashOldestRequest);
+    BOOST_CHECK(after.vHeightInFlight == before.vHeightInFlight);
+    BOOST_CHECK_EQUAL(chainActive.Height(), 0);
+
+    // Valid cross-peer delivery still satisfies the original request.
+    Deliver(other, 1);
+    BOOST_CHECK_EQUAL(Stats(owner).nBlocksInFlight, 127);
+    BOOST_CHECK_EQUAL(chainActive.Height(), 1);
+}
+
+BOOST_AUTO_TEST_CASE(invalid_owned_block_releases_request_for_reassignment)
+{
+    CNode owner(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "owner", true);
+    CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "healthy", true);
+    Headers(owner);
+    Headers(healthy);
+    BOOST_REQUIRE(SendMessages(&owner, false));
+    CBlock invalid = blocks[1];
+    CMutableTransaction coinbase(invalid.vtx[0]);
+    ++coinbase.vout[0].nValue;
+    invalid.vtx[0] = CTransaction(coinbase);
+    CDataStream payload(SER_NETWORK, PROTOCOL_VERSION);
+    payload << invalid;
+    BOOST_REQUIRE(ProcessMessage(&owner, "block", payload, GetTime()));
+    CheckReject(owner, "block", "bad-txnmrklroot", invalid.GetHash());
+    BOOST_CHECK_EQUAL(Stats(owner).nBlocksInFlight, 127);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    const auto reassigned = Stats(healthy);
+    BOOST_REQUIRE_EQUAL(reassigned.nBlocksInFlight, 2);
+    BOOST_CHECK_EQUAL(reassigned.vHeightInFlight.front(), 1);
+    Deliver(healthy, 1);
+    BOOST_CHECK_EQUAL(chainActive.Height(), 1);
+}
+
 BOOST_AUTO_TEST_CASE(teardown_releases_all_accounting)
 {
     CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "B", true);

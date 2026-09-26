@@ -491,11 +491,12 @@ void FinalizeNode(NodeId nodeid) {
 }
 
 // Requires cs_main.
-// Returns a bool indicating whether we requested this block.
-bool MarkBlockAsReceived(const uint256& hash) {
+// Returns whether a request was removed, optionally restricted to its owner.
+bool MarkBlockAsReceived(const uint256& hash, NodeId nodeid = -1) {
     AssertLockHeld(cs_main);
     map<uint256, pair<NodeId, list<QueuedBlock>::iterator> >::iterator itInFlight = mapBlocksInFlight.find(hash);
-    if (itInFlight != mapBlocksInFlight.end()) {
+    if (itInFlight != mapBlocksInFlight.end() &&
+        (nodeid == -1 || itInFlight->second.first == nodeid)) {
         CNodeState *state = State(itInFlight->second.first);
         assert(state != NULL);
         assert(state->nBlocksInFlight > 0);
@@ -4828,7 +4829,10 @@ bool ProcessNewBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, bool
 
     {
         LOCK(cs_main);
-        bool fRequested = MarkBlockAsReceived(pblock->GetHash());
+        // An invalid body must not cancel another peer's request for this header.
+        // Valid cross-peer delivery and local processing retain their semantics.
+        bool fRequested = MarkBlockAsReceived(pblock->GetHash(),
+            !checked && pfrom ? pfrom->GetId() : -1);
         fRequested |= fForceProcessing;
         if (!checked) {
             return error("%s: CheckBlock FAILED", __func__);
