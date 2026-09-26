@@ -310,7 +310,7 @@ struct CNodeState {
     bool fSyncStarted;
     //! Initial header discovery finished; do not repeat it on this connection.
     bool fSyncCompleted;
-    //! Deadline for progress on the active header exchange, or zero.
+    //! Monotonic deadline for progress on the active header exchange, or zero.
     int64_t nHeaderSyncDeadline;
     //! Greatest validated chain work returned in a full batch during this exchange.
     arith_uint256 nHeaderSyncWork;
@@ -419,7 +419,7 @@ int64_t GetHeaderSyncDeadline()
 {
     // Allow slow connections ample time for one bounded 160-header response.
     const int64_t timeout = 15 * 60 * 1000000LL;
-    return std::min(GetTimeMicros(), std::numeric_limits<int64_t>::max() - timeout) + timeout;
+    return std::min(GetSteadyTimeMicros(), std::numeric_limits<int64_t>::max() - timeout) + timeout;
 }
 
 void UpdateHeaderSyncProgress(CNodeState& state, const arith_uint256& work)
@@ -799,7 +799,19 @@ bool GetNodeStateStats(NodeId nodeid, CNodeStateStats &stats) {
     stats.nGlobalValidatedBlocksInFlight = nQueuedValidatedHeaders;
     stats.fPreferredDownload = state->fPreferredDownload;
     stats.fHeaderSyncStarted = state->fSyncStarted;
-    stats.nHeaderSyncDeadline = state->nHeaderSyncDeadline;
+    stats.nHeaderSyncDeadline = 0;
+    stats.nHeaderSyncTimeoutRemaining = 0;
+    if (state->nHeaderSyncDeadline) {
+        const int64_t steadyNow = GetSteadyTimeMicros();
+        const int64_t wallNow = GetTimeMicros();
+        const int64_t remaining = steadyNow < state->nHeaderSyncDeadline
+            ? state->nHeaderSyncDeadline - steadyNow : 0;
+        stats.nHeaderSyncTimeoutRemaining = remaining;
+        // Preserve the public epoch timestamp as a current estimate. Only the
+        // monotonic deadline controls expiry, even if civil time changes.
+        stats.nHeaderSyncDeadline = std::min(wallNow,
+            std::numeric_limits<int64_t>::max() - remaining) + remaining;
+    }
     stats.fBlockDownloadStopped = state->fDownloadStopped;
     stats.nOldestRequest = state->vBlocksInFlight.empty() ? 0 : state->vBlocksInFlight.front().nTime;
     stats.hashOldestRequest = state->vBlocksInFlight.empty() ? uint256() : state->vBlocksInFlight.front().hash;
@@ -7511,7 +7523,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             // instead of timing out replies we chose not to process.
             StopHeaderSync(state);
             ReleaseBlockRequests(state);
-        } else if (state.nHeaderSyncDeadline && GetTimeMicros() > state.nHeaderSyncDeadline) {
+        } else if (state.nHeaderSyncDeadline && GetSteadyTimeMicros() > state.nHeaderSyncDeadline) {
             LogPrint("net", "Timeout waiting for header progress from peer=%d, disconnecting\n", pto->id);
             pto->fDisconnect = true;
         }

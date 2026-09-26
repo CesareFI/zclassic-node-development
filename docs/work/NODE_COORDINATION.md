@@ -97,3 +97,54 @@ plus the two-file source/test patch with SHA256
 Raw evidence and candidate binaries remain outside Git. These fixture checks do
 not establish fresh mainnet sync, sustained peer diversity, or historical-chain
 acceptance; those remain separate observations.
+
+## Header-sync expiry under civil-clock corrections
+
+A deterministic two-clock regression reproduced seven failures in the former
+wall-time header timeout. A backward wall step retained the expired source's
+header role and prevented the healthy source from issuing `getheaders`; a
+forward step disconnected the source before its elapsed 900-second allowance.
+The test varies wall time by plus/minus 3,600 seconds while independently
+advancing elapsed time through 899 seconds, 900 seconds and 900 seconds + 1 us.
+
+Header deadline creation, verified-progress refresh and expiry now share a
+process-local monotonic clock. Its origin makes values nonnegative, zero remains
+reserved, and test overrides are independent of the wall clock. The allowance
+remains 15 minutes with the same strict greater-than expiry boundary. Role
+cleanup, preferred-source priority and import-pause handling are unchanged.
+
+`getpeerinfo` retains its existing epoch `header_sync_deadline`, projected from
+current wall time plus the monotonic remainder with saturation at `INT64_MAX`.
+`header_sync_timeout_remaining` comes directly from that remainder. The RPC
+regression covers both civil-time directions and epoch saturation while retaining
+a 900-second remainder. Expired but not yet cleaned-up roles project to the
+observation time and report zero remaining; the scheduler still owns cleanup.
+
+The final focused suite passes 44 cases and 65,787 assertions in 51.62 seconds.
+It covers exact expiry, immediate healthy-source takeover, genuine header
+progress, repeated batches, import/reset lifecycle and the previous ownership
+regressions. Independent source review found no blocking issue. Broader results
+are recorded below when complete.
+
+Scope: header scheduling and its diagnostics only. Block-request, ping, socket,
+and consensus wall clocks remain unchanged. This does not establish whole-node
+clock-jump resilience, native non-Linux acceptance, or public-network IBD rates.
+No validation predicate, PoW, monetary, transaction or upgrade rule changed.
+The next networking slice is inventory send-buffer refusal: reproduce whether
+newly reserved but unsent requests prevent immediate reassignment, preserving
+previously issued requests and their stall age.
+
+Final validation for the header-clock slice:
+
+- Full rebuilt Boost suite: 483/483 cases, 143,037,029 assertions, 468.55 seconds.
+- GoogleTest upgrade activation/epoch checks: 6/6.
+- Selective ASan/UBSan with leak detection: both clock cases, the RPC diagnostic
+  case, and all 44 download cases pass; full download run 152.23 seconds with no
+  findings. All four changed translation units (`main.cpp`, `utiltime.cpp`,
+  `rpc/net.cpp`, and the download tests) were instrumented; other dependencies
+  and objects were not.
+- The separate daemon passes isolated regtest startup and SIGTERM shutdown
+  (exit 0), plus full RELRO, canary, NX, PIE and no-RPATH/RUNPATH inspection.
+- Diff checks and independent review pass. The exact source is
+  `0282a7637ee0c747724e228d07ca34acb9a36e1b` plus source/test patch SHA256
+  `9ee0fc9169fb5ab50550be29ca966351b23352217643409fd8982df3593a0939`.

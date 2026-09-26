@@ -12,9 +12,13 @@
 int64_t GetTime();
 int64_t GetTimeMillis();
 int64_t GetTimeMicros();
+/** Monotonic microseconds for process-local elapsed-time enforcement. */
+int64_t GetSteadyTimeMicros();
 void SetMockTime(int64_t nMockTimeIn);
 /** Override the request clock in deterministic tests; zero restores real time. */
 void SetMockTimeMicros(int64_t time);
+/** Override with nonnegative monotonic microseconds; zero restores real time. */
+void SetMockSteadyTimeMicros(int64_t time);
 void MilliSleep(int64_t n);
 
 std::string DateTimeStrFormat(const char* pszFormat, int64_t nTime);

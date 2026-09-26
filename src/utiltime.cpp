@@ -11,6 +11,7 @@
 
 #include <chrono>
 #include <atomic>
+#include <cassert>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/thread.hpp>
 
@@ -18,10 +19,27 @@ using namespace std;
 
 static int64_t nMockTime = 0;  //! For unit testing
 static std::atomic<int64_t> nMockTimeMicros{0};
+static std::atomic<int64_t> nMockSteadyTimeMicros{0};
 
 void SetMockTimeMicros(int64_t time)
 {
     nMockTimeMicros.store(time, std::memory_order_relaxed);
+}
+
+void SetMockSteadyTimeMicros(int64_t time)
+{
+    assert(time >= 0);
+    nMockSteadyTimeMicros.store(time, std::memory_order_relaxed);
+}
+
+int64_t GetSteadyTimeMicros()
+{
+    const int64_t mock = nMockSteadyTimeMicros.load(std::memory_order_relaxed);
+    if (mock) return mock;
+    static const auto origin = std::chrono::steady_clock::now();
+    // Use a process-local origin and reserve zero for inactive deadlines.
+    return 1 + std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - origin).count();
 }
 
 int64_t GetTime()

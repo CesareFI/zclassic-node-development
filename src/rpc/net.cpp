@@ -177,7 +177,7 @@ UniValue getpeerinfo(const UniValue& params, bool fHelp)
             obj.push_back(Pair("header_sync_started", statestats.fHeaderSyncStarted));
             if (statestats.nHeaderSyncDeadline) {
                 obj.push_back(Pair("header_sync_deadline", statestats.nHeaderSyncDeadline / 1000000));
-                obj.push_back(Pair("header_sync_timeout_remaining", std::max<int64_t>(0, statestats.nHeaderSyncDeadline - now) / 1000000.0));
+                obj.push_back(Pair("header_sync_timeout_remaining", statestats.nHeaderSyncTimeoutRemaining / 1000000.0));
             }
             obj.push_back(Pair("block_download_stopped", statestats.fBlockDownloadStopped));
             obj.push_back(Pair("blocks_in_flight", statestats.nBlocksInFlight));
