@@ -181,3 +181,31 @@ performs idempotent removal. Remaining risk is ordinary lock contention before
 that same-iteration send pass, not retained ownership across a later polling
 cycle. The next networking investigation should target a distinct measured
 source-diversity or header-gap condition rather than duplicate this lifecycle.
+
+## Disconnect gate precedes bootstrap serving
+
+The native message handler calls `SendMessages` for a peer in the same
+iteration in which malformed ingress can mark it disconnected. Before this
+slice, `SendMessages` invoked ping handling and
+`SendQueuedBootstrapSnapshotChunk` before its later `fDisconnect` cleanup.
+Thus a peer with queued snapshot work could consume a snapshot read and send
+buffer allocation after it had already been selected for teardown. This was a
+bounded but avoidable resource path, independent of snapshot validity.
+
+The disconnect gate now runs immediately after the version gate. It performs
+the existing idempotent block-download release when `cs_main` is available and
+returns before ping or bootstrap serving. A deterministic protocol regression
+queues a snapshot request on a disconnected, versioned peer, runs
+`SendMessages`, and proves the request remains queued for teardown rather than
+being popped for service. It proves no consensus or bootstrap acceptance rule;
+manifest and chunk validation are unchanged.
+
+The focused regression passes 7 assertions. The complete
+`bootstrap_snapshot_protocol_tests` group passes 56 cases, and the complete
+`block_download_tests` group passes 46 cases after the same incremental native
+rebuild. Worldstream's latest accessible `agent/worldstream-ibd-20260918`
+head is `d9f5153be8fc59d140db9b6f59e796a7c668160a`; it changes C23
+coins-tip restart recovery only, so there is no overlap. Consensus impact:
+NONE. With 13 GB free and a mandatory 10 GB reserve, no cold sanitizer build
+was started and no sanitizer result is claimed. Next investigate a distinct
+peer-source diversity condition in the C++ bootstrap driver or block scheduler.

@@ -7456,6 +7456,19 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         if (pto->nVersion == 0)
             return true;
 
+        // Do not spend CPU or enqueue bootstrap data for a peer already marked
+        // for teardown. Release its block-download ownership before returning;
+        // ThreadSocketHandler's later cleanup is intentionally idempotent.
+        if (pto->fDisconnect) {
+            TRY_LOCK(cs_main, lockMain);
+            if (lockMain) {
+                CNodeState* state = State(pto->GetId());
+                if (state != NULL)
+                    StopBlockDownload(*state);
+            }
+            return true;
+        }
+
         //
         // Message: ping
         //

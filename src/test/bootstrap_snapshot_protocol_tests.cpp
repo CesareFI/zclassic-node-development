@@ -470,6 +470,27 @@ BOOST_AUTO_TEST_CASE(bootstrap_snapshot_chunk_request_queue)
     BOOST_CHECK(!node.PopBootstrapChunkRequest(emptyKind, popped));
 }
 
+BOOST_AUTO_TEST_CASE(disconnected_peer_keeps_bootstrap_chunk_queue_for_teardown)
+{
+    CNode node(INVALID_SOCKET, CAddress(CService("127.0.0.1", 0)), "", true);
+    node.nVersion = PROTOCOL_VERSION;
+    node.fDisconnect = true;
+    CBootstrapSnapshotChunkRequest request;
+    request.nFileIndex = 1;
+    request.nOffset = 512 * 1024;
+    request.nLength = 512 * 1024;
+    BOOST_REQUIRE(node.QueueBootstrapChunkRequest(CNode::BOOTSTRAP_CHUNK_SNAPSHOT, request));
+
+    BOOST_REQUIRE(SendMessages(&node, false));
+    CNode::BootstrapChunkKind kind = CNode::BOOTSTRAP_CHUNK_PARAMS;
+    CBootstrapSnapshotChunkRequest queued;
+    BOOST_REQUIRE(node.PopBootstrapChunkRequest(kind, queued));
+    BOOST_CHECK_EQUAL((int)kind, (int)CNode::BOOTSTRAP_CHUNK_SNAPSHOT);
+    BOOST_CHECK_EQUAL(queued.nFileIndex, request.nFileIndex);
+    BOOST_CHECK_EQUAL(queued.nOffset, request.nOffset);
+    BOOST_CHECK_EQUAL(queued.nLength, request.nLength);
+}
+
 BOOST_AUTO_TEST_CASE(bootstrap_param_chunk_request_queue_preserves_kind_and_order)
 {
     CNode node(INVALID_SOCKET, CAddress(CService("127.0.0.1", 0)), "", true);
