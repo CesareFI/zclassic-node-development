@@ -50,6 +50,18 @@ std::vector<char> MalformedFrame(std::mt19937& random, unsigned step)
     return {encoded.begin(), encoded.end()};
 }
 
+std::vector<char> TruncatedBlockFrame()
+{
+    const std::vector<char> payload(1, 0);
+    CMessageHeader header(Params().MessageStart(), "block", payload.size());
+    const uint256 checksum = Hash(payload.begin(), payload.end());
+    header.nChecksum = ReadLE32(checksum.begin());
+    CDataStream encoded(SER_NETWORK, PROTOCOL_VERSION);
+    encoded << header;
+    encoded.write(payload.data(), payload.size());
+    return {encoded.begin(), encoded.end()};
+}
+
 void FeedFragments(CNode& peer, const std::vector<char>& frame, std::mt19937& random)
 {
     LOCK(peer.cs_vRecvMsg);
@@ -1319,6 +1331,32 @@ BOOST_AUTO_TEST_CASE(fragmented_malformed_messages_release_downloads)
     BOOST_CHECK_EQUAL(chainActive.Height(), 129);
     BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
     BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 0);
+}
+
+BOOST_AUTO_TEST_CASE(truncated_block_frame_releases_requests_for_takeover)
+{
+    CNode malformed(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "malformed", true);
+    CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "healthy", true);
+    Headers(malformed);
+    BOOST_REQUIRE(SendMessages(&malformed, false));
+    BOOST_REQUIRE_EQUAL(Stats(malformed).nBlocksInFlight, 128);
+
+    std::mt19937 random(0x424c4f43);
+    FeedFragments(malformed, TruncatedBlockFrame(), random);
+    BOOST_REQUIRE(malformed.fDisconnect);
+    BOOST_REQUIRE(SendMessages(&malformed, false));
+    BOOST_CHECK_EQUAL(Stats(malformed).nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 0);
+
+    Headers(healthy);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_REQUIRE_EQUAL(Stats(healthy).nBlocksInFlight, 128);
+    for (size_t height = 1; height <= 128; ++height) Deliver(healthy, height);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    Deliver(healthy, 129);
+    BOOST_CHECK_EQUAL(chainActive.Height(), 129);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
 }
 
 BOOST_DATA_TEST_CASE(download_limits_bound_requests_and_recover,

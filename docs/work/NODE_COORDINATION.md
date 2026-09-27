@@ -148,3 +148,31 @@ Final validation for the header-clock slice:
 - Diff checks and independent review pass. The exact source is
   `0282a7637ee0c747724e228d07ca34acb9a36e1b` plus source/test patch SHA256
   `9ee0fc9169fb5ab50550be29ca966351b23352217643409fd8982df3593a0939`.
+
+## Malformed block ingress releases swarm reservations
+
+A validly framed but truncated `block` payload reached the native message
+parser, generated a malformed reject, and left the connection alive. A peer
+which owned the normal 128-block IBD batch could therefore retain all of its
+reservations until the ordinary block timeout despite having supplied no usable
+response. The existing fragmented-frame test only demonstrated recovery after
+an explicit simulated remote close, so it did not cover this wire-level path.
+
+`ProcessMessages` now marks a peer for ordinary disconnect when deserializing a
+complete `block` or `headers` payload raises an I/O parse failure. It assigns no
+ban score and does not alter validation; the established disconnect path drops
+only that peer's request ownership and permits another source to claim the
+work. The focused framed-ingress regression supplies a checksum-valid one-byte
+`block` frame, proves 128 reservations are cleared, and proves a healthy peer
+claims the batch and advances the fixture through height 129.
+
+The complete `block_download_tests` group passes 46 cases, including malformed
+framing, randomized reassignment, timeout, disconnect and header-source
+failover coverage. The affected normal C++ objects rebuilt incrementally with
+the existing tree. No reusable sanitizer binary is present; with 13 GB free
+and a required 10 GB reserve, a cold sanitizer build was not started. No C23,
+storage, consensus, PoW, monetary, transaction, serialization, upgrade, wallet
+or production-datadir surface is involved. Worldstream's storage/startup scope
+is not modified. Remaining risk is transport-loop latency between the marked
+disconnect and its normal teardown; the next networking investigation should
+measure that lifecycle before adding scheduler changes.

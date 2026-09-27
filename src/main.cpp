@@ -7381,6 +7381,12 @@ bool ProcessMessages(CNode* pfrom)
         catch (const std::ios_base::failure& e)
         {
             pfrom->PushMessage("reject", strCommand, REJECT_MALFORMED, string("error parsing message"));
+            // A complete but malformed block or headers message cannot make
+            // progress on the peer's outstanding download work. Disconnect
+            // without assigning a ban score so normal teardown immediately
+            // makes that work available to another source.
+            if (strCommand == "block" || strCommand == "headers")
+                pfrom->fDisconnect = true;
             if (strstr(e.what(), "end of data"))
             {
                 // Allow exceptions from under-length message on vRecv
