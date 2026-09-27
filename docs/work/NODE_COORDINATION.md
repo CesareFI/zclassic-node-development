@@ -209,3 +209,22 @@ coins-tip restart recovery only, so there is no overlap. Consensus impact:
 NONE. With 13 GB free and a mandatory 10 GB reserve, no cold sanitizer build
 was started and no sanitizer result is claimed. Next investigate a distinct
 peer-source diversity condition in the C++ bootstrap driver or block scheduler.
+
+## Truncated headers release their discovery role
+
+The malformed-ingress disconnect rule applies to both `block` and `headers`,
+but the original wire-level regression covered only a truncated block body.
+The new headers case uses a checksum-valid complete frame that declares one
+header and supplies no header bytes. It proves the parser marks the peer for
+disconnect, `SendMessages` clears its active header role, and a healthy
+outbound peer immediately sends `getheaders` and claims its normal block
+batch. An empty headers reply remains distinct and valid; the test deliberately
+uses a nonzero count to exercise deserialization failure.
+
+Both direct framed regressions pass (670 and 544 assertions respectively), and
+the complete `block_download_tests` group passes 47 cases. This is protocol
+recovery coverage only: no header, block, checkpoint, PoW, chain-selection or
+validation rule changed. Consensus impact: NONE. No sanitizer run is claimed;
+the existing 13 GB free-space headroom is reserved against a cold sanitizer
+build. The next investigation remains bootstrap-client source diversity or a
+distinct scheduler condition.

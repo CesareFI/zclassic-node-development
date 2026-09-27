@@ -50,10 +50,12 @@ std::vector<char> MalformedFrame(std::mt19937& random, unsigned step)
     return {encoded.begin(), encoded.end()};
 }
 
-std::vector<char> TruncatedBlockFrame()
+std::vector<char> TruncatedPayloadFrame(const char* command)
 {
-    const std::vector<char> payload(1, 0);
-    CMessageHeader header(Params().MessageStart(), "block", payload.size());
+    // Both commands require more bytes after this nonzero prefix: a block
+    // needs its header and headers needs the declared header body.
+    const std::vector<char> payload(1, 1);
+    CMessageHeader header(Params().MessageStart(), command, payload.size());
     const uint256 checksum = Hash(payload.begin(), payload.end());
     header.nChecksum = ReadLE32(checksum.begin());
     CDataStream encoded(SER_NETWORK, PROTOCOL_VERSION);
@@ -1342,7 +1344,7 @@ BOOST_AUTO_TEST_CASE(truncated_block_frame_releases_requests_for_takeover)
     BOOST_REQUIRE_EQUAL(Stats(malformed).nBlocksInFlight, 128);
 
     std::mt19937 random(0x424c4f43);
-    FeedFragments(malformed, TruncatedBlockFrame(), random);
+    FeedFragments(malformed, TruncatedPayloadFrame("block"), random);
     BOOST_REQUIRE(malformed.fDisconnect);
     BOOST_REQUIRE(SendMessages(&malformed, false));
     BOOST_CHECK_EQUAL(Stats(malformed).nBlocksInFlight, 0);
@@ -1357,6 +1359,31 @@ BOOST_AUTO_TEST_CASE(truncated_block_frame_releases_requests_for_takeover)
     Deliver(healthy, 129);
     BOOST_CHECK_EQUAL(chainActive.Height(), 129);
     BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
+}
+
+BOOST_AUTO_TEST_CASE(truncated_headers_frame_releases_header_role)
+{
+    CNode malformed(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "malformed", false);
+    CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "healthy", false);
+    Handshake(malformed);
+    BOOST_REQUIRE(SendMessages(&malformed, false));
+    BOOST_REQUIRE(Stats(malformed).fHeaderSyncStarted);
+    BOOST_REQUIRE_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 1);
+
+    std::mt19937 random(0x48445253);
+    FeedFragments(malformed, TruncatedPayloadFrame("headers"), random);
+    BOOST_REQUIRE(malformed.fDisconnect);
+    BOOST_REQUIRE(SendMessages(&malformed, false));
+    BOOST_CHECK(!Stats(malformed).fHeaderSyncStarted);
+    BOOST_CHECK(Stats(malformed).fBlockDownloadStopped);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 0);
+
+    Handshake(healthy);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_CHECK_EQUAL(Sent(healthy, "getheaders"), 1);
+    Headers(healthy);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_REQUIRE_EQUAL(Stats(healthy).nBlocksInFlight, 128);
 }
 
 BOOST_DATA_TEST_CASE(download_limits_bound_requests_and_recover,
