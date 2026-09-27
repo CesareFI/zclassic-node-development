@@ -698,3 +698,35 @@ completed successfully for `f86fb572b5eb963c0fd58ad2e13d3133599bcddb` on
 2026-09-27. Dependency restore/build, CCache, full Zclassic build, and artifact
 upload all passed. This validates the event-bound transport retry boundary;
 sanitizer coverage remains unrun due to the preserved disk reserve.
+
+## Bootstrap throughput watchdog uses monotonic elapsed time
+
+Baseline and root cause: bootstrap snapshot and Zcash-parameter downloads used
+`GetTimeMillis()` for their sustained-throughput windows and displayed rate.
+That is wall-clock time, so an NTP correction or operator clock change could
+spuriously expire a healthy transfer window or extend a stalled peer's window.
+The block-download scheduler already uses the process-local steady clock for
+the same elapsed-time safety property.
+
+Fix and after-result: snapshot subset, parallel aggregate, and parameter
+transfer accounting now obtain elapsed milliseconds from
+`GetSteadyTimeMicros()`. Network message timeouts, protocol framing, chunk
+order, request ownership, hashes, manifest checks, and all validation remain
+unchanged. A narrow test seam exposes only the chosen elapsed clock; with the
+existing deterministic steady-clock mock it returns 1234 ms for 1,234,567 us.
+
+Regression proof: after an incremental `make -C src -j2 test/test_bitcoin`,
+the focused `bootstrap_download_throughput_clock_is_monotonic` case and all
+64 `bootstrap_snapshot_protocol_tests` cases pass. `git diff --check` passes.
+ASan/UBSan remains unrun: 11 GB free preserves the required 10 GB reserve but
+does not safely fit a cold sanitizer build. This legacy checkout has no
+cyclomatic-complexity ratchet. The unrelated broad RPC-wallet ECC-context
+collision remains unaddressed and is not hidden.
+
+Consensus impact: NONE. Only local elapsed-time enforcement and presentation
+for optional bootstrap/parameter transfers change; chain history, consensus
+serialization, PoW, monetary policy, upgrades, block and transaction
+validity, and cryptography are untouched. Worldstream remains non-overlap
+storage/restart work at `d9f5153be8fc59d140db9b6f59e796a7c668160a`.
+Remaining risk: a stream reset after chunk delivery still falls to the bounded
+outer snapshot retry; byte-accurate resume needs separate loopback evidence.

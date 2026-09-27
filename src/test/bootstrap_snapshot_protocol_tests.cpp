@@ -50,6 +50,7 @@ extern std::string BootstrapServeQuotaKey(const CNetAddr& addr);
 // global-namespace definition. Caller keeps windowStartMs/bytesAtWindowStart
 // as locals; returns true to abort when a full window stayed below the floor.
 extern bool BootstrapDownloadTooSlow(int64_t&, uint64_t&, uint64_t, int64_t);
+extern int64_t BootstrapDownloadMonotonicMillisForTest();
 
 // Internal decoder used by the discovery socket path. Kept out of bootstrap.h
 // because it is not part of the node's public bootstrap API.
@@ -1164,6 +1165,16 @@ BOOST_AUTO_TEST_CASE(bootstrap_download_throughput_watchdog)
         const uint64_t bytes2 = bytes1 + 1024;                 // +1 KiB only
         BOOST_CHECK(BootstrapDownloadTooSlow(ws, bws, bytes2, now2)); // late stall -> abort
     }
+}
+
+BOOST_AUTO_TEST_CASE(bootstrap_download_throughput_clock_is_monotonic)
+{
+    // The watchdog must not inherit wall-clock corrections. The transfer path
+    // uses the same steady source as block-download deadlines, which is mocked
+    // here without sleeping or touching a socket.
+    SetMockSteadyTimeMicros(1234567);
+    BOOST_CHECK_EQUAL(BootstrapDownloadMonotonicMillisForTest(), 1234);
+    SetMockSteadyTimeMicros(0);
 }
 
 BOOST_AUTO_TEST_CASE(bootstrap_network_message_roundtrip)

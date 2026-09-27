@@ -187,7 +187,7 @@ static const int64_t BOOTSTRAP_THROUGHPUT_WINDOW_MS = 60 * 1000;
 // Windowed minimum-throughput watchdog for bootstrap downloads. The caller keeps
 // windowStartMs/bytesAtWindowStart as locals, initialized to (download start
 // time, 0), and calls this after each received chunk with the cumulative bytes
-// received and the current time (GetTimeMillis()). Returns true => abort: a full
+// received and the current monotonic time in milliseconds. Returns true => abort: a full
 // BOOTSTRAP_THROUGHPUT_WINDOW_MS elapsed during which the peer delivered less
 // than BOOTSTRAP_MIN_THROUGHPUT_BYTES_PER_SEC on average. On a healthy window it
 // advances the window and returns false; before a window completes it returns
@@ -207,6 +207,21 @@ bool BootstrapDownloadTooSlow(int64_t& windowStartMs, uint64_t& bytesAtWindowSta
     windowStartMs = nowMs;
     bytesAtWindowStart = totalBytesReceived;
     return false;
+}
+
+// Snapshot and parameter transfers use elapsed time for throughput enforcement
+// and display only. Keep that accounting independent of wall-clock corrections
+// so NTP or an operator clock adjustment cannot extend a stalled peer's window.
+static int64_t BootstrapDownloadMonotonicMillis()
+{
+    return GetSteadyTimeMicros() / 1000;
+}
+
+// Narrow test seam for the deterministic monotonic-clock regression. Kept out
+// of bootstrap.h because it is not node API.
+int64_t BootstrapDownloadMonotonicMillisForTest()
+{
+    return BootstrapDownloadMonotonicMillis();
 }
 
 // Forward declarations for the bootstrap-handshake/message helpers reused by
@@ -1570,7 +1585,7 @@ static bool DownloadBootstrapFileSubset(SOCKET socket, const CBootstrapSnapshotM
     int last_logged_percent = -1;
     int64_t last_emit_ms = 0;
     int last_emit_decile = -1;
-    const int64_t download_started = GetTimeMillis();
+    const int64_t download_started = BootstrapDownloadMonotonicMillis();
     int64_t throughputWindowStartMs = download_started;
     uint64_t throughputBytesAtWindowStart = 0;
     bool ok = true;
@@ -1636,7 +1651,7 @@ static bool DownloadBootstrapFileSubset(SOCKET socket, const CBootstrapSnapshotM
             progressBytes.fetch_add(chunk.vData.size(), std::memory_order_relaxed) + chunk.vData.size();
 
         if (BootstrapDownloadTooSlow(throughputWindowStartMs, throughputBytesAtWindowStart,
-                                     stream_received, GetTimeMillis())) {
+                                     stream_received, BootstrapDownloadMonotonicMillis())) {
             error = "bootstrap snapshot download too slow (peer stalled or throttling); aborting";
             ok = false;
             break;
@@ -1669,7 +1684,7 @@ static bool DownloadBootstrapFileSubset(SOCKET socket, const CBootstrapSnapshotM
                 : 100;
             if (percent != last_logged_percent) {
                 last_logged_percent = percent;
-                const int64_t elapsed_ms = std::max<int64_t>(1, GetTimeMillis() - download_started);
+                const int64_t elapsed_ms = std::max<int64_t>(1, BootstrapDownloadMonotonicMillis() - download_started);
                 const double mbps = (total_received / 1048576.0) / (elapsed_ms / 1000.0);
                 LogPrintf("Bootstrap: downloaded %d%% (%llu/%llu bytes, %.1f MB/s)\n",
                     percent,
@@ -1938,7 +1953,7 @@ static bool DownloadBootstrapSnapshotParallel(const CService& peerAddress, const
     int last_logged_percent = -1;
     int64_t last_emit_ms = 0;
     int last_emit_decile = -1;
-    const int64_t download_started = GetTimeMillis();
+    const int64_t download_started = BootstrapDownloadMonotonicMillis();
     try {
     while (doneCount.load(std::memory_order_acquire) < nStreams) {
         if (ShutdownRequested()) {
@@ -1950,7 +1965,7 @@ static bool DownloadBootstrapSnapshotParallel(const CService& peerAddress, const
             : 100;
         if (percent != last_logged_percent) {
             last_logged_percent = percent;
-            const int64_t elapsed_ms = std::max<int64_t>(1, GetTimeMillis() - download_started);
+            const int64_t elapsed_ms = std::max<int64_t>(1, BootstrapDownloadMonotonicMillis() - download_started);
             const double mbps = (total_received / 1048576.0) / (elapsed_ms / 1000.0);
             LogPrintf("Bootstrap: downloaded %d%% (%llu/%llu bytes, %.1f MB/s, %d streams)\n",
                 percent,
@@ -4176,7 +4191,7 @@ static bool DownloadZcashParamFile(SOCKET socket, uint32_t file_index, uint64_t 
     int last_percent = -1;
     int64_t last_emit_ms = 0;
     int last_emit_decile = -1;
-    const int64_t started = GetTimeMillis();
+    const int64_t started = BootstrapDownloadMonotonicMillis();
     int64_t throughputWindowStartMs = started;
     uint64_t throughputBytesAtWindowStart = 0;
     bool ok = true;
@@ -4226,7 +4241,7 @@ static bool DownloadZcashParamFile(SOCKET socket, uint32_t file_index, uint64_t 
         }
         received += chunk.vData.size();
         if (BootstrapDownloadTooSlow(throughputWindowStartMs, throughputBytesAtWindowStart,
-                                     received, GetTimeMillis())) {
+                                     received, BootstrapDownloadMonotonicMillis())) {
             error = "zcash param download too slow (peer stalled or throttling); aborting";
             ok = false;
             break;
@@ -4234,7 +4249,7 @@ static bool DownloadZcashParamFile(SOCKET socket, uint32_t file_index, uint64_t 
         const int percent = size > 0 ? (int)((received * 100) / size) : 100;
         if (percent != last_percent) {
             last_percent = percent;
-            const int64_t elapsed_ms = std::max<int64_t>(1, GetTimeMillis() - started);
+            const int64_t elapsed_ms = std::max<int64_t>(1, BootstrapDownloadMonotonicMillis() - started);
             EmitBootstrapProgress(
                 strprintf("Fetching params %-22s %3d%%  %.1f MB/s",
                     display_name.c_str(),
