@@ -269,7 +269,7 @@ int BootstrapSocketRemainingTimeoutMillisForTest(int64_t deadline_us)
 // decentralized discovery below; their definitions appear later in this file.
 static bool BootstrapHandshake(SOCKET socket, const CService& peer_address, int timeout_ms, std::string& error);
 static bool SendBootstrapMessage(SOCKET socket, const char* command, const CDataStream& payload, int timeout_ms, std::string& error);
-static bool ReceiveExpectedBootstrapMessage(SOCKET socket, const char* expected_command, CDataStream& payload, int timeout_ms, std::string& error);
+static bool ReceiveExpectedBootstrapMessage(SOCKET socket, const char* expected_command, CDataStream& payload, int timeout_ms, std::string& error, bool* transportFailure = NULL);
 
 // --- Decentralized bootstrap-peer discovery ------------------------------
 //
@@ -689,11 +689,17 @@ static bool SendBootstrapMessage(SOCKET socket, const char* command, const CData
     return SendBootstrapBytes(socket, &message[0], message.size(), timeout_ms, error);
 }
 
-static bool ReceiveBootstrapMessage(SOCKET socket, std::string& command, CDataStream& payload, int timeout_ms, std::string& error)
+static bool ReceiveBootstrapMessage(SOCKET socket, std::string& command, CDataStream& payload, int timeout_ms, std::string& error, bool* transportFailure = NULL)
 {
+    if (transportFailure) {
+        *transportFailure = false;
+    }
     const int64_t deadline_us = BootstrapSocketDeadlineMicros(timeout_ms);
     CSerializeData headerBytes(CMessageHeader::HEADER_SIZE);
     if (!RecvBootstrapBytesUntil(socket, &headerBytes[0], headerBytes.size(), deadline_us, error)) {
+        if (transportFailure) {
+            *transportFailure = true;
+        }
         return false;
     }
 
@@ -720,6 +726,9 @@ static bool ReceiveBootstrapMessage(SOCKET socket, std::string& command, CDataSt
         const size_t offset = message.size();
         message.resize(offset + header.nMessageSize);
         if (!RecvBootstrapBytesUntil(socket, &message[offset], header.nMessageSize, deadline_us, error)) {
+            if (transportFailure) {
+                *transportFailure = true;
+            }
             return false;
         }
     }
@@ -727,8 +736,11 @@ static bool ReceiveBootstrapMessage(SOCKET socket, std::string& command, CDataSt
     return DecodeBootstrapNetworkMessage(message, command, payload, error);
 }
 
-static bool ReceiveExpectedBootstrapMessage(SOCKET socket, const char* expected_command, CDataStream& payload, int timeout_ms, std::string& error)
+static bool ReceiveExpectedBootstrapMessage(SOCKET socket, const char* expected_command, CDataStream& payload, int timeout_ms, std::string& error, bool* transportFailure)
 {
+    if (transportFailure) {
+        *transportFailure = false;
+    }
     const int64_t deadline = BootstrapSocketDeadlineMicros(timeout_ms);
     unsigned int unexpected_messages = 0;
 
@@ -736,11 +748,18 @@ static bool ReceiveExpectedBootstrapMessage(SOCKET socket, const char* expected_
         const int remaining_ms = BootstrapSocketRemainingTimeoutMillis(deadline);
         if (remaining_ms == 0) {
             error = strprintf("timed out waiting for bootstrap peer message %s", expected_command);
+            if (transportFailure) {
+                *transportFailure = true;
+            }
             return false;
         }
 
         std::string command;
-        if (!ReceiveBootstrapMessage(socket, command, payload, remaining_ms, error)) {
+        bool receiveTransportFailure = false;
+        if (!ReceiveBootstrapMessage(socket, command, payload, remaining_ms, error, &receiveTransportFailure)) {
+            if (transportFailure) {
+                *transportFailure = receiveTransportFailure;
+            }
             return false;
         }
 
@@ -766,9 +785,15 @@ static bool ReceiveExpectedBootstrapMessage(SOCKET socket, const char* expected_
             const int send_remaining_ms = BootstrapSocketRemainingTimeoutMillis(deadline);
             if (send_remaining_ms == 0) {
                 error = strprintf("timed out waiting for bootstrap peer message %s", expected_command);
+                if (transportFailure) {
+                    *transportFailure = true;
+                }
                 return false;
             }
             if (!SendBootstrapMessage(socket, "pong", pongPayload, send_remaining_ms, error)) {
+                if (transportFailure) {
+                    *transportFailure = true;
+                }
                 return false;
             }
             continue;
@@ -1600,21 +1625,38 @@ static bool DownloadBootstrapPrepareStaging(const CBootstrapSnapshotManifest& ma
 // aborts promptly if `abortFlag` is set (sibling stream failure or shutdown).
 // The single-stream caller passes logProgress=true to emit progress inline; the
 // parallel manager logs aggregate progress from its own thread (logProgress=false).
-static bool DownloadBootstrapFileSubset(SOCKET socket, const CBootstrapSnapshotManifest& manifest, const boost::filesystem::path& staging, const std::vector<uint32_t>& order, int timeout_ms, std::atomic<uint64_t>& progressBytes, std::atomic<bool>& abortFlag, bool logProgress, std::string& error)
+static bool DownloadBootstrapFileSubset(SOCKET socket, const CBootstrapSnapshotManifest& manifest, const boost::filesystem::path& staging, const std::vector<uint32_t>& order, int timeout_ms, std::atomic<uint64_t>& progressBytes, std::atomic<bool>& abortFlag, bool logProgress, std::string& error, bool& retryable)
 {
+    retryable = false;
+    // A restarted stream retains only files whose completed hash was verified.
+    // It always starts unfinished files again from offset zero, replacing their
+    // untrusted .part file rather than attempting a partial-file resume.
+    std::vector<uint32_t> remaining;
+    for (size_t i = 0; i < order.size(); ++i) {
+        const CBootstrapSnapshotFile& file = manifest.vFiles[order[i]];
+        const boost::filesystem::path path = staging / boost::filesystem::path(file.strPath);
+        if (!boost::filesystem::exists(path)) {
+            remaining.push_back(order[i]);
+            continue;
+        }
+        if (!VerifyBootstrapDownloadedFile(path, file, error)) {
+            return false;
+        }
+    }
+
     // Request cursor over (position in `order`, byte offset within that file).
     size_t reqPos = 0;
     uint64_t reqOffset = 0;
     auto nextRequest =
         [&](CBootstrapSnapshotChunkRequest& request) -> bool {
-            while (reqPos < order.size()) {
-                const CBootstrapSnapshotFile& f = manifest.vFiles[order[reqPos]];
+            while (reqPos < remaining.size()) {
+                const CBootstrapSnapshotFile& f = manifest.vFiles[remaining[reqPos]];
                 if (reqOffset >= f.nSize) {
                     ++reqPos;
                     reqOffset = 0;
                     continue;
                 }
-                request.nFileIndex = order[reqPos];
+                request.nFileIndex = remaining[reqPos];
                 request.nOffset = reqOffset;
                 request.nLength = (uint32_t)std::min<uint64_t>(manifest.nChunkSize, f.nSize - reqOffset);
                 reqOffset += request.nLength;
@@ -1630,6 +1672,7 @@ static bool DownloadBootstrapFileSubset(SOCKET socket, const CBootstrapSnapshotM
             break;
         }
         if (!SendBootstrapChunkRequest(socket, request, timeout_ms, error)) {
+            retryable = true;
             return false;
         }
         inflight.push_back(request);
@@ -1639,6 +1682,7 @@ static bool DownloadBootstrapFileSubset(SOCKET socket, const CBootstrapSnapshotM
     boost::filesystem::path open_path;
     boost::filesystem::path open_part;
     uint64_t stream_received = 0;
+    uint64_t open_file_received = 0;
     int last_logged_percent = -1;
     int64_t last_emit_ms = 0;
     int last_emit_decile = -1;
@@ -1659,7 +1703,9 @@ static bool DownloadBootstrapFileSubset(SOCKET socket, const CBootstrapSnapshotM
             break;
         }
         CDataStream chunkPayload(SER_NETWORK, PROTOCOL_VERSION);
-        if (!ReceiveExpectedBootstrapMessage(socket, NetMsgType::BSCHK, chunkPayload, timeout_ms, error)) {
+        bool receiveTransportFailure = false;
+        if (!ReceiveExpectedBootstrapMessage(socket, NetMsgType::BSCHK, chunkPayload, timeout_ms, error, &receiveTransportFailure)) {
+            retryable = receiveTransportFailure;
             ok = false;
             break;
         }
@@ -1704,6 +1750,7 @@ static bool DownloadBootstrapFileSubset(SOCKET socket, const CBootstrapSnapshotM
             break;
         }
         stream_received += chunk.vData.size();
+        open_file_received += chunk.vData.size();
         const uint64_t total_received =
             progressBytes.fetch_add(chunk.vData.size(), std::memory_order_relaxed) + chunk.vData.size();
 
@@ -1729,6 +1776,7 @@ static bool DownloadBootstrapFileSubset(SOCKET socket, const CBootstrapSnapshotM
                 break;
             }
             boost::filesystem::rename(open_part, open_path);
+            open_file_received = 0;
         }
 
         // Log on each whole-percent advance so an operator watching the console
@@ -1779,6 +1827,7 @@ static bool DownloadBootstrapFileSubset(SOCKET socket, const CBootstrapSnapshotM
         CBootstrapSnapshotChunkRequest refill;
         if (nextRequest(refill)) {
             if (!SendBootstrapChunkRequest(socket, refill, timeout_ms, error)) {
+                retryable = true;
                 ok = false;
                 break;
             }
@@ -1789,6 +1838,12 @@ static bool DownloadBootstrapFileSubset(SOCKET socket, const CBootstrapSnapshotM
     if (fp) {
         fclose(fp);
         fp = NULL;
+    }
+    // Progress describes verified files plus bytes currently written to an
+    // unfinished file. Do not retain the latter after a reset: the retry
+    // replaces that .part file from zero and must not exceed 100%.
+    if (!ok && open_file_received != 0) {
+        progressBytes.fetch_sub(open_file_received, std::memory_order_relaxed);
     }
     return ok;
 }
@@ -1816,8 +1871,9 @@ static bool DownloadBootstrapSnapshot(SOCKET socket, const CBootstrapSnapshotMan
 
     std::atomic<uint64_t> progressBytes(0);
     std::atomic<bool> abortFlag(false);
+    bool retryable = false;
     return DownloadBootstrapFileSubset(socket, manifest, staging, order, timeout_ms,
-                                       progressBytes, abortFlag, /*logProgress=*/true, error);
+                                       progressBytes, abortFlag, /*logProgress=*/true, error, retryable);
 }
 
 // Open a fresh connection to the bootstrap peer, handshake, fetch the manifest,
@@ -1872,6 +1928,10 @@ static bool OpenBootstrapStreamAndVerifyManifestOnce(const CService& peerAddress
 // Keep this deliberately small and bounded: a persistently bad source still
 // fails promptly and falls through to the existing outer peer retry policy.
 static const int BOOTSTRAP_STREAM_OPEN_ATTEMPTS = 2;
+// A verified manifest does not make a live chunk stream reliable. Retry one
+// socket-level reset per worker, retaining only completed SHA-256-verified
+// files. Semantic peer faults and local write/hash failures remain terminal.
+static const int BOOTSTRAP_STREAM_DOWNLOAD_ATTEMPTS = 2;
 
 static bool OpenBootstrapStreamAndVerifyManifest(const CService& peerAddress, int timeout_ms, const CBootstrapSnapshotManifest& masterManifest, SOCKET& outSocket, std::string& error)
 {
@@ -1980,27 +2040,41 @@ static bool DownloadBootstrapSnapshotParallel(const CService& peerAddress, const
     boost::thread_group workers;
     for (int w = 0; w < nStreams; ++w) {
         workers.create_thread([&, w]() {
-            SOCKET s = INVALID_SOCKET;
             try {
-                if (!abortFlag.load(std::memory_order_relaxed)) {
+                std::string lastError;
+                bool completed = false;
+                for (int attempt = 0; attempt < BOOTSTRAP_STREAM_DOWNLOAD_ATTEMPTS &&
+                     !abortFlag.load(std::memory_order_relaxed); ++attempt) {
+                    SOCKET s = INVALID_SOCKET;
                     std::string e;
-                    if (!OpenBootstrapStreamAndVerifyManifest(peerAddress, timeout_ms, manifest, s, e)) {
-                        recordError(e);
-                    } else {
-                        std::string de;
-                        if (!DownloadBootstrapFileSubset(s, manifest, staging, groups[w], timeout_ms,
-                                                         progressBytes, abortFlag, /*logProgress=*/false, de)) {
-                            recordError(de);
-                        }
+                    const bool opened = OpenBootstrapStreamAndVerifyManifest(peerAddress, timeout_ms,
+                                                                              manifest, s, e);
+                    bool retryable = false;
+                    if (opened) {
+                        bool downloadRetryable = false;
+                        completed = DownloadBootstrapFileSubset(s, manifest, staging, groups[w], timeout_ms,
+                                                                progressBytes, abortFlag, /*logProgress=*/false,
+                                                                e, downloadRetryable);
+                        retryable = !completed && downloadRetryable;
                     }
+                    if (s != INVALID_SOCKET) {
+                        CloseSocket(s);
+                    }
+                    if (completed) {
+                        break;
+                    }
+                    lastError = e;
+                    if (!opened || !retryable || ShutdownRequested()) {
+                        break;
+                    }
+                }
+                if (!completed && !abortFlag.load(std::memory_order_relaxed)) {
+                    recordError(lastError);
                 }
             } catch (const std::exception& ex) {
                 recordError(strprintf("bootstrap stream %d exception: %s", w, ex.what()));
             } catch (...) {
                 recordError(strprintf("bootstrap stream %d unknown exception", w));
-            }
-            if (s != INVALID_SOCKET) {
-                CloseSocket(s);
             }
             doneCount.fetch_add(1, std::memory_order_release);
         });
@@ -2069,6 +2143,17 @@ static bool DownloadBootstrapSnapshotParallel(const CService& peerAddress, const
         return false;
     }
     return true;
+}
+
+// Narrow native-test seam: exercises the same parallel worker, reconnect, and
+// per-file verification path with a localhost fixture rather than a chain copy.
+bool BootstrapDownloadSnapshotParallelForTest(const CService& peerAddress,
+                                              const CBootstrapSnapshotManifest& manifest,
+                                              const boost::filesystem::path& staging,
+                                              int timeout_ms, std::string& error)
+{
+    return DownloadBootstrapSnapshotParallel(peerAddress, "loopback", manifest, staging,
+                                             timeout_ms, 1, error);
 }
 
 static bool BootstrapHandshake(SOCKET socket, const CService& peer_address, int timeout_ms, std::string& error)

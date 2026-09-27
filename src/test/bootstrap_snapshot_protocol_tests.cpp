@@ -63,6 +63,10 @@ extern bool DecodeBootstrapDiscoveryAddresses(CDataStream&, const CService&,
 extern bool BootstrapOpenStreamAndVerifyManifestForTest(const CService&, int,
                                                         const CBootstrapSnapshotManifest&,
                                                         std::string&);
+extern bool BootstrapDownloadSnapshotParallelForTest(const CService&,
+                                                     const CBootstrapSnapshotManifest&,
+                                                     const boost::filesystem::path&, int,
+                                                     std::string&);
 
 // Test-only seam (defined in bootstrapvalidation.cpp, not the public header) to
 // drive a terminal latch so we can verify the finalization-hold flag releases on
@@ -199,7 +203,7 @@ static bool ReceiveAllTestBytes(SOCKET socket, char* data, size_t size)
     return true;
 }
 
-static bool ReceiveTestBootstrapMessage(SOCKET socket, std::string& command)
+static bool ReceiveTestBootstrapMessage(SOCKET socket, std::string& command, CDataStream* outputPayload = NULL)
 {
     CSerializeData headerBytes(CMessageHeader::HEADER_SIZE);
     if (!ReceiveAllTestBytes(socket, &headerBytes[0], headerBytes.size())) {
@@ -223,7 +227,13 @@ static bool ReceiveTestBootstrapMessage(SOCKET socket, std::string& command)
     }
     CDataStream payload(SER_NETWORK, PROTOCOL_VERSION);
     std::string error;
-    return DecodeBootstrapNetworkMessage(message, command, payload, error);
+    if (!DecodeBootstrapNetworkMessage(message, command, payload, error)) {
+        return false;
+    }
+    if (outputPayload) {
+        *outputPayload = payload;
+    }
+    return true;
 }
 
 static bool SendTestBootstrapMessage(SOCKET socket, const char* command, const CDataStream& payload)
@@ -238,6 +248,8 @@ static CService StartManifestLoopbackPeer(const CBootstrapSnapshotManifest& mani
                                           bool trailingManifest,
                                           bool dropFirstConnection,
                                           bool dropAfterHandshake,
+                                          const std::string& chunkData,
+                                          bool dropAfterFirstChunkResponse,
                                           boost::thread& server,
                                           bool& serverOk)
 {
@@ -270,7 +282,7 @@ static CService StartManifestLoopbackPeer(const CBootstrapSnapshotManifest& mani
                 CloseSocket(client);
                 client = INVALID_SOCKET;
             }
-            const int sessions = dropAfterHandshake ? 2 : 1;
+            const int sessions = (dropAfterHandshake || dropAfterFirstChunkResponse) ? 2 : 1;
             for (int session = 0; session < sessions; ++session) {
                 client = accept(listener, NULL, NULL);
                 std::string command;
@@ -302,7 +314,44 @@ static CService StartManifestLoopbackPeer(const CBootstrapSnapshotManifest& mani
                 if (trailingManifest) {
                     manifestPayload << uint8_t(0);
                 }
-                serverOk = SendTestBootstrapMessage(client, NetMsgType::BSMAN, manifestPayload);
+                if (!SendTestBootstrapMessage(client, NetMsgType::BSMAN, manifestPayload)) {
+                    throw std::runtime_error("could not send bootstrap manifest");
+                }
+                if (chunkData.empty()) {
+                    serverOk = true;
+                    continue;
+                }
+                for (size_t offset = 0; offset < chunkData.size();) {
+                    CDataStream chunkRequestPayload(SER_NETWORK, PROTOCOL_VERSION);
+                    if (!ReceiveTestBootstrapMessage(client, command, &chunkRequestPayload) || command != NetMsgType::GETBSCHK) {
+                        throw std::runtime_error("missing bootstrap chunk request");
+                    }
+                    const size_t length = std::min<size_t>(manifest.nChunkSize, chunkData.size() - offset);
+                    CBootstrapSnapshotChunkRequest request;
+                    chunkRequestPayload >> request;
+                    if (!chunkRequestPayload.empty() || request.nFileIndex != 0 || request.nOffset != offset ||
+                        request.nLength != length) {
+                        throw std::runtime_error("invalid bootstrap chunk request");
+                    }
+                    CBootstrapSnapshotChunk chunk;
+                    chunk.nFileIndex = request.nFileIndex;
+                    chunk.nOffset = request.nOffset;
+                    chunk.vData.assign(chunkData.begin() + offset, chunkData.begin() + offset + length);
+                    CDataStream chunkPayload(SER_NETWORK, PROTOCOL_VERSION);
+                    chunkPayload << chunk;
+                    if (!SendTestBootstrapMessage(client, NetMsgType::BSCHK, chunkPayload)) {
+                        throw std::runtime_error("could not send bootstrap chunk");
+                    }
+                    offset += length;
+                    if (dropAfterFirstChunkResponse && session == 0) {
+                        CloseSocket(client);
+                        client = INVALID_SOCKET;
+                        break;
+                    }
+                }
+                if (client != INVALID_SOCKET) {
+                    serverOk = true;
+                }
             }
         } catch (const std::exception&) {
             serverOk = false;
@@ -1313,14 +1362,14 @@ BOOST_AUTO_TEST_CASE(bootstrap_loopback_reconnect_stream_requires_exact_manifest
 
     bool validServerOk = false;
     boost::thread validServer;
-    const CService validPeer = StartManifestLoopbackPeer(manifest, false, false, false, validServer, validServerOk);
+    const CService validPeer = StartManifestLoopbackPeer(manifest, false, false, false, "", false, validServer, validServerOk);
     BOOST_CHECK(BootstrapOpenStreamAndVerifyManifestForTest(validPeer, 1000, manifest, error));
     validServer.join();
     BOOST_CHECK(validServerOk);
 
     bool malformedServerOk = false;
     boost::thread malformedServer;
-    const CService malformedPeer = StartManifestLoopbackPeer(manifest, true, false, false, malformedServer, malformedServerOk);
+    const CService malformedPeer = StartManifestLoopbackPeer(manifest, true, false, false, "", false, malformedServer, malformedServerOk);
     BOOST_CHECK(!BootstrapOpenStreamAndVerifyManifestForTest(malformedPeer, 1000, manifest, error));
     BOOST_CHECK(error.find("trailing") != std::string::npos);
     malformedServer.join();
@@ -1330,7 +1379,7 @@ BOOST_AUTO_TEST_CASE(bootstrap_loopback_reconnect_stream_requires_exact_manifest
     ++divergent.nSnapshotBytes;
     bool divergentServerOk = false;
     boost::thread divergentServer;
-    const CService divergentPeer = StartManifestLoopbackPeer(divergent, false, false, false, divergentServer, divergentServerOk);
+    const CService divergentPeer = StartManifestLoopbackPeer(divergent, false, false, false, "", false, divergentServer, divergentServerOk);
     BOOST_CHECK(!BootstrapOpenStreamAndVerifyManifestForTest(divergentPeer, 1000, manifest, error));
     BOOST_CHECK(error.find("differs") != std::string::npos);
     divergentServer.join();
@@ -1338,18 +1387,51 @@ BOOST_AUTO_TEST_CASE(bootstrap_loopback_reconnect_stream_requires_exact_manifest
 
     bool retryServerOk = false;
     boost::thread retryServer;
-    const CService retryPeer = StartManifestLoopbackPeer(manifest, false, true, false, retryServer, retryServerOk);
+    const CService retryPeer = StartManifestLoopbackPeer(manifest, false, true, false, "", false, retryServer, retryServerOk);
     BOOST_CHECK(BootstrapOpenStreamAndVerifyManifestForTest(retryPeer, 1000, manifest, error));
     retryServer.join();
     BOOST_CHECK(retryServerOk);
 
     bool afterHandshakeServerOk = false;
     boost::thread afterHandshakeServer;
-    const CService afterHandshakePeer = StartManifestLoopbackPeer(manifest, false, false, true,
+    const CService afterHandshakePeer = StartManifestLoopbackPeer(manifest, false, false, true, "", false,
                                                                     afterHandshakeServer, afterHandshakeServerOk);
     BOOST_CHECK(BootstrapOpenStreamAndVerifyManifestForTest(afterHandshakePeer, 1000, manifest, error));
     afterHandshakeServer.join();
     BOOST_CHECK(afterHandshakeServerOk);
+}
+
+BOOST_AUTO_TEST_CASE(bootstrap_loopback_chunk_reset_retries_verified_manifest_stream)
+{
+    const std::string bytes = DeterministicBytes(257, 91);
+    CBootstrapSnapshotManifest manifest;
+    manifest.nSnapshotBytes = bytes.size();
+    manifest.nChunkSize = 128;
+    CBootstrapSnapshotFile file;
+    file.strPath = "blocks/blk00000.dat";
+    file.nSize = bytes.size();
+    std::vector<unsigned char> unsignedBytes(bytes.begin(), bytes.end());
+    file.hashSha256 = Sha256OfBytes(unsignedBytes);
+    manifest.vFiles.push_back(file);
+
+    bool serverOk = false;
+    boost::thread server;
+    const CService peer = StartManifestLoopbackPeer(manifest, false, false, false, bytes, true,
+                                                     server, serverOk);
+    // /tmp may be a deliberately small tmpfs in CI. This is still a unique,
+    // disposable test-only directory, but lives beside the existing build lane
+    // so the production downloader's 1 GiB free-space guard is exercised.
+    const boost::filesystem::path staging = boost::filesystem::current_path() /
+        boost::filesystem::unique_path("zclassic-bootstrap-retry-%%%%-%%%%-%%%%");
+    std::string error;
+    BOOST_CHECK_MESSAGE(BootstrapDownloadSnapshotParallelForTest(peer, manifest, staging, 1000, error), error);
+    server.join();
+    BOOST_CHECK(serverOk);
+
+    boost::filesystem::ifstream staged(staging / file.strPath, std::ios::binary);
+    const std::string got((std::istreambuf_iterator<char>(staged)), std::istreambuf_iterator<char>());
+    BOOST_CHECK_EQUAL(got, bytes);
+    boost::filesystem::remove_all(staging);
 }
 
 BOOST_AUTO_TEST_CASE(bootstrap_chunk_payload_requires_exact_wire_consumption)

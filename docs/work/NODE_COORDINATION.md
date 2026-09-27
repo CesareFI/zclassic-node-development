@@ -766,3 +766,42 @@ untouched. Worldstream remains non-overlap storage/restart work at
 `d9f5153be8fc59d140db9b6f59e796a7c668160a`. Remaining risk: post-chunk
 stream recovery still uses the existing outer snapshot retry rather than a
 byte-accurate resume protocol.
+
+## Bootstrap chunk-stream reset retries one verified stream
+
+Baseline and root cause: parallel bootstrap workers retried a transient reset
+while opening or fetching their manifest, but a socket reset after a verified
+manifest immediately cancelled every worker and discarded the entire staging
+attempt. This could waste already verified files and make one flaky TCP stream
+stall fresh-node bootstrap progress.
+
+Fix and after-result: each parallel worker now gets one additional attempt
+only when a socket send, receive, ping reply, or deadline expires during its
+chunk transfer. A reconnect repeats the normal handshake and exact manifest
+identity check. It retains only final files whose SHA-256 has already verified;
+an unfinished `.part` is overwritten from offset zero and its provisional
+progress is removed. Malformed framing/chunks, unexpected chunk ownership,
+rejects, divergent manifests, hash mismatch, local I/O errors, and shutdown
+remain terminal. The retry is per worker, bounded at two attempts, and never
+trusts data before the existing per-file hash and later import validation.
+
+Regression proof: a localhost-only C++ loopback fixture serves one valid chunk
+of a deterministic three-chunk file, resets the connection, then requires the
+client to reconnect, re-fetch the exact manifest, request the file from zero,
+and hash the final 257-byte result. The focused case and all 66
+`bootstrap_snapshot_protocol_tests` cases pass after an incremental build;
+`git diff --check` passes. The fixture uses a unique disposable directory on
+the build filesystem because this host's `/tmp` has only about 200 MB and the
+real downloader correctly reserves a 1 GiB staging margin. ASan/UBSan remains
+unrun: 11 GB free preserves the required 10 GB reserve but cannot safely fit a
+cold sanitizer build. This legacy checkout has no cyclomatic-complexity gate.
+The unrelated broad RPC-wallet ECC-context collision remains unaddressed and
+is not hidden.
+
+Consensus impact: NONE. Only optional bootstrap transport retry and progress
+accounting change; chain history, consensus serialization, PoW, monetary
+policy, upgrades, block/transaction validity, and cryptography are untouched.
+Worldstream remains non-overlap C23 storage/startup work at
+`d9f5153be8fc59d140db9b6f59e796a7c668160a`. Remaining risk: recovery retries
+the same peer rather than changing sources; peer-diverse manifest acquisition
+under reconnect churn is the recommended next networking investigation.
