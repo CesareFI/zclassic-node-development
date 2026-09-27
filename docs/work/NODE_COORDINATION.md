@@ -648,30 +648,31 @@ parallel-stream retry behavior.
 ## Parallel bootstrap streams recover one transport reset
 
 Baseline and root cause: every parallel snapshot stream opened exactly one
-connection. A transient pre-handshake TCP reset on any one of the independent
-streams aborted the whole download and discarded its staging, even when the
-same source was immediately reachable again. The new loopback fixture made
-this concrete by accepting then closing the first connection before a
-handshake and serving the matching manifest on the second.
+connection. A transient TCP reset before the manifest response—either before
+or immediately after the bootstrap handshake—aborted the whole download and
+discarded its staging, even when the same source was immediately reachable
+again. The loopback fixture establishes both reset positions before serving
+the matching manifest on the second connection.
 
 Fix and after-result: reconnect-stream opening now has a strict two-attempt
-budget, but only for failures before a completed bootstrap handshake. Once a
-peer has handshaken, malformed or divergent manifest input remains fail-fast
-with its precise existing error; it is never retried as a transport blip. The
-outer peer policy still owns broader source failover, staging cleanup, and all
-snapshot validation. This recovers a one-off connection reset without turning
-malformed source behavior into extra network work.
+budget until a `BSMAN` frame arrives. A reset while connecting, handshaking,
+sending `getbsman`, or awaiting that first frame recovers once; once the frame
+arrives, malformed or divergent manifest input remains fail-fast with its
+precise existing error. The outer peer policy still owns broader source
+failover, staging cleanup, and all snapshot validation. This recovers a one-off
+transport reset without turning malformed source behavior into extra network
+work.
 
 Regression proof: the localhost fixture proves a matching manifest succeeds
-after exactly one pre-handshake drop, while its existing cases prove trailing
-and divergent manifests still fail immediately. The focused case and all 63
+after exactly one pre- or post-handshake reset, while its existing cases prove
+trailing and divergent manifests still fail immediately. The focused case and all 63
 `bootstrap_snapshot_protocol_tests` cases pass after an incremental C++ build.
 `git diff --check` passes. ASan/UBSan is unrun: 11 GB free preserves the 10 GB
 reserve but cannot safely fit a cold sanitizer build; this legacy checkout has
 no cyclomatic-complexity gate. The unrelated broad RPC-wallet ECC-context
 failure remains unaddressed and is not hidden.
 
-Consensus impact: NONE. Only a bounded pre-validation socket reconnect changes;
+Consensus impact: NONE. Only a bounded pre-manifest socket reconnect changes;
 the compiled anchor, manifest identity check, per-file hashes, imported-state
 verification, chain history, consensus serialization, PoW, monetary policy,
 upgrades, block/transaction rules, and cryptography are unchanged. Worldstream

@@ -1766,10 +1766,10 @@ static bool OpenBootstrapStreamAndVerifyManifestOnce(const CService& peerAddress
         CloseSocket(socket);
         return false;
     }
-    // Once the peer finished a handshake, a malformed or divergent manifest is
-    // a semantic source failure, not a reconnect hiccup. Preserve that exact
-    // error and let the outer peer policy choose a different source.
-    retryable = false;
+    // A reset while sending the request or waiting for its first reply is still
+    // a transport failure. Once a BSMAN frame arrived, malformed or divergent
+    // content is semantic and must preserve its exact fail-fast error.
+    retryable = true;
     CDataStream empty(SER_NETWORK, PROTOCOL_VERSION);
     if (!SendBootstrapMessage(socket, NetMsgType::GETBSMAN, empty, timeout_ms, error)) {
         CloseSocket(socket);
@@ -1780,6 +1780,7 @@ static bool OpenBootstrapStreamAndVerifyManifestOnce(const CService& peerAddress
         CloseSocket(socket);
         return false;
     }
+    retryable = false;
     CBootstrapSnapshotManifest manifest;
     if (!DecodeBootstrapSnapshotManifestPayload(manifestPayload, manifest, error)) {
         CloseSocket(socket);

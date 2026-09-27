@@ -234,6 +234,7 @@ static bool SendTestBootstrapMessage(SOCKET socket, const char* command, const C
 static CService StartManifestLoopbackPeer(const CBootstrapSnapshotManifest& manifest,
                                           bool trailingManifest,
                                           bool dropFirstConnection,
+                                          bool dropAfterHandshake,
                                           boost::thread& server,
                                           bool& serverOk)
 {
@@ -266,30 +267,40 @@ static CService StartManifestLoopbackPeer(const CBootstrapSnapshotManifest& mani
                 CloseSocket(client);
                 client = INVALID_SOCKET;
             }
-            client = accept(listener, NULL, NULL);
-            std::string command;
-            if (client == INVALID_SOCKET || !ReceiveTestBootstrapMessage(client, command) || command != "version") {
-                throw std::runtime_error("missing bootstrap version");
+            const int sessions = dropAfterHandshake ? 2 : 1;
+            for (int session = 0; session < sessions; ++session) {
+                client = accept(listener, NULL, NULL);
+                std::string command;
+                if (client == INVALID_SOCKET || !ReceiveTestBootstrapMessage(client, command) || command != "version") {
+                    throw std::runtime_error("missing bootstrap version");
+                }
+                CDataStream version(SER_NETWORK, INIT_PROTO_VERSION);
+                const CAddress remote(service, NODE_BOOTSTRAP);
+                version << PROTOCOL_VERSION << uint64_t(NODE_BOOTSTRAP) << GetTime()
+                        << remote << remote << uint64_t(1) << std::string("/loopback/") << 0 << true;
+                if (!SendTestBootstrapMessage(client, "version", version) ||
+                    !ReceiveTestBootstrapMessage(client, command) || command != "verack") {
+                    throw std::runtime_error("missing bootstrap verack");
+                }
+                CDataStream empty(SER_NETWORK, PROTOCOL_VERSION);
+                if (!SendTestBootstrapMessage(client, "verack", empty)) {
+                    throw std::runtime_error("could not send bootstrap verack");
+                }
+                if (dropAfterHandshake && session == 0) {
+                    CloseSocket(client);
+                    client = INVALID_SOCKET;
+                    continue;
+                }
+                if (!ReceiveTestBootstrapMessage(client, command) || command != NetMsgType::GETBSMAN) {
+                    throw std::runtime_error("missing bootstrap manifest request");
+                }
+                CDataStream manifestPayload(SER_NETWORK, PROTOCOL_VERSION);
+                manifestPayload << manifest;
+                if (trailingManifest) {
+                    manifestPayload << uint8_t(0);
+                }
+                serverOk = SendTestBootstrapMessage(client, NetMsgType::BSMAN, manifestPayload);
             }
-            CDataStream version(SER_NETWORK, INIT_PROTO_VERSION);
-            const CAddress remote(service, NODE_BOOTSTRAP);
-            version << PROTOCOL_VERSION << uint64_t(NODE_BOOTSTRAP) << GetTime()
-                    << remote << remote << uint64_t(1) << std::string("/loopback/") << 0 << true;
-            if (!SendTestBootstrapMessage(client, "version", version) ||
-                !ReceiveTestBootstrapMessage(client, command) || command != "verack") {
-                throw std::runtime_error("missing bootstrap verack");
-            }
-            CDataStream empty(SER_NETWORK, PROTOCOL_VERSION);
-            if (!SendTestBootstrapMessage(client, "verack", empty) ||
-                !ReceiveTestBootstrapMessage(client, command) || command != NetMsgType::GETBSMAN) {
-                throw std::runtime_error("missing bootstrap manifest request");
-            }
-            CDataStream manifestPayload(SER_NETWORK, PROTOCOL_VERSION);
-            manifestPayload << manifest;
-            if (trailingManifest) {
-                manifestPayload << uint8_t(0);
-            }
-            serverOk = SendTestBootstrapMessage(client, NetMsgType::BSMAN, manifestPayload);
         } catch (const std::exception&) {
             serverOk = false;
         }
@@ -1267,14 +1278,14 @@ BOOST_AUTO_TEST_CASE(bootstrap_loopback_reconnect_stream_requires_exact_manifest
 
     bool validServerOk = false;
     boost::thread validServer;
-    const CService validPeer = StartManifestLoopbackPeer(manifest, false, false, validServer, validServerOk);
+    const CService validPeer = StartManifestLoopbackPeer(manifest, false, false, false, validServer, validServerOk);
     BOOST_CHECK(BootstrapOpenStreamAndVerifyManifestForTest(validPeer, 1000, manifest, error));
     validServer.join();
     BOOST_CHECK(validServerOk);
 
     bool malformedServerOk = false;
     boost::thread malformedServer;
-    const CService malformedPeer = StartManifestLoopbackPeer(manifest, true, false, malformedServer, malformedServerOk);
+    const CService malformedPeer = StartManifestLoopbackPeer(manifest, true, false, false, malformedServer, malformedServerOk);
     BOOST_CHECK(!BootstrapOpenStreamAndVerifyManifestForTest(malformedPeer, 1000, manifest, error));
     BOOST_CHECK(error.find("trailing") != std::string::npos);
     malformedServer.join();
@@ -1284,7 +1295,7 @@ BOOST_AUTO_TEST_CASE(bootstrap_loopback_reconnect_stream_requires_exact_manifest
     ++divergent.nSnapshotBytes;
     bool divergentServerOk = false;
     boost::thread divergentServer;
-    const CService divergentPeer = StartManifestLoopbackPeer(divergent, false, false, divergentServer, divergentServerOk);
+    const CService divergentPeer = StartManifestLoopbackPeer(divergent, false, false, false, divergentServer, divergentServerOk);
     BOOST_CHECK(!BootstrapOpenStreamAndVerifyManifestForTest(divergentPeer, 1000, manifest, error));
     BOOST_CHECK(error.find("differs") != std::string::npos);
     divergentServer.join();
@@ -1292,10 +1303,18 @@ BOOST_AUTO_TEST_CASE(bootstrap_loopback_reconnect_stream_requires_exact_manifest
 
     bool retryServerOk = false;
     boost::thread retryServer;
-    const CService retryPeer = StartManifestLoopbackPeer(manifest, false, true, retryServer, retryServerOk);
+    const CService retryPeer = StartManifestLoopbackPeer(manifest, false, true, false, retryServer, retryServerOk);
     BOOST_CHECK(BootstrapOpenStreamAndVerifyManifestForTest(retryPeer, 1000, manifest, error));
     retryServer.join();
     BOOST_CHECK(retryServerOk);
+
+    bool afterHandshakeServerOk = false;
+    boost::thread afterHandshakeServer;
+    const CService afterHandshakePeer = StartManifestLoopbackPeer(manifest, false, false, true,
+                                                                    afterHandshakeServer, afterHandshakeServerOk);
+    BOOST_CHECK(BootstrapOpenStreamAndVerifyManifestForTest(afterHandshakePeer, 1000, manifest, error));
+    afterHandshakeServer.join();
+    BOOST_CHECK(afterHandshakeServerOk);
 }
 
 BOOST_AUTO_TEST_CASE(bootstrap_chunk_payload_requires_exact_wire_consumption)
