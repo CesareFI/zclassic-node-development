@@ -323,3 +323,27 @@ changed. Worldstream's latest accessible C23 head remains
 networking change. With 13 GB free and a 10 GB reserve, no cold sanitizer build
 was started. Next investigate a distinct bootstrap-client source-diversity or
 ordinary block-scheduler recovery condition.
+
+## Headers require their mandated zero transaction counts
+
+Each serialized header in a `headers` message is followed by a CompactSize
+transaction count which the protocol requires to be zero. The handler decoded
+that value but discarded it, so a sender could set it nonzero and still cause
+the declared header to update peer availability. A new regression established
+the baseline: count `1` returned success, changed sync height from `-1` to `1`,
+and assigned no misbehavior.
+
+The handler now rejects a nonzero count with the existing malformed-message
+score before acquiring `cs_main` or changing peer/header/block scheduling
+state. The direct regression confirms no peer progress or in-flight accounting
+changes. The adjacent trailing-payload regression remains green, proving the
+two malformed encodings are handled independently.
+
+The two focused cases pass with 531 and 528 assertions respectively; the full
+`block_download_tests` group passes 49 cases and 68,746 assertions. Consensus
+impact: NONE. Header/block acceptance, PoW, chain selection, transaction,
+serialization, monetary, and upgrade rules remain unchanged. Worldstream's
+latest accessible C23 head remains storage/restart-only and does not overlap.
+No cold sanitizer build was started with 13 GB free and the 10 GB reserve.
+Next investigate a distinct bounded bootstrap-client or block-scheduler
+recovery condition.

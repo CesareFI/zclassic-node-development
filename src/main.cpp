@@ -6991,7 +6991,10 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
         headers.resize(nCount);
         for (unsigned int n = 0; n < nCount; n++) {
             vRecv >> headers[n];
-            ReadCompactSize(vRecv); // ignore tx count; assume it is 0.
+            if (ReadCompactSize(vRecv) != 0) {
+                Misbehaving(pfrom->GetId(), 20);
+                return error("headers message has nonzero transaction count");
+            }
         }
         if (!vRecv.empty()) {
             Misbehaving(pfrom->GetId(), 20);

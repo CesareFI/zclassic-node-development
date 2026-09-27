@@ -1269,6 +1269,22 @@ BOOST_AUTO_TEST_CASE(headers_trailing_bytes_do_not_advance_peer_availability)
     BOOST_CHECK_EQUAL(Stats(peer).nSyncHeight, 1);
 }
 
+BOOST_AUTO_TEST_CASE(headers_nonzero_transaction_count_does_not_advance_peer_availability)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "headers", true);
+    PrepareTransport(peer);
+    CDataStream malformed(SER_NETWORK, PROTOCOL_VERSION);
+    WriteCompactSize(malformed, 1);
+    malformed << blocks[1].GetBlockHeader();
+    WriteCompactSize(malformed, 1);
+    const auto before = Stats(peer);
+    BOOST_CHECK(!ProcessMessage(&peer, "headers", malformed, GetTime()));
+    const auto after = Stats(peer);
+    BOOST_CHECK_EQUAL(after.nSyncHeight, before.nSyncHeight);
+    BOOST_CHECK_EQUAL(after.nBlocksInFlight, before.nBlocksInFlight);
+    BOOST_CHECK_GE(after.nMisbehavior - before.nMisbehavior, 20);
+}
+
 BOOST_AUTO_TEST_CASE(randomized_receipt_reassignment_and_repeated_cleanup)
 {
     std::array<std::unique_ptr<CNode>, 4> peers;
