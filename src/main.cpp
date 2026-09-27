@@ -560,6 +560,13 @@ bool ProcessNotFound(CNode& peer, CDataStream& payload)
         unavailable = request != mapBlocksInFlight.end() &&
                       request->second.first == peer.GetId();
     }
+    if (!payload.empty()) {
+        // Do not let a malformed reply release a peer's work. The declared
+        // inventory must consume the complete wire payload before it can be
+        // treated as an availability signal.
+        Misbehaving(peer.GetId(), 20);
+        return error("notfound message has trailing bytes");
+    }
     if (unavailable) {
         // This source explicitly cannot serve our assigned work. Release its
         // requests and sync roles now so another peer can take over. This is

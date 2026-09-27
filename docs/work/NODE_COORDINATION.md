@@ -274,3 +274,26 @@ incremental native rebuild. Consensus impact: NONE. Worldstream remains on
 separate C23 storage/restart work; no sanitizer run is claimed while retaining
 13 GB free-space headroom. Next investigate an ordinary block-scheduler or
 bootstrap-client failure mode that has a bounded local reproduction.
+
+## Malformed notfound cannot release owned blocks
+
+`notfound` replies are an immediate availability signal: a well-formed reply
+for an owned block disconnects that source and releases its batch for another
+peer. Before this slice the handler decoded the declared inventory but ignored
+remaining payload bytes, so an owned-block reply with trailing garbage could
+trigger that release before the malformed wire message was rejected.
+
+The handler now requires the declared inventory to consume the complete
+payload before changing ownership. Trailing bytes score the sender and return
+an error with no disconnect or request mutation. The regression starts with a
+128-block assignment, sends an owned `notfound` plus one trailing byte, and
+proves the assignment and global validated count remain unchanged while
+misbehavior rises by at least 20.
+
+The focused case passes 541 assertions and the full `block_download_tests`
+group passes 47 cases. No availability behavior changes for well-formed
+`notfound` responses, and no block/header/consensus validation predicate is
+changed. Consensus impact: NONE. Worldstream remains separate C23
+storage/restart work. No sanitizer result is claimed; the incremental normal
+build fits within the preserved 13 GB free-space headroom. Next target a
+distinct peer-scheduler or bootstrap-client recovery condition.

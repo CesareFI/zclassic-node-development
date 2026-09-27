@@ -1232,6 +1232,17 @@ BOOST_AUTO_TEST_CASE(notfound_inventory_is_bounded_and_fully_decoded)
                       std::ios_base::failure);
     BOOST_CHECK_EQUAL(Stats(peer).nBlocksInFlight, 128);
     BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 128);
+    CDataStream trailing(SER_NETWORK, PROTOCOL_VERSION);
+    trailing << std::vector<CInv>{CInv(MSG_BLOCK, blocks[1].GetHash())};
+    trailing << uint8_t{0};
+    const auto before = Stats(peer);
+    BOOST_CHECK(!ProcessMessage(&peer, "notfound", trailing, GetTime()));
+    const auto after = Stats(peer);
+    BOOST_CHECK(!peer.fDisconnect);
+    BOOST_CHECK_EQUAL(after.nBlocksInFlight, before.nBlocksInFlight);
+    BOOST_CHECK_EQUAL(after.nGlobalValidatedBlocksInFlight,
+                      before.nGlobalValidatedBlocksInFlight);
+    BOOST_CHECK_GE(after.nMisbehavior - before.nMisbehavior, 20);
 }
 
 BOOST_AUTO_TEST_CASE(randomized_receipt_reassignment_and_repeated_cleanup)
