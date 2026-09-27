@@ -689,3 +689,12 @@ completed successfully for `15a741ab25297486bd3a5da2a7c737ee331c543a` on
 artifact upload all passed. This confirms both the bounded stream-open retry
 implementation and the still-pinned native_ccache dependency path in the
 published C++ development head; it does not claim sanitizer coverage.
+
+### CI checkpoint: post-handshake retry boundary
+
+GitHub Actions run
+[`36349538788`](https://github.com/CesareFI/zclassic-node-development/actions/runs/36349538788)
+completed successfully for `f86fb572b5eb963c0fd58ad2e13d3133599bcddb` on
+2026-09-27. Dependency restore/build, CCache, full Zclassic build, and artifact
+upload all passed. This validates the event-bound transport retry boundary;
+sanitizer coverage remains unrun due to the preserved disk reserve.
