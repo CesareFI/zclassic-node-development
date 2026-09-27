@@ -406,3 +406,36 @@ transaction validity, monetary rules, upgrades, and cryptography are
 unchanged. Worldstream's accessible work remains C23 startup/fresh-sync only.
 Remaining risk: audit the next distinct bounded P2P message path rather than
 changing scheduling policy without a measured stall.
+
+## Block deadlines ignore civil-clock jumps
+
+Baseline and root cause: header discovery already used a monotonic deadline,
+but block-request deadlines and the block-window stall timer used
+`GetTimeMicros()`. A bounded two-case regression held monotonic elapsed time
+one microsecond before a real request deadline while moving civil time by
+minus or plus one hour. The pre-fix code produced five assertion failures: a
+forward wall-clock correction could disconnect a healthy block source before
+its elapsed timeout.
+
+Fix and after-result: block request timestamps, request deadlines, and stall
+starts now use `GetSteadyTimeMicros()` exclusively for scheduling. Public
+`getpeerinfo` state still reports epoch-based request times and deadlines by
+projecting the monotonic remaining duration onto the current wall clock; those
+estimates are diagnostics only and cannot drive a disconnect. The regression
+proves both clock directions preserve the source until the strict monotonic
+deadline, then disconnect and release its in-flight request after it.
+
+Regression proof: the focused two-case wall-step test passes after the native
+incremental rebuild. The complete `block_download_tests` suite passed all 54
+cases (`*** No errors detected`) before the final comment-only clarification,
+and the focused test was rerun after it. `git diff --check` passes. No cold
+sanitizer build was started: 11 GB free remains above the 10 GB reserve but is
+not enough for a safe cold sanitizer profile; this legacy tree has no
+cyclomatic-complexity gate.
+
+Consensus impact: NONE. This is local operational timeout accounting only;
+block/header validation, PoW, chain selection, serialization, transaction
+rules, monetary policy, upgrade activation, and cryptography are unchanged.
+Worldstream remains non-overlapping C23 startup/fresh-sync work. Remaining
+risk: exercise a distinct bounded block-window stall scenario before changing
+peer-selection policy.

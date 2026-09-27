@@ -226,9 +226,9 @@ namespace {
     struct QueuedBlock {
         uint256 hash;
         const CBlockIndex *pindex;  //! Optional.
-        int64_t nTime;  //! Time of "getdata" request in microseconds.
+        int64_t nTime;  //! Monotonic time of "getdata" request in microseconds.
         bool fValidatedHeaders;  //! Whether this block has validated headers at the time of request.
-        int64_t nTimeDisconnect; //! The timeout for this block request (for disconnecting a slow peer)
+        int64_t nTimeDisconnect; //! Monotonic timeout for disconnecting a slow peer.
     };
     map<uint256, pair<NodeId, list<QueuedBlock>::iterator> > mapBlocksInFlight;
 
@@ -314,7 +314,7 @@ struct CNodeState {
     int64_t nHeaderSyncDeadline;
     //! Greatest validated chain work returned in a full batch during this exchange.
     arith_uint256 nHeaderSyncWork;
-    //! Since when we're stalling block download progress (in microseconds), or 0.
+    //! Monotonic time since block download progress stalled, or 0.
     int64_t nStallingSince;
     list<QueuedBlock> vBlocksInFlight;
     int nBlocksInFlight;
@@ -420,6 +420,35 @@ int64_t GetHeaderSyncDeadline()
     // Allow slow connections ample time for one bounded 160-header response.
     const int64_t timeout = 15 * 60 * 1000000LL;
     return std::min(GetSteadyTimeMicros(), std::numeric_limits<int64_t>::max() - timeout) + timeout;
+}
+
+// Convert a monotonic deadline into an epoch estimate for diagnostics. The
+// estimate is never used to make a scheduling decision.
+int64_t GetWallDeadlineEstimate(int64_t steadyDeadline)
+{
+    if (steadyDeadline == 0)
+        return 0;
+    const int64_t steadyNow = GetSteadyTimeMicros();
+    const int64_t remaining = steadyNow < steadyDeadline
+        ? steadyDeadline - steadyNow : 0;
+    const int64_t wallNow = GetTimeMicros();
+    return wallNow > std::numeric_limits<int64_t>::max() - remaining
+        ? std::numeric_limits<int64_t>::max() : wallNow + remaining;
+}
+
+// Convert a monotonic start timestamp into an epoch estimate for diagnostics.
+// A nonpositive estimate is intentionally represented as zero, the existing
+// absent-timestamp value in CNodeStateStats.
+int64_t GetWallStartEstimate(int64_t steadyStart)
+{
+    if (steadyStart == 0)
+        return 0;
+    const int64_t steadyNow = GetSteadyTimeMicros();
+    if (steadyNow <= steadyStart)
+        return GetTimeMicros();
+    const int64_t elapsed = steadyNow - steadyStart;
+    const int64_t wallNow = GetTimeMicros();
+    return wallNow > elapsed ? wallNow - elapsed : 0;
 }
 
 void UpdateHeaderSyncProgress(CNodeState& state, const arith_uint256& work)
@@ -590,7 +619,7 @@ void MarkBlockAsInFlight(NodeId nodeid, const uint256& hash, const Consensus::Pa
     // Make sure it's not listed somewhere already.
     MarkBlockAsReceived(hash);
 
-    int64_t nNow = GetTimeMicros();
+    int64_t nNow = GetSteadyTimeMicros();
     int nHeight = pindex != NULL ? pindex->nHeight : chainActive.Height(); // Help block timeout computation
     QueuedBlock newentry = {hash, pindex, nNow, pindex != NULL, GetBlockTimeout(nNow, nQueuedValidatedHeaders, consensusParams, nHeight)};
     nQueuedValidatedHeaders += newentry.fValidatedHeaders;
@@ -820,10 +849,12 @@ bool GetNodeStateStats(NodeId nodeid, CNodeStateStats &stats) {
             std::numeric_limits<int64_t>::max() - remaining) + remaining;
     }
     stats.fBlockDownloadStopped = state->fDownloadStopped;
-    stats.nOldestRequest = state->vBlocksInFlight.empty() ? 0 : state->vBlocksInFlight.front().nTime;
+    stats.nOldestRequest = state->vBlocksInFlight.empty() ? 0 :
+        GetWallStartEstimate(state->vBlocksInFlight.front().nTime);
     stats.hashOldestRequest = state->vBlocksInFlight.empty() ? uint256() : state->vBlocksInFlight.front().hash;
-    stats.nDownloadDeadline = state->vBlocksInFlight.empty() ? 0 : state->vBlocksInFlight.front().nTimeDisconnect;
-    stats.nStallingSince = state->nStallingSince;
+    stats.nDownloadDeadline = state->vBlocksInFlight.empty() ? 0 :
+        GetWallDeadlineEstimate(state->vBlocksInFlight.front().nTimeDisconnect);
+    stats.nStallingSince = GetWallStartEstimate(state->nStallingSince);
     BOOST_FOREACH(const QueuedBlock& queue, state->vBlocksInFlight) {
         if (queue.pindex)
             stats.vHeightInFlight.push_back(queue.pindex->nHeight);
@@ -7665,8 +7696,9 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             pto->PushMessage("inv", vInv);
 
         // Detect whether we're stalling
-        int64_t nNow = GetTimeMicros();
-        if (!pto->fDisconnect && state.nStallingSince && state.nStallingSince < nNow - 1000000 * BLOCK_STALLING_TIMEOUT) {
+        const int64_t nNow = GetTimeMicros();
+        const int64_t nSteadyNow = GetSteadyTimeMicros();
+        if (!pto->fDisconnect && state.nStallingSince && state.nStallingSince < nSteadyNow - 1000000 * BLOCK_STALLING_TIMEOUT) {
             // Stalling only triggers when the block download window cannot move. During normal steady state,
             // the download window should be much larger than the to-be-downloaded set of blocks, so disconnection
             // should only happen during initial block download.
@@ -7685,12 +7717,12 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         // more quickly than once every 5 minutes, then we'll shorten the download window for this block).
         if (!pto->fDisconnect && state.vBlocksInFlight.size() > 0) {
             QueuedBlock &queuedBlock = state.vBlocksInFlight.front();
-            int64_t nTimeoutIfRequestedNow = GetBlockTimeout(nNow, nQueuedValidatedHeaders - state.nBlocksInFlightValidHeaders, consensusParams, pindexBestHeader->nHeight);
+            int64_t nTimeoutIfRequestedNow = GetBlockTimeout(nSteadyNow, nQueuedValidatedHeaders - state.nBlocksInFlightValidHeaders, consensusParams, pindexBestHeader->nHeight);
             if (queuedBlock.nTimeDisconnect > nTimeoutIfRequestedNow) {
                 LogPrint("net", "Reducing block download timeout for peer=%d block=%s, orig=%d new=%d\n", pto->id, queuedBlock.hash.ToString(), queuedBlock.nTimeDisconnect, nTimeoutIfRequestedNow);
                 queuedBlock.nTimeDisconnect = nTimeoutIfRequestedNow;
             }
-            if (queuedBlock.nTimeDisconnect < nNow) {
+            if (queuedBlock.nTimeDisconnect < nSteadyNow) {
                 LogPrintf("Timeout downloading block %s from peer=%d, disconnecting\n", queuedBlock.hash.ToString(), pto->id);
                 pto->fDisconnect = true;
             }
@@ -7715,7 +7747,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             }
             if (state.nBlocksInFlight == 0 && staller != -1) {
                 if (State(staller)->nStallingSince == 0) {
-                    State(staller)->nStallingSince = nNow;
+                    State(staller)->nStallingSince = nSteadyNow;
                     LogPrint("net", "Stall started peer=%d\n", staller);
                 }
             }

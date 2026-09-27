@@ -1479,6 +1479,31 @@ BOOST_AUTO_TEST_CASE(block_timeout_saturates_at_int64_max)
                       std::numeric_limits<int64_t>::max());
 }
 
+BOOST_DATA_TEST_CASE(block_timeout_ignores_wall_clock_steps,
+                    boost::unit_test::data::make({-3600, 3600}), wallStep)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
+               "clock", true);
+    Headers(peer, 1);
+    BOOST_REQUIRE(SendMessages(&peer, false));
+    const auto before = Stats(peer);
+    BOOST_REQUIRE_GT(before.nDownloadDeadline, start);
+
+    // Civil time must not decide whether an otherwise healthy in-flight
+    // request timed out. Keep elapsed monotonic time one microsecond short
+    // of the request deadline while moving wall time by an hour.
+    SetMockTimeMicros(start + wallStep * 1000000LL);
+    SetMockSteadyTimeMicros(before.nDownloadDeadline - 1);
+    BOOST_REQUIRE(SendMessages(&peer, false));
+    BOOST_CHECK(!peer.fDisconnect);
+    BOOST_CHECK_EQUAL(Stats(peer).nDownloadDeadline, GetTimeMicros() + 1);
+
+    SetMockSteadyTimeMicros(before.nDownloadDeadline + 1);
+    BOOST_REQUIRE(SendMessages(&peer, false));
+    BOOST_CHECK(peer.fDisconnect);
+    BOOST_CHECK_EQUAL(Stats(peer).nBlocksInFlight, 0);
+}
+
 BOOST_AUTO_TEST_CASE(receive_queue_size_accounts_message_overhead)
 {
     CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "queue-size", true);
