@@ -224,6 +224,44 @@ int64_t BootstrapDownloadMonotonicMillisForTest()
     return BootstrapDownloadMonotonicMillis();
 }
 
+// A bootstrap frame may arrive in many partial socket reads. Derive one
+// monotonic deadline before that loop so a peer cannot extend the advertised
+// timeout by delivering a byte just before every individual select() expires.
+static int64_t BootstrapSocketDeadlineMicros(int timeout_ms)
+{
+    const int64_t now = GetSteadyTimeMicros();
+    if (timeout_ms <= 0) {
+        return now;
+    }
+    const int64_t timeout_us = (int64_t)timeout_ms * 1000;
+    if (timeout_us > std::numeric_limits<int64_t>::max() - now) {
+        return std::numeric_limits<int64_t>::max();
+    }
+    return now + timeout_us;
+}
+
+static int BootstrapSocketRemainingTimeoutMillis(int64_t deadline_us)
+{
+    const int64_t remaining_us = deadline_us - GetSteadyTimeMicros();
+    if (remaining_us <= 0) {
+        return 0;
+    }
+    const int64_t remaining_ms = (remaining_us + 999) / 1000;
+    return remaining_ms > std::numeric_limits<int>::max()
+        ? std::numeric_limits<int>::max() : (int)remaining_ms;
+}
+
+// Narrow deterministic test seams; neither is node API.
+int64_t BootstrapSocketDeadlineMicrosForTest(int timeout_ms)
+{
+    return BootstrapSocketDeadlineMicros(timeout_ms);
+}
+
+int BootstrapSocketRemainingTimeoutMillisForTest(int64_t deadline_us)
+{
+    return BootstrapSocketRemainingTimeoutMillis(deadline_us);
+}
+
 // Forward declarations for the bootstrap-handshake/message helpers reused by
 // decentralized discovery below; their definitions appear later in this file.
 static bool BootstrapHandshake(SOCKET socket, const CService& peer_address, int timeout_ms, std::string& error);
@@ -540,6 +578,7 @@ static bool WaitBootstrapSocket(SOCKET socket, bool write, int timeout_ms, std::
 static bool SendBootstrapBytes(SOCKET socket, const char* data, size_t size, int timeout_ms, std::string& error)
 {
     size_t sent = 0;
+    const int64_t deadline_us = BootstrapSocketDeadlineMicros(timeout_ms);
     while (sent < size) {
         const ssize_t ret = send(socket, data + sent, size - sent, MSG_NOSIGNAL);
         if (ret > 0) {
@@ -556,14 +595,20 @@ static bool SendBootstrapBytes(SOCKET socket, const char* data, size_t size, int
             error = strprintf("bootstrap socket send failed: %s", NetworkErrorString(err));
             return false;
         }
-        if (!WaitBootstrapSocket(socket, true, timeout_ms, error)) {
+        const int remaining_ms = BootstrapSocketRemainingTimeoutMillis(deadline_us);
+        if (remaining_ms == 0) {
+            error = "bootstrap socket write timeout";
+            return false;
+        }
+        if (!WaitBootstrapSocket(socket, true, remaining_ms, error)) {
             return false;
         }
     }
     return true;
 }
 
-static bool RecvBootstrapBytes(SOCKET socket, char* data, size_t size, int timeout_ms, std::string& error)
+static bool RecvBootstrapBytesUntil(SOCKET socket, char* data, size_t size,
+                                    int64_t deadline_us, std::string& error)
 {
     size_t received = 0;
     while (received < size) {
@@ -582,7 +627,12 @@ static bool RecvBootstrapBytes(SOCKET socket, char* data, size_t size, int timeo
             error = strprintf("bootstrap socket recv failed: %s", NetworkErrorString(err));
             return false;
         }
-        if (!WaitBootstrapSocket(socket, false, timeout_ms, error)) {
+        const int remaining_ms = BootstrapSocketRemainingTimeoutMillis(deadline_us);
+        if (remaining_ms == 0) {
+            error = "bootstrap socket read timeout";
+            return false;
+        }
+        if (!WaitBootstrapSocket(socket, false, remaining_ms, error)) {
             return false;
         }
     }
@@ -638,8 +688,9 @@ static bool SendBootstrapMessage(SOCKET socket, const char* command, const CData
 
 static bool ReceiveBootstrapMessage(SOCKET socket, std::string& command, CDataStream& payload, int timeout_ms, std::string& error)
 {
+    const int64_t deadline_us = BootstrapSocketDeadlineMicros(timeout_ms);
     CSerializeData headerBytes(CMessageHeader::HEADER_SIZE);
-    if (!RecvBootstrapBytes(socket, &headerBytes[0], headerBytes.size(), timeout_ms, error)) {
+    if (!RecvBootstrapBytesUntil(socket, &headerBytes[0], headerBytes.size(), deadline_us, error)) {
         return false;
     }
 
@@ -665,7 +716,7 @@ static bool ReceiveBootstrapMessage(SOCKET socket, std::string& command, CDataSt
     if (header.nMessageSize > 0) {
         const size_t offset = message.size();
         message.resize(offset + header.nMessageSize);
-        if (!RecvBootstrapBytes(socket, &message[offset], header.nMessageSize, timeout_ms, error)) {
+        if (!RecvBootstrapBytesUntil(socket, &message[offset], header.nMessageSize, deadline_us, error)) {
             return false;
         }
     }
@@ -675,18 +726,17 @@ static bool ReceiveBootstrapMessage(SOCKET socket, std::string& command, CDataSt
 
 static bool ReceiveExpectedBootstrapMessage(SOCKET socket, const char* expected_command, CDataStream& payload, int timeout_ms, std::string& error)
 {
-    const int64_t deadline = GetTimeMillis() + timeout_ms;
+    const int64_t deadline = BootstrapSocketDeadlineMicros(timeout_ms);
     unsigned int unexpected_messages = 0;
 
     while (true) {
-        const int64_t now = GetTimeMillis();
-        if (now >= deadline) {
+        const int remaining_ms = BootstrapSocketRemainingTimeoutMillis(deadline);
+        if (remaining_ms == 0) {
             error = strprintf("timed out waiting for bootstrap peer message %s", expected_command);
             return false;
         }
 
         std::string command;
-        const int remaining_ms = std::max<int64_t>(1, deadline - now);
         if (!ReceiveBootstrapMessage(socket, command, payload, remaining_ms, error)) {
             return false;
         }
@@ -710,7 +760,11 @@ static bool ReceiveExpectedBootstrapMessage(SOCKET socket, const char* expected_
                 }
                 pongPayload << nonce;
             }
-            const int send_remaining_ms = std::max<int64_t>(1, deadline - GetTimeMillis());
+            const int send_remaining_ms = BootstrapSocketRemainingTimeoutMillis(deadline);
+            if (send_remaining_ms == 0) {
+                error = strprintf("timed out waiting for bootstrap peer message %s", expected_command);
+                return false;
+            }
             if (!SendBootstrapMessage(socket, "pong", pongPayload, send_remaining_ms, error)) {
                 return false;
             }

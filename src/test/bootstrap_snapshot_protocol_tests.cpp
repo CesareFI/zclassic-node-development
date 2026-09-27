@@ -51,6 +51,8 @@ extern std::string BootstrapServeQuotaKey(const CNetAddr& addr);
 // as locals; returns true to abort when a full window stayed below the floor.
 extern bool BootstrapDownloadTooSlow(int64_t&, uint64_t&, uint64_t, int64_t);
 extern int64_t BootstrapDownloadMonotonicMillisForTest();
+extern int64_t BootstrapSocketDeadlineMicrosForTest(int);
+extern int BootstrapSocketRemainingTimeoutMillisForTest(int64_t);
 
 // Internal decoder used by the discovery socket path. Kept out of bootstrap.h
 // because it is not part of the node's public bootstrap API.
@@ -1174,6 +1176,24 @@ BOOST_AUTO_TEST_CASE(bootstrap_download_throughput_clock_is_monotonic)
     // here without sleeping or touching a socket.
     SetMockSteadyTimeMicros(1234567);
     BOOST_CHECK_EQUAL(BootstrapDownloadMonotonicMillisForTest(), 1234);
+    SetMockSteadyTimeMicros(0);
+}
+
+BOOST_AUTO_TEST_CASE(bootstrap_socket_frame_deadline_is_monotonic_and_bounded)
+{
+    // SendBootstrapBytes and RecvBootstrapBytes use these exact helpers around
+    // every partial socket operation. A byte trickle must consume the one
+    // original deadline rather than receive a fresh full timeout per byte.
+    SetMockSteadyTimeMicros(1000000);
+    const int64_t deadline = BootstrapSocketDeadlineMicrosForTest(60);
+    BOOST_CHECK_EQUAL(deadline, 1060000);
+
+    SetMockSteadyTimeMicros(1000001);
+    BOOST_CHECK_EQUAL(BootstrapSocketRemainingTimeoutMillisForTest(deadline), 60);
+    SetMockSteadyTimeMicros(1059999);
+    BOOST_CHECK_EQUAL(BootstrapSocketRemainingTimeoutMillisForTest(deadline), 1);
+    SetMockSteadyTimeMicros(1060000);
+    BOOST_CHECK_EQUAL(BootstrapSocketRemainingTimeoutMillisForTest(deadline), 0);
     SetMockSteadyTimeMicros(0);
 }
 

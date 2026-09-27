@@ -730,3 +730,37 @@ validity, and cryptography are untouched. Worldstream remains non-overlap
 storage/restart work at `d9f5153be8fc59d140db9b6f59e796a7c668160a`.
 Remaining risk: a stream reset after chunk delivery still falls to the bounded
 outer snapshot retry; byte-accurate resume needs separate loopback evidence.
+
+## Bootstrap frame timeout cannot be extended by byte trickle
+
+Baseline and root cause: bootstrap socket send/receive loops supplied their
+full timeout to every retry after a partial socket operation. A peer could keep
+a header or payload alive by making periodic small progress, repeatedly buying
+another full `select()` timeout. `ReceiveExpectedBootstrapMessage` also used a
+wall-clock deadline, and its frame reader could separately spend that remaining
+budget on the header and payload.
+
+Fix and after-result: each write, complete receive frame (header plus payload),
+and expected-message wait now derives one overflow-safe deadline from
+`GetSteadyTimeMicros()`. Every retry computes the rounded-up remaining
+milliseconds; expiration retains the existing read/write/expected-message
+timeout errors. A ping response uses the same residual budget. No socket is
+reopened, no message is retried, and no protocol/validation behavior changes.
+
+Regression proof: the deterministic mock-clock case starts a 60 ms budget at
+1,000,000 us, verifies 60 ms remains after one microsecond, one ms remains at
+the final microsecond, and zero remains at expiry. This directly covers the
+helpers used around every partial socket operation. After incremental rebuild,
+the focused case and all 65 `bootstrap_snapshot_protocol_tests` cases pass;
+`git diff --check` passes. ASan/UBSan remains unrun because 11 GB free must
+retain the 10 GB reserve; this legacy checkout has no cyclomatic-complexity
+ratchet. The unrelated broad RPC-wallet ECC-context collision remains
+unaddressed and is not hidden.
+
+Consensus impact: NONE. This is bounded timeout accounting for optional
+bootstrap transport only; chain history, consensus serialization, PoW,
+monetary policy, upgrades, block/transaction validity, and cryptography are
+untouched. Worldstream remains non-overlap storage/restart work at
+`d9f5153be8fc59d140db9b6f59e796a7c668160a`. Remaining risk: post-chunk
+stream recovery still uses the existing outer snapshot retry rather than a
+byte-accurate resume protocol.
