@@ -832,3 +832,28 @@ unchanged. Worldstream remains non-overlap C23 storage/startup work at
 `d9f5153be8fc59d140db9b6f59e796a7c668160a`. Remaining risk: diversity is
 endpoint-level rather than autonomous-system-level; a later bounded source
 selection study should measure repeated advertisements across reconnect churn.
+
+## Bootstrap seed candidates preserve bounded dial diversity
+
+Baseline and root cause: before discovery dials its maximum three seed
+candidates, DNS and fixed-seed results were appended without routability or
+duplicate filtering. Repeated resolver data could therefore spend all probes
+on one endpoint; local/private results could consume probes before normal
+addrman policy existed.
+
+Fix and after-result: a shared candidate-admission helper accepts only unique,
+routable `CService` endpoints. Both DNS and fixed-seed paths use it, preserving
+first-seen order and existing global caps.
+
+Regression proof: a deterministic native test admits two routable endpoints
+while rejecting a duplicate, loopback, and RFC1918 candidate, and verifies the
+two retained endpoints stay ordered. The focused case passes after incremental
+compilation.
+
+Consensus impact: NONE. Optional pre-database bootstrap-peer candidate
+selection only; chain history, consensus serialization, PoW, monetary policy,
+upgrades, block/transaction validity, and cryptography are unchanged.
+Worldstream remains non-overlap C23 storage/startup work at
+`d9f5153be8fc59d140db9b6f59e796a7c668160a`. Remaining risk: routable address
+diversity is not autonomous-system diversity; measure source concentration
+before considering more complex selection policy.

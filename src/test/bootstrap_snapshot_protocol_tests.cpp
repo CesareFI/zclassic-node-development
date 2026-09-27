@@ -59,6 +59,7 @@ extern int BootstrapSocketRemainingTimeoutMillisForTest(int64_t);
 extern bool DecodeBootstrapDiscoveryAddresses(CDataStream&, const CService&,
                                               std::vector<std::string>&, size_t&,
                                               std::string&);
+extern bool AddBootstrapDiscoveryCandidate(std::vector<CService>&, const CService&);
 
 extern bool BootstrapOpenStreamAndVerifyManifestForTest(const CService&, int,
                                                         const CBootstrapSnapshotManifest&,
@@ -1522,6 +1523,23 @@ BOOST_AUTO_TEST_CASE(bootstrap_discovery_addr_keeps_valid_unique_bootstrap_peers
     BOOST_CHECK_EQUAL(appended, 1U);
     BOOST_REQUIRE_EQUAL(discovered.size(), 1U);
     BOOST_CHECK_EQUAL(discovered.front(), advertised.ToStringIPPort());
+}
+
+BOOST_AUTO_TEST_CASE(bootstrap_discovery_candidate_admission_preserves_dial_diversity)
+{
+    std::vector<CService> candidates;
+    const unsigned short port = Params().GetDefaultPort();
+    const CService publicOne("8.8.8.8", port);
+    const CService publicTwo("9.9.9.9", port);
+
+    BOOST_CHECK(AddBootstrapDiscoveryCandidate(candidates, publicOne));
+    BOOST_CHECK(!AddBootstrapDiscoveryCandidate(candidates, publicOne));
+    BOOST_CHECK(!AddBootstrapDiscoveryCandidate(candidates, CService("127.0.0.1", port)));
+    BOOST_CHECK(!AddBootstrapDiscoveryCandidate(candidates, CService("10.0.0.1", port)));
+    BOOST_CHECK(AddBootstrapDiscoveryCandidate(candidates, publicTwo));
+    BOOST_REQUIRE_EQUAL(candidates.size(), 2U);
+    BOOST_CHECK(candidates[0] == publicOne);
+    BOOST_CHECK(candidates[1] == publicTwo);
 }
 
 BOOST_AUTO_TEST_CASE(bootstrap_fresh_chain_datadir_checks_chain_files)

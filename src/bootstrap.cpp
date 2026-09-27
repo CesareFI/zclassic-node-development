@@ -380,6 +380,19 @@ static size_t DiscoverBootstrapPeersFromSocket(SOCKET socket, const CService& pe
     return appended;
 }
 
+// Discovery has a very small direct-dial budget. Admit only routable unique
+// endpoints so a duplicate or local/private DNS/fixed-seed reply cannot spend
+// multiple probes before addrman and normal peer management are available.
+bool AddBootstrapDiscoveryCandidate(std::vector<CService>& candidates, const CService& candidate)
+{
+    if (!candidate.IsValid() || !candidate.IsRoutable() ||
+        std::find(candidates.begin(), candidates.end(), candidate) != candidates.end()) {
+        return false;
+    }
+    candidates.push_back(candidate);
+    return true;
+}
+
 std::vector<std::string> DiscoverBootstrapPeers()
 {
     std::vector<std::string> discovered;
@@ -407,9 +420,7 @@ std::vector<std::string> DiscoverBootstrapPeers()
                     continue;
                 }
                 for (size_t i = 0; i < vIPs.size() && candidates.size() < BOOTSTRAP_DISCOVERY_MAX_CANDIDATES; ++i) {
-                    if (vIPs[i].IsValid()) {
-                        candidates.push_back(CService(vIPs[i], (unsigned short)defaultPort));
-                    }
+                    AddBootstrapDiscoveryCandidate(candidates, CService(vIPs[i], (unsigned short)defaultPort));
                 }
             }
         }
@@ -420,9 +431,7 @@ std::vector<std::string> DiscoverBootstrapPeers()
                 struct in6_addr ip;
                 memcpy(&ip, vFixed[i].addr, sizeof(ip));
                 CService svc(ip, vFixed[i].port);
-                if (svc.IsValid()) {
-                    candidates.push_back(svc);
-                }
+                AddBootstrapDiscoveryCandidate(candidates, svc);
             }
         }
 
