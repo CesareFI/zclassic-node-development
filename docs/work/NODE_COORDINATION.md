@@ -441,3 +441,19 @@ rules, monetary policy, upgrade activation, and cryptography are unchanged.
 Worldstream remains non-overlapping C23 startup/fresh-sync work. Remaining
 risk: exercise a distinct bounded block-window stall scenario before changing
 peer-selection policy.
+
+## Malformed address advertisements cannot enter discovery
+
+Baseline and root cause: the `addr` handler decoded its declared address
+vector but accepted trailing bytes, then relayed and stored advertised peers.
+A direct fixture sent one valid routable address followed by one byte and
+reproduced success, addrman mutation, and no malformed-message score.
+
+Fix: require the address vector to consume the complete payload before any
+relay or addrman mutation. Trailing bytes now receive the existing score of
+20 and return an error. The regression proves the address count is unchanged.
+
+Consensus impact: NONE. This is P2P peer-discovery framing only; validation,
+PoW, chain selection, serialization, monetary policy, upgrades, and
+cryptography are untouched. Worldstream remains non-overlapping C23
+startup/fresh-sync work.

@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see COPYING.
 
 #include "chainparams.h"
+#include "addrman.h"
 #include "consensus/validation.h"
 #include "crypto/common.h"
 #include "importing.h"
@@ -11,6 +12,7 @@
 #include "test/test_bitcoin.h"
 #include "util.h"
 #include "utiltime.h"
+#include "timedata.h"
 
 #include <boost/test/unit_test.hpp>
 #include <boost/test/data/test_case.hpp>
@@ -1658,6 +1660,21 @@ BOOST_AUTO_TEST_CASE(chain_request_trailing_bytes_do_not_enter_service)
                           before.nGlobalBlocksInFlight);
         BOOST_CHECK_GE(after.nMisbehavior - before.nMisbehavior, 20);
     }
+}
+
+BOOST_AUTO_TEST_CASE(address_trailing_bytes_do_not_mutate_peer_discovery)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
+               "addr", true);
+    PrepareTransport(peer);
+    CAddress advertised(CService("8.8.8.8", Params().GetDefaultPort()));
+    advertised.nTime = GetAdjustedTime();
+    CDataStream malformed(SER_NETWORK, PROTOCOL_VERSION);
+    malformed << std::vector<CAddress>{advertised} << uint8_t{0};
+    const size_t before = addrman.size();
+    BOOST_CHECK(!ProcessMessage(&peer, "addr", malformed, GetTime()));
+    BOOST_CHECK_EQUAL(addrman.size(), before);
+    BOOST_CHECK_GE(Stats(peer).nMisbehavior, 20);
 }
 
 BOOST_AUTO_TEST_CASE(inventory_send_abort_releases_only_unsent_requests)
