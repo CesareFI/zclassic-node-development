@@ -566,3 +566,36 @@ validation, and cryptography are untouched. Worldstream remains non-overlap
 storage/restart work at `d9f5153be8fc59d140db9b6f59e796a7c668160a`.
 Remaining risk: a full isolated reconnect fixture is still needed before
 changing parallel-stream retry/resume behavior.
+
+## Bootstrap chunk delivery rejects malformed residual data
+
+Baseline and root cause: the normal `CNode` unsolicited `BSCHK`/`BSPCHK`
+handler already checked residual bytes, but the standalone snapshot and Zcash
+parameter download sockets each deserialized a chunk then immediately advanced
+their in-flight request and file-write path. A valid chunk followed by residual
+wire data was therefore accepted on the actual bootstrap transfer path.
+
+Fix and after-result: both clients now use
+`DecodeBootstrapSnapshotChunkPayload`, which decodes into a temporary and
+requires exact consumption before assigning the output chunk. Decode,
+truncation, or trailing-byte failure leaves the caller's prior chunk untouched,
+so neither the request queue nor any staging write is reached. Normal P2P
+chunk scoring and wire behavior are intentionally unchanged.
+
+Regression proof: the direct wire fixture proves valid chunk decoding, then
+tests a trailing byte and a truncated serialization. Both failures preserve a
+sentinel chunk's file index, offset, and data. The focused case and complete
+62-case `bootstrap_snapshot_protocol_tests` group pass after an incremental
+C++ rebuild. `git diff --check` passes. ASan/UBSan remains unrun because 11 GB
+free preserves the required 10 GB reserve but cannot safely accommodate a cold
+sanitizer build; no legacy cyclomatic-complexity gate exists. The previously
+observed unrelated broad RPC-wallet ECC-context failure is not masked.
+
+Consensus impact: NONE. This rejects malformed optional transfer framing before
+the existing chunk size, offset, per-file hash, manifest, and imported-state
+checks. Chain history, consensus serialization, PoW, monetary policy, network
+upgrades, block/transaction validation, and cryptography are untouched.
+Worldstream remains non-overlap storage/restart work at
+`d9f5153be8fc59d140db9b6f59e796a7c668160a`. Remaining risk: bounded
+localhost reconnect coverage is still prerequisite evidence for safely adding
+parallel-stream retry/resume behavior.

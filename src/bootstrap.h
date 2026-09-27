@@ -259,6 +259,11 @@ bool ValidateBootstrapSnapshotManifest(const CBootstrapSnapshotManifest& manifes
 bool DecodeBootstrapSnapshotManifestPayload(CDataStream& payload,
                                             CBootstrapSnapshotManifest& manifest,
                                             std::string& error);
+//! Decode one received snapshot/parameter chunk and require the complete
+//! bounded wire payload. On failure `chunk` is left unchanged.
+bool DecodeBootstrapSnapshotChunkPayload(CDataStream& payload,
+                                         CBootstrapSnapshotChunk& chunk,
+                                         std::string& error);
 
 // --- Option B client side: trustless self-snapshot provisional accept ---------
 //! Record that a v2 self-snapshot was just imported and awaits provisional

@@ -747,6 +747,25 @@ bool DecodeBootstrapSnapshotManifestPayload(CDataStream& payload,
     return true;
 }
 
+bool DecodeBootstrapSnapshotChunkPayload(CDataStream& payload,
+                                         CBootstrapSnapshotChunk& chunk,
+                                         std::string& error)
+{
+    CBootstrapSnapshotChunk decoded;
+    try {
+        payload >> decoded;
+    } catch (const std::exception& e) {
+        error = strprintf("could not decode bootstrap chunk: %s", e.what());
+        return false;
+    }
+    if (!payload.empty()) {
+        error = "bootstrap chunk has trailing bytes";
+        return false;
+    }
+    chunk = decoded;
+    return true;
+}
+
 bool DecodeBootstrapNetworkMessage(const CSerializeData& message, std::string& command, CDataStream& payload, std::string& error)
 {
     command.clear();
@@ -1574,10 +1593,7 @@ static bool DownloadBootstrapFileSubset(SOCKET socket, const CBootstrapSnapshotM
         }
 
         CBootstrapSnapshotChunk chunk;
-        try {
-            chunkPayload >> chunk;
-        } catch (const std::exception& e) {
-            error = strprintf("could not decode bootstrap chunk: %s", e.what());
+        if (!DecodeBootstrapSnapshotChunkPayload(chunkPayload, chunk, error)) {
             ok = false;
             break;
         }
@@ -4146,10 +4162,7 @@ static bool DownloadZcashParamFile(SOCKET socket, uint32_t file_index, uint64_t 
             break;
         }
         CBootstrapSnapshotChunk chunk;
-        try {
-            chunkPayload >> chunk;
-        } catch (const std::exception& e) {
-            error = strprintf("could not decode zcash param chunk: %s", e.what());
+        if (!DecodeBootstrapSnapshotChunkPayload(chunkPayload, chunk, error)) {
             ok = false;
             break;
         }

@@ -1122,6 +1122,49 @@ BOOST_AUTO_TEST_CASE(bootstrap_manifest_payload_requires_exact_wire_consumption)
     BOOST_CHECK(SerializeHash(preserved) == before);
 }
 
+BOOST_AUTO_TEST_CASE(bootstrap_chunk_payload_requires_exact_wire_consumption)
+{
+    CBootstrapSnapshotChunk expected;
+    expected.nFileIndex = 7;
+    expected.nOffset = 4096;
+    expected.vData.push_back(0x01);
+    expected.vData.push_back(0x02);
+    expected.vData.push_back(0x03);
+
+    CDataStream valid(SER_NETWORK, PROTOCOL_VERSION);
+    valid << expected;
+    CBootstrapSnapshotChunk decoded;
+    std::string error;
+    BOOST_REQUIRE(DecodeBootstrapSnapshotChunkPayload(valid, decoded, error));
+    BOOST_CHECK(error.empty());
+    BOOST_CHECK_EQUAL(decoded.nFileIndex, expected.nFileIndex);
+    BOOST_CHECK_EQUAL(decoded.nOffset, expected.nOffset);
+    BOOST_CHECK(decoded.vData == expected.vData);
+    BOOST_CHECK(valid.empty());
+
+    CBootstrapSnapshotChunk preserved;
+    preserved.nFileIndex = 9;
+    preserved.nOffset = 8192;
+    preserved.vData.push_back(0xff);
+    CDataStream trailing(SER_NETWORK, PROTOCOL_VERSION);
+    trailing << expected;
+    trailing << uint8_t(0);
+    BOOST_CHECK(!DecodeBootstrapSnapshotChunkPayload(trailing, preserved, error));
+    BOOST_CHECK(error.find("trailing") != std::string::npos);
+    BOOST_CHECK_EQUAL(preserved.nFileIndex, 9U);
+    BOOST_CHECK_EQUAL(preserved.nOffset, 8192U);
+    BOOST_REQUIRE_EQUAL(preserved.vData.size(), 1U);
+    BOOST_CHECK_EQUAL(preserved.vData[0], 0xff);
+
+    CDataStream truncated(SER_NETWORK, PROTOCOL_VERSION);
+    truncated << expected;
+    truncated.resize(truncated.size() - 1);
+    BOOST_CHECK(!DecodeBootstrapSnapshotChunkPayload(truncated, preserved, error));
+    BOOST_CHECK(error.find("decode") != std::string::npos);
+    BOOST_CHECK_EQUAL(preserved.nFileIndex, 9U);
+    BOOST_CHECK_EQUAL(preserved.nOffset, 8192U);
+}
+
 BOOST_AUTO_TEST_CASE(bootstrap_discovery_addr_rejects_trailing_wire_bytes)
 {
     const CService source("127.0.0.1", Params().GetDefaultPort());
