@@ -48,6 +48,12 @@ extern std::string BootstrapServeQuotaKey(const CNetAddr& addr);
 // as locals; returns true to abort when a full window stayed below the floor.
 extern bool BootstrapDownloadTooSlow(int64_t&, uint64_t&, uint64_t, int64_t);
 
+// Internal decoder used by the discovery socket path. Kept out of bootstrap.h
+// because it is not part of the node's public bootstrap API.
+extern bool DecodeBootstrapDiscoveryAddresses(CDataStream&, const CService&,
+                                              std::vector<std::string>&, size_t&,
+                                              std::string&);
+
 // Test-only seam (defined in bootstrapvalidation.cpp, not the public header) to
 // drive a terminal latch so we can verify the finalization-hold flag releases on
 // VALIDATED/FAILED without a full chain + background thread.
@@ -1092,6 +1098,49 @@ BOOST_AUTO_TEST_CASE(bootstrap_network_message_header_failures)
     truncated.pop_back();
     BOOST_CHECK(!DecodeBootstrapNetworkMessage(truncated, command, decodedPayload, error));
     BOOST_CHECK(error.find("size mismatch") != std::string::npos);
+}
+
+BOOST_AUTO_TEST_CASE(bootstrap_discovery_addr_rejects_trailing_wire_bytes)
+{
+    const CService source("127.0.0.1", Params().GetDefaultPort());
+    CAddress advertised(CService("8.8.8.8", Params().GetDefaultPort()), NODE_BOOTSTRAP);
+    std::vector<CAddress> addresses(1, advertised);
+    CDataStream payload(SER_NETWORK, PROTOCOL_VERSION);
+    payload << addresses;
+    payload << uint8_t(0);
+
+    std::vector<std::string> discovered;
+    discovered.push_back("1.1.1.1:8033");
+    const std::vector<std::string> before = discovered;
+    size_t appended = 99;
+    std::string error;
+
+    BOOST_CHECK(!DecodeBootstrapDiscoveryAddresses(payload, source, discovered, appended, error));
+    BOOST_CHECK(error.find("trailing") != std::string::npos);
+    BOOST_CHECK_EQUAL_COLLECTIONS(discovered.begin(), discovered.end(), before.begin(), before.end());
+    BOOST_CHECK_EQUAL(appended, 99U);
+}
+
+BOOST_AUTO_TEST_CASE(bootstrap_discovery_addr_keeps_valid_unique_bootstrap_peers)
+{
+    const CService source("127.0.0.1", Params().GetDefaultPort());
+    const CAddress advertised(CService("8.8.8.8", Params().GetDefaultPort()), NODE_BOOTSTRAP);
+    std::vector<CAddress> addresses;
+    addresses.push_back(advertised);
+    addresses.push_back(advertised);
+    addresses.push_back(CAddress(CService("9.9.9.9", Params().GetDefaultPort()), NODE_NETWORK));
+    CDataStream payload(SER_NETWORK, PROTOCOL_VERSION);
+    payload << addresses;
+
+    std::vector<std::string> discovered;
+    size_t appended = 0;
+    std::string error;
+
+    BOOST_REQUIRE(DecodeBootstrapDiscoveryAddresses(payload, source, discovered, appended, error));
+    BOOST_CHECK(error.empty());
+    BOOST_CHECK_EQUAL(appended, 1U);
+    BOOST_REQUIRE_EQUAL(discovered.size(), 1U);
+    BOOST_CHECK_EQUAL(discovered.front(), advertised.ToStringIPPort());
 }
 
 BOOST_AUTO_TEST_CASE(bootstrap_fresh_chain_datadir_checks_chain_files)

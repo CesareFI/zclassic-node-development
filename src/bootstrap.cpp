@@ -246,6 +246,51 @@ static const int BOOTSTRAP_DISCOVERY_NET_TIMEOUT_MS = 10000;
 // a single getaddr and read one addr reply, appending NODE_BOOTSTRAP peers as
 // "ip:port" strings to `out`. Best-effort: any failure just leaves `out`
 // unchanged for this peer. Returns the number of new entries appended.
+// Decode one discovery addr payload before changing the caller's result set.
+// Keeping the whole payload check here matters because discovery sockets are
+// deliberately separate from CNode/ProcessMessage: a valid vector followed by
+// arbitrary bytes must not become a source of bootstrap candidates.
+bool DecodeBootstrapDiscoveryAddresses(CDataStream& addrPayload, const CService& peerAddress,
+                                      std::vector<std::string>& out, size_t& appended,
+                                      std::string& error)
+{
+    std::vector<CAddress> vAddr;
+    try {
+        addrPayload >> vAddr;
+    } catch (const std::exception& e) {
+        error = strprintf("malformed addr from %s: %s", peerAddress.ToStringIPPort(), e.what());
+        return false;
+    }
+    if (!addrPayload.empty()) {
+        error = strprintf("addr from %s has trailing bytes", peerAddress.ToStringIPPort());
+        return false;
+    }
+    // Mirror the addr-message bound enforced by the normal net handler so a
+    // misbehaving peer cannot make us iterate an enormous list.
+    if (vAddr.size() > 1000) {
+        error = strprintf("oversized addr (%u) from %s", (unsigned int)vAddr.size(), peerAddress.ToStringIPPort());
+        return false;
+    }
+
+    appended = 0;
+    for (size_t i = 0; i < vAddr.size() && out.size() < BOOTSTRAP_DISCOVERY_MAX_RESULTS; ++i) {
+        const CAddress& addr = vAddr[i];
+        if (!(addr.nServices & NODE_BOOTSTRAP)) {
+            continue;
+        }
+        if (!addr.IsValid()) {
+            continue;
+        }
+        const std::string entry = addr.ToStringIPPort();
+        if (std::find(out.begin(), out.end(), entry) != out.end()) {
+            continue;
+        }
+        out.push_back(entry);
+        ++appended;
+    }
+    return true;
+}
+
 static size_t DiscoverBootstrapPeersFromSocket(SOCKET socket, const CService& peerAddress, std::vector<std::string>& out)
 {
     std::string error;
@@ -266,35 +311,10 @@ static size_t DiscoverBootstrapPeersFromSocket(SOCKET socket, const CService& pe
         return 0;
     }
 
-    std::vector<CAddress> vAddr;
-    try {
-        addrPayload >> vAddr;
-    } catch (const std::exception& e) {
-        LogPrint("net", "bootstrap discovery: malformed addr from %s: %s\n", peerAddress.ToStringIPPort(), e.what());
-        return 0;
-    }
-    // Mirror the addr-message bound enforced by the normal net handler so a
-    // misbehaving peer cannot make us iterate an enormous list.
-    if (vAddr.size() > 1000) {
-        LogPrint("net", "bootstrap discovery: oversized addr (%u) from %s\n", (unsigned int)vAddr.size(), peerAddress.ToStringIPPort());
-        return 0;
-    }
-
     size_t appended = 0;
-    for (size_t i = 0; i < vAddr.size() && out.size() < BOOTSTRAP_DISCOVERY_MAX_RESULTS; ++i) {
-        const CAddress& addr = vAddr[i];
-        if (!(addr.nServices & NODE_BOOTSTRAP)) {
-            continue;
-        }
-        if (!addr.IsValid()) {
-            continue;
-        }
-        const std::string entry = addr.ToStringIPPort();
-        if (std::find(out.begin(), out.end(), entry) != out.end()) {
-            continue;
-        }
-        out.push_back(entry);
-        ++appended;
+    if (!DecodeBootstrapDiscoveryAddresses(addrPayload, peerAddress, out, appended, error)) {
+        LogPrint("net", "bootstrap discovery: %s\n", error);
+        return 0;
     }
     return appended;
 }

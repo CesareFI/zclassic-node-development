@@ -457,3 +457,39 @@ Consensus impact: NONE. This is P2P peer-discovery framing only; validation,
 PoW, chain selection, serialization, monetary policy, upgrades, and
 cryptography are untouched. Worldstream remains non-overlapping C23
 startup/fresh-sync work.
+
+## Bootstrap discovery rejects trailing address payloads
+
+Baseline and root cause: the normal P2P `addr` path had already been made
+strict, but the bounded bootstrap discovery client has its own socket and
+deserializer. It accepted a valid advertised `NODE_BOOTSTRAP` address vector
+followed by arbitrary bytes, allowing malformed untrusted discovery traffic to
+become a bootstrap source. This is not a consensus shortcut, but it weakens
+the discovery client's framing boundary and makes malformed source selection
+harder to diagnose.
+
+Fix and after-result: `DecodeBootstrapDiscoveryAddresses` now decodes the
+entire wire payload before it changes the caller's discovered-peer vector. A
+trailing byte, malformed vector, or over-limit vector leaves the result and
+appended-count untouched; valid, unique `NODE_BOOTSTRAP` addresses retain the
+same bounded acceptance behavior. The socket handshake, candidates, timeout,
+and compiled-anchor verification remain unchanged.
+
+Regression proof: the deterministic payload fixture serializes an authentic
+`addr` vector plus one byte and proves rejection with no source-list mutation;
+its companion validates acceptance of one unique bootstrap address while
+filtering a duplicate and a non-bootstrap service. Both focused cases pass,
+the 59-case `bootstrap_snapshot_protocol_tests` suite passes after an
+incremental C++ rebuild, and all 57 `block_download_tests` cases pass. `git
+diff --check` passes. No ASan/UBSan result is claimed: 11 GB free preserves
+the required 10 GB reserve, but does not safely accommodate a cold sanitizer
+profile. This legacy C++ checkout has no cyclomatic-complexity gate.
+
+Consensus impact: NONE. The change only rejects malformed optional discovery
+framing before source selection; chain history, block/header and transaction
+validation, PoW, serialization, monetary policy, upgrades, and cryptography
+are untouched. Worldstream's latest accessible C23 head
+`d9f5153be8fc59d140db9b6f59e796a7c668160a` remains storage/restart-only, so
+there is no overlap. Remaining risk: inspect a distinct bootstrap
+manifest-source diversity/reconnect condition rather than broaden scheduler
+policy without a measured failure.
