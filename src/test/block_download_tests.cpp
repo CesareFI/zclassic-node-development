@@ -9,6 +9,7 @@
 #include "net.h"
 #include "rpc/server.h"
 #include "test/test_bitcoin.h"
+#include "util.h"
 #include "utiltime.h"
 
 #include <boost/test/unit_test.hpp>
@@ -1376,6 +1377,79 @@ BOOST_AUTO_TEST_CASE(receive_queue_size_accounts_message_overhead)
         BOOST_CHECK_EQUAL(peer.GetTotalRecvSize(), 1024 + 2048 + 2 * 24);
         peer.vRecvMsg.clear();
     }
+}
+
+BOOST_AUTO_TEST_CASE(inventory_send_abort_releases_only_unsent_requests)
+{
+    CNode announced(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "inv", true);
+    PrepareTransport(announced);
+    SetMockTime(blocks.front().GetBlockTime() + 1);
+    {
+        struct ScopedSendBuffer {
+            bool existed;
+            std::string value;
+            ScopedSendBuffer()
+            {
+                const auto previous = mapArgs.find("-maxsendbuffer");
+                existed = previous != mapArgs.end();
+                if (existed) value = previous->second;
+                mapArgs["-maxsendbuffer"] = "1";
+            }
+            ~ScopedSendBuffer()
+            {
+                if (existed) mapArgs["-maxsendbuffer"] = value;
+                else mapArgs.erase("-maxsendbuffer");
+            }
+        } sendBuffer;
+        BOOST_REQUIRE_EQUAL(SendBufferSize(), 1000);
+
+        // This request was actually queued before the later batch aborts.
+        CDataStream first(SER_NETWORK, PROTOCOL_VERSION);
+        first << std::vector<CInv>{CInv(MSG_BLOCK, blocks[1].GetHash())};
+        BOOST_REQUIRE(ProcessMessage(&announced, "inv", first, GetTime()));
+        BOOST_REQUIRE_EQUAL(Sent(announced, "getdata"), 1);
+        const auto before = Stats(announced);
+        BOOST_REQUIRE_EQUAL(before.nBlocksInFlight, 1);
+        BOOST_REQUIRE(before.hashOldestRequest == blocks[1].GetHash());
+        BOOST_REQUIRE_LT(announced.nSendSize, SendBufferSize());
+
+        // Valid bounded inventory generates enough getheaders output to abort
+        // before its accumulated getdata message can be queued.
+        std::vector<CInv> inventory;
+        for (size_t height = 2; height < blocks.size(); ++height)
+            inventory.emplace_back(MSG_BLOCK, blocks[height].GetHash());
+        CDataStream batch(SER_NETWORK, PROTOCOL_VERSION);
+        batch << inventory;
+        BOOST_CHECK(!ProcessMessage(&announced, "inv", batch, GetTime()));
+        const auto after = Stats(announced);
+        BOOST_TEST_MESSAGE("inv_abort_outstanding=" << after.nBlocksInFlight
+                           << " getdata_frames=" << Sent(announced, "getdata"));
+        BOOST_CHECK_EQUAL(after.nMisbehavior, 50);
+        BOOST_CHECK(!announced.fDisconnect);
+        BOOST_CHECK_EQUAL(Sent(announced, "getdata"), 1);
+        BOOST_CHECK_EQUAL(after.nBlocksInFlight, 1);
+        BOOST_CHECK_EQUAL(after.nGlobalBlocksInFlight, 1);
+        BOOST_CHECK_EQUAL(after.nGlobalValidatedBlocksInFlight, 0);
+        BOOST_CHECK(after.hashOldestRequest == before.hashOldestRequest);
+        BOOST_CHECK_EQUAL(after.nDownloadDeadline, before.nDownloadDeadline);
+    }
+    SetMockTime(0);
+
+    // Keep the first source alive. Unsent work is available immediately,
+    // without waiting for its oldest correctly issued request to time out.
+    CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "healthy", true);
+    Headers(healthy);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    const auto reassigned = Stats(healthy);
+    BOOST_CHECK_EQUAL(reassigned.nBlocksInFlight, 128);
+    BOOST_REQUIRE(!reassigned.vHeightInFlight.empty());
+    BOOST_CHECK_EQUAL(reassigned.vHeightInFlight.front(), 2);
+    BOOST_CHECK_EQUAL(reassigned.vHeightInFlight.back(), 129);
+    Deliver(announced, 1);
+    for (int height : reassigned.vHeightInFlight) Deliver(healthy, height);
+    BOOST_CHECK_EQUAL(chainActive.Height(), 129);
+    BOOST_CHECK(chainActive.Tip()->GetBlockHash() == blocks.back().GetHash());
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
 }
 
 BOOST_DATA_TEST_CASE(inventory_requests_mix_with_validated_downloads,

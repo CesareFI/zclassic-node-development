@@ -6711,6 +6711,14 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
             GetMainSignals().Inventory(inv.hash);
 
             if (pfrom->nSendSize > (SendBufferSize() * 2)) {
+                // This batch's getdata was never queued. Release only its
+                // reservations; cancellation is not progress on older work.
+                CNodeState* state = State(pfrom->GetId());
+                assert(state != NULL);
+                const int64_t stallingSince = state->nStallingSince;
+                for (const CInv& request : vToFetch)
+                    MarkBlockAsReceived(request.hash, pfrom->GetId());
+                state->nStallingSince = stallingSince;
                 Misbehaving(pfrom->GetId(), 50);
                 return error("send buffer size() = %u", pfrom->nSendSize);
             }
