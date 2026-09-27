@@ -173,6 +173,11 @@ the existing tree. No reusable sanitizer binary is present; with 13 GB free
 and a required 10 GB reserve, a cold sanitizer build was not started. No C23,
 storage, consensus, PoW, monetary, transaction, serialization, upgrade, wallet
 or production-datadir surface is involved. Worldstream's storage/startup scope
-is not modified. Remaining risk is transport-loop latency between the marked
-disconnect and its normal teardown; the next networking investigation should
-measure that lifecycle before adding scheduler changes.
+is not modified. A follow-up read-only transport-loop trace found no extra
+scheduler interval: `ThreadMessageHandler` calls `SendMessages` after
+`ProcessMessages` in the same peer iteration, and its existing
+`fDisconnect` branch calls `StopBlockDownload`; `ThreadSocketHandler` then
+performs idempotent removal. Remaining risk is ordinary lock contention before
+that same-iteration send pass, not retained ownership across a later polling
+cycle. The next networking investigation should target a distinct measured
+source-diversity or header-gap condition rather than duplicate this lifecycle.
