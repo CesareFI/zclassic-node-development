@@ -611,3 +611,36 @@ official-release download and its unchanged pinned SHA-256 verification no
 longer fail in the previously affected CI stage. This build result does not
 replace the focused C++ test results above and does not claim sanitizer
 coverage.
+
+## Loopback reconnect-stream manifest fixture
+
+Baseline and root cause: the parallel snapshot reconnect path opens a new
+socket, repeats the bootstrap handshake, and must prove that its manifest is
+identical to the already accepted master manifest. The existing unit tests
+covered serialization helpers but had no native loopback peer exercising the
+actual TCP handshake and reconnect-stream verifier, leaving source-divergence
+and malformed-response recovery indirect.
+
+Fix and after-result: a small test-only `127.0.0.1` fixture now binds one
+ephemeral TCP port, performs only `version`/`verack`/`getbsman`, and closes its
+own socket. It creates no datadir, wallet, snapshot files, or external
+connection. The narrow test seam invokes the existing production reconnect
+stream checker and closes its returned socket; it changes no production
+transfer policy.
+
+Regression proof: one deterministic fixture accepts the matching master
+manifest, rejects the same manifest with a trailing byte, and rejects a
+well-formed but divergent manifest identity. The focused loopback test and all
+63 `bootstrap_snapshot_protocol_tests` cases pass after an incremental C++
+build. `git diff --check` passes. ASan/UBSan remains unrun because 11 GB free
+must preserve the 10 GB reserve; no legacy cyclomatic-complexity gate exists.
+The unrelated broad RPC-wallet ECC-context failure remains explicitly
+unaddressed.
+
+Consensus impact: NONE. This is test-only loopback coverage around existing
+bootstrap socket validation. Consensus serialization, chain history, PoW,
+monetary policy, upgrades, block/transaction validity, and cryptography are
+unchanged. Worldstream remains non-overlap storage/restart work at
+`d9f5153be8fc59d140db9b6f59e796a7c668160a`. Remaining risk: use this fixture
+to establish a bounded reconnect-after-transient-failure case before changing
+parallel-stream retry behavior.

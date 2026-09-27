@@ -18,12 +18,15 @@
 #include "utilstrencodings.h"
 
 #include <algorithm>
+#include <cstring>
 #include <iterator>
 #include <map>
 #include <set>
+#include <stdexcept>
 
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/fstream.hpp>
+#include <boost/thread.hpp>
 #include <boost/test/unit_test.hpp>
 
 // Non-static handler in main.cpp; exposed so we can drive it directly here to
@@ -53,6 +56,10 @@ extern bool BootstrapDownloadTooSlow(int64_t&, uint64_t&, uint64_t, int64_t);
 extern bool DecodeBootstrapDiscoveryAddresses(CDataStream&, const CService&,
                                               std::vector<std::string>&, size_t&,
                                               std::string&);
+
+extern bool BootstrapOpenStreamAndVerifyManifestForTest(const CService&, int,
+                                                        const CBootstrapSnapshotManifest&,
+                                                        std::string&);
 
 // Test-only seam (defined in bootstrapvalidation.cpp, not the public header) to
 // drive a terminal latch so we can verify the finalization-hold flag releases on
@@ -161,6 +168,128 @@ static std::string DeterministicBytes(size_t n, unsigned int seed)
         s[i] = (char)((x >> 16) & 0xff);
     }
     return s;
+}
+
+static bool SendAllTestBytes(SOCKET socket, const char* data, size_t size)
+{
+    size_t sent = 0;
+    while (sent < size) {
+        const int n = send(socket, data + sent, (int)(size - sent), MSG_NOSIGNAL);
+        if (n <= 0) {
+            return false;
+        }
+        sent += n;
+    }
+    return true;
+}
+
+static bool ReceiveAllTestBytes(SOCKET socket, char* data, size_t size)
+{
+    size_t received = 0;
+    while (received < size) {
+        const int n = recv(socket, data + received, (int)(size - received), 0);
+        if (n <= 0) {
+            return false;
+        }
+        received += n;
+    }
+    return true;
+}
+
+static bool ReceiveTestBootstrapMessage(SOCKET socket, std::string& command)
+{
+    CSerializeData headerBytes(CMessageHeader::HEADER_SIZE);
+    if (!ReceiveAllTestBytes(socket, &headerBytes[0], headerBytes.size())) {
+        return false;
+    }
+    CMessageHeader header(Params().MessageStart());
+    try {
+        CDataStream headerStream(headerBytes, SER_NETWORK, PROTOCOL_VERSION);
+        headerStream >> header;
+    } catch (const std::exception&) {
+        return false;
+    }
+    if (!header.IsValid(Params().MessageStart()) || header.nMessageSize > MAX_PROTOCOL_MESSAGE_LENGTH) {
+        return false;
+    }
+    CSerializeData message = headerBytes;
+    const size_t offset = message.size();
+    message.resize(offset + header.nMessageSize);
+    if (header.nMessageSize != 0 && !ReceiveAllTestBytes(socket, &message[offset], header.nMessageSize)) {
+        return false;
+    }
+    CDataStream payload(SER_NETWORK, PROTOCOL_VERSION);
+    std::string error;
+    return DecodeBootstrapNetworkMessage(message, command, payload, error);
+}
+
+static bool SendTestBootstrapMessage(SOCKET socket, const char* command, const CDataStream& payload)
+{
+    CSerializeData message;
+    std::string error;
+    return BuildBootstrapNetworkMessage(command, payload, message, error) &&
+           SendAllTestBytes(socket, &message[0], message.size());
+}
+
+static CService StartManifestLoopbackPeer(const CBootstrapSnapshotManifest& manifest,
+                                          bool trailingManifest,
+                                          boost::thread& server,
+                                          bool& serverOk)
+{
+    SOCKET listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    BOOST_REQUIRE(listener != INVALID_SOCKET);
+    struct sockaddr_in address;
+    std::memset(&address, 0, sizeof(address));
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    address.sin_port = 0;
+    BOOST_REQUIRE_EQUAL(bind(listener, (struct sockaddr*)&address, sizeof(address)), 0);
+    BOOST_REQUIRE_EQUAL(listen(listener, 1), 0);
+#ifdef WIN32
+    int addressLength = sizeof(address);
+#else
+    socklen_t addressLength = sizeof(address);
+#endif
+    BOOST_REQUIRE_EQUAL(getsockname(listener, (struct sockaddr*)&address, &addressLength), 0);
+    const CService service("127.0.0.1", ntohs(address.sin_port));
+
+    server = boost::thread([=, &serverOk]() mutable {
+        SOCKET client = INVALID_SOCKET;
+        serverOk = false;
+        try {
+            client = accept(listener, NULL, NULL);
+            std::string command;
+            if (client == INVALID_SOCKET || !ReceiveTestBootstrapMessage(client, command) || command != "version") {
+                throw std::runtime_error("missing bootstrap version");
+            }
+            CDataStream version(SER_NETWORK, INIT_PROTO_VERSION);
+            const CAddress remote(service, NODE_BOOTSTRAP);
+            version << PROTOCOL_VERSION << uint64_t(NODE_BOOTSTRAP) << GetTime()
+                    << remote << remote << uint64_t(1) << std::string("/loopback/") << 0 << true;
+            if (!SendTestBootstrapMessage(client, "version", version) ||
+                !ReceiveTestBootstrapMessage(client, command) || command != "verack") {
+                throw std::runtime_error("missing bootstrap verack");
+            }
+            CDataStream empty(SER_NETWORK, PROTOCOL_VERSION);
+            if (!SendTestBootstrapMessage(client, "verack", empty) ||
+                !ReceiveTestBootstrapMessage(client, command) || command != NetMsgType::GETBSMAN) {
+                throw std::runtime_error("missing bootstrap manifest request");
+            }
+            CDataStream manifestPayload(SER_NETWORK, PROTOCOL_VERSION);
+            manifestPayload << manifest;
+            if (trailingManifest) {
+                manifestPayload << uint8_t(0);
+            }
+            serverOk = SendTestBootstrapMessage(client, NetMsgType::BSMAN, manifestPayload);
+        } catch (const std::exception&) {
+            serverOk = false;
+        }
+        if (client != INVALID_SOCKET) {
+            CloseSocket(client);
+        }
+        CloseSocket(listener);
+    });
+    return service;
 }
 
 BOOST_FIXTURE_TEST_SUITE(bootstrap_snapshot_protocol_tests, BasicTestingSetup)
@@ -1120,6 +1249,37 @@ BOOST_AUTO_TEST_CASE(bootstrap_manifest_payload_requires_exact_wire_consumption)
     BOOST_CHECK(!DecodeBootstrapSnapshotManifestPayload(trailing, preserved, error));
     BOOST_CHECK(error.find("trailing") != std::string::npos);
     BOOST_CHECK(SerializeHash(preserved) == before);
+}
+
+BOOST_AUTO_TEST_CASE(bootstrap_loopback_reconnect_stream_requires_exact_manifest)
+{
+    const CBootstrapSnapshotManifest manifest = ValidBootstrapManifest();
+    std::string error;
+
+    bool validServerOk = false;
+    boost::thread validServer;
+    const CService validPeer = StartManifestLoopbackPeer(manifest, false, validServer, validServerOk);
+    BOOST_CHECK(BootstrapOpenStreamAndVerifyManifestForTest(validPeer, 1000, manifest, error));
+    validServer.join();
+    BOOST_CHECK(validServerOk);
+
+    bool malformedServerOk = false;
+    boost::thread malformedServer;
+    const CService malformedPeer = StartManifestLoopbackPeer(manifest, true, malformedServer, malformedServerOk);
+    BOOST_CHECK(!BootstrapOpenStreamAndVerifyManifestForTest(malformedPeer, 1000, manifest, error));
+    BOOST_CHECK(error.find("trailing") != std::string::npos);
+    malformedServer.join();
+    BOOST_CHECK(malformedServerOk);
+
+    CBootstrapSnapshotManifest divergent = manifest;
+    ++divergent.nSnapshotBytes;
+    bool divergentServerOk = false;
+    boost::thread divergentServer;
+    const CService divergentPeer = StartManifestLoopbackPeer(divergent, false, divergentServer, divergentServerOk);
+    BOOST_CHECK(!BootstrapOpenStreamAndVerifyManifestForTest(divergentPeer, 1000, manifest, error));
+    BOOST_CHECK(error.find("differs") != std::string::npos);
+    divergentServer.join();
+    BOOST_CHECK(divergentServerOk);
 }
 
 BOOST_AUTO_TEST_CASE(bootstrap_chunk_payload_requires_exact_wire_consumption)

@@ -1789,6 +1789,22 @@ static bool OpenBootstrapStreamAndVerifyManifest(const CService& peerAddress, in
     return true;
 }
 
+// Kept out of bootstrap.h: the native unit fixture uses this narrow seam to
+// exercise the real loopback handshake and reconnect-stream manifest check.
+bool BootstrapOpenStreamAndVerifyManifestForTest(const CService& peerAddress,
+                                                 int timeout_ms,
+                                                 const CBootstrapSnapshotManifest& masterManifest,
+                                                 std::string& error)
+{
+    SOCKET socket = INVALID_SOCKET;
+    const bool ok = OpenBootstrapStreamAndVerifyManifest(peerAddress, timeout_ms,
+                                                          masterManifest, socket, error);
+    if (socket != INVALID_SOCKET) {
+        CloseSocket(socket);
+    }
+    return ok;
+}
+
 // Parallel snapshot download: split the file set across `nStreams` independent
 // connections to the same peer. Defeats single-flow loss-limiting on lossy WAN
 // paths (each flow gets its own congestion window, so aggregate throughput
