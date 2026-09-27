@@ -334,7 +334,12 @@ bool DecodeBootstrapDiscoveryAddresses(CDataStream& addrPayload, const CService&
         if (!(addr.nServices & NODE_BOOTSTRAP)) {
             continue;
         }
-        if (!addr.IsValid()) {
+        // Discovery runs before addrman and dials the returned endpoints
+        // directly. Match the normal addr-message policy: syntactically valid
+        // loopback/private addresses must not consume this bounded bootstrap
+        // dial budget or turn an untrusted peer advertisement into a local-net
+        // connection attempt.
+        if (!addr.IsValid() || !addr.IsRoutable()) {
             continue;
         }
         const std::string entry = addr.ToStringIPPort();

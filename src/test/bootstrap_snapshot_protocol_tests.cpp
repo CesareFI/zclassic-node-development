@@ -1506,6 +1506,10 @@ BOOST_AUTO_TEST_CASE(bootstrap_discovery_addr_keeps_valid_unique_bootstrap_peers
     addresses.push_back(advertised);
     addresses.push_back(advertised);
     addresses.push_back(CAddress(CService("9.9.9.9", Params().GetDefaultPort()), NODE_NETWORK));
+    // Discovery dials retained endpoints directly before addrman is available.
+    // Valid-but-unroutable addresses must not consume that bounded dial budget.
+    addresses.push_back(CAddress(CService("127.0.0.1", Params().GetDefaultPort()), NODE_BOOTSTRAP));
+    addresses.push_back(CAddress(CService("10.0.0.1", Params().GetDefaultPort()), NODE_BOOTSTRAP));
     CDataStream payload(SER_NETWORK, PROTOCOL_VERSION);
     payload << addresses;
 

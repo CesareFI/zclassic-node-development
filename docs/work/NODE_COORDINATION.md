@@ -805,3 +805,30 @@ Worldstream remains non-overlap C23 storage/startup work at
 `d9f5153be8fc59d140db9b6f59e796a7c668160a`. Remaining risk: recovery retries
 the same peer rather than changing sources; peer-diverse manifest acquisition
 under reconnect churn is the recommended next networking investigation.
+
+## Bootstrap discovery rejects unroutable advertised endpoints
+
+Baseline and root cause: the pre-database bootstrap discovery parser accepted
+any syntactically valid `NODE_BOOTSTRAP` address. Unlike normal P2P `addr`
+handling, that included loopback and RFC1918 endpoints. A responding discovery
+peer could therefore consume the small direct-dial budget with local or private
+addresses, reducing healthy-source diversity and causing unwanted local-network
+connection attempts.
+
+Fix and after-result: discovery now requires both `IsValid()` and
+`IsRoutable()` before retaining an advertised endpoint, matching ordinary P2P
+address policy. The bounded result count, exact-payload check, service-bit
+requirement, and transport behavior are otherwise unchanged.
+
+Regression proof: the existing deterministic decoder fixture now mixes a
+routable advertised bootstrap endpoint with duplicate, non-bootstrap, loopback,
+and RFC1918 entries; only the single routable unique bootstrap endpoint is
+retained. The focused decoder case passes after incremental compilation.
+
+Consensus impact: NONE. This only filters untrusted optional peer-discovery
+advertisements before dialing; chain history, consensus serialization, PoW,
+monetary policy, upgrades, block/transaction validity, and cryptography are
+unchanged. Worldstream remains non-overlap C23 storage/startup work at
+`d9f5153be8fc59d140db9b6f59e796a7c668160a`. Remaining risk: diversity is
+endpoint-level rather than autonomous-system-level; a later bounded source
+selection study should measure repeated advertisements across reconnect churn.
