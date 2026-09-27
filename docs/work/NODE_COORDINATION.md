@@ -599,3 +599,15 @@ Worldstream remains non-overlap storage/restart work at
 `d9f5153be8fc59d140db9b6f59e796a7c668160a`. Remaining risk: bounded
 localhost reconnect coverage is still prerequisite evidence for safely adding
 parallel-stream retry/resume behavior.
+
+### CI checkpoint
+
+GitHub Actions run
+[`36346553038`](https://github.com/CesareFI/zclassic-node-development/actions/runs/36346553038)
+completed successfully for `fc130ea1383db94f8236f4364e0b29b4cd9dbf38` on
+2026-09-27. It passed dependency cache restore, `Build depends`, CCache,
+`Build Zclassic`, and artifact upload. In particular, the native_ccache 3.3.1
+official-release download and its unchanged pinned SHA-256 verification no
+longer fail in the previously affected CI stage. This build result does not
+replace the focused C++ test results above and does not claim sanitizer
+coverage.
