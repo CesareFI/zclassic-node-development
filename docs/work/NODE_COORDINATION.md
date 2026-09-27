@@ -252,3 +252,25 @@ is weakened. Consensus impact: NONE. Worldstream remains confined to C23
 storage/restart work. With 13 GB free space, no cold sanitizer build was run;
 this incremental native build used existing artifacts. Next investigate a
 distinct client-side source-diversity or ordinary block-scheduler condition.
+
+## Exact duplicate bootstrap peers no longer consume failover budget
+
+Bootstrap peer selection retries each configured source before proceeding to the
+next one. Previously, repeated identical `-bootstrappeer` entries were treated
+as separate sources, so one unreachable endpoint could consume the full retry
+budget repeatedly before a distinct configured peer was tried. This reduced
+the intended source diversity without adding any independent availability.
+
+`GetBootstrapPeerList` now removes only exact duplicate endpoint strings while
+preserving first-seen order and the existing explicit-peer precedence. The
+same normalization protects compiled defaults if an accidental duplicate is
+introduced. It does not resolve aliases or infer trust/network identity, and
+does not alter manifest, snapshot, block or consensus validation.
+
+The peer-list regression now supplies repeated explicit endpoints and proves
+the ordered distinct list; it also derives and checks the normalized compiled
+defaults. All 57 `bootstrap_snapshot_protocol_tests` cases pass after the
+incremental native rebuild. Consensus impact: NONE. Worldstream remains on
+separate C23 storage/restart work; no sanitizer run is claimed while retaining
+13 GB free-space headroom. Next investigate an ordinary block-scheduler or
+bootstrap-client failure mode that has a bounded local reproduction.

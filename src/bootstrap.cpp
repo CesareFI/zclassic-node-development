@@ -385,23 +385,37 @@ std::vector<std::string> DiscoverBootstrapPeers()
     return discovered;
 }
 
+static std::vector<std::string> UniqueBootstrapPeers(const std::vector<std::string>& peers)
+{
+    std::set<std::string> seen;
+    std::vector<std::string> unique;
+    unique.reserve(peers.size());
+    for (const std::string& peer : peers) {
+        if (seen.insert(peer).second)
+            unique.push_back(peer);
+    }
+    return unique;
+}
+
 std::vector<std::string> GetBootstrapPeerList()
 {
     // Explicit -bootstrappeer entries (repeatable) take precedence: the operator
-    // asked for exactly these peers.
+    // chose these sources. Collapse exact duplicates without changing the
+    // first-seen order so a repeated endpoint cannot consume another source's
+    // complete retry budget.
     std::map<std::string, std::vector<std::string> >::const_iterator it = mapMultiArgs.find("-bootstrappeer");
     if (it != mapMultiArgs.end() && !it->second.empty()) {
-        return it->second;
+        return UniqueBootstrapPeers(it->second);
     }
     // Backwards-compat: a single -bootstrappeer also lands in mapArgs.
     if (mapArgs.count("-bootstrappeer")) {
-        return std::vector<std::string>(1, mapArgs["-bootstrappeer"]);
+        return UniqueBootstrapPeers(std::vector<std::string>(1, mapArgs["-bootstrappeer"]));
     }
     // Otherwise the compiled per-network defaults. Network discovery of
     // additional NODE_BOOTSTRAP peers (DiscoverBootstrapPeers) is invoked
     // lazily by the init bootstrap loop only if these fail, so we neither pay
     // its latency nor dial seed peers when a compiled peer already works.
-    return Params().BootstrapPeers();
+    return UniqueBootstrapPeers(Params().BootstrapPeers());
 }
 
 static bool IsSafeBootstrapSnapshotPath(const boost::filesystem::path& relative);

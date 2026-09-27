@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <iterator>
 #include <map>
+#include <set>
 
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/fstream.hpp>
@@ -2192,6 +2193,8 @@ BOOST_AUTO_TEST_CASE(bootstrap_peer_list_multi_and_single)
         std::vector<std::string> multi;
         multi.push_back("a:1");
         multi.push_back("b:2");
+        multi.push_back("a:1");
+        multi.push_back("b:2");
         mapMultiArgs["-bootstrappeer"] = multi;
         // A stray single value must not override the repeatable list.
         mapArgs["-bootstrappeer"] = "ignored:0";
@@ -2213,14 +2216,20 @@ BOOST_AUTO_TEST_CASE(bootstrap_peer_list_multi_and_single)
         BOOST_CHECK_EQUAL(got[0], "c:3");
     }
 
-    // (c) With neither set, the compiled per-network defaults are returned
-    // (non-empty on mainnet, which BasicTestingSetup selects).
+    // (c) With neither set, compiled per-network defaults remain in their
+    // original order with any accidental exact duplicates removed.
     {
         mapMultiArgs.erase("-bootstrappeer");
         mapArgs.erase("-bootstrappeer");
 
         const std::vector<std::string> got = GetBootstrapPeerList();
-        BOOST_CHECK(got == Params().BootstrapPeers());
+        std::set<std::string> seen;
+        std::vector<std::string> expected;
+        for (const std::string& peer : Params().BootstrapPeers()) {
+            if (seen.insert(peer).second)
+                expected.push_back(peer);
+        }
+        BOOST_CHECK(got == expected);
         BOOST_CHECK(!got.empty());
     }
 
