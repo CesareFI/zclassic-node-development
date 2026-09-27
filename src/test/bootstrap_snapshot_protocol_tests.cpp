@@ -2291,6 +2291,28 @@ BOOST_AUTO_TEST_CASE(bootstrap_peer_list_multi_and_single)
     RestoreArg("-bootstrappeer", hadArg, oldArg);
 }
 
+BOOST_AUTO_TEST_CASE(bootstrap_peer_retry_schedule_round_robins_sources)
+{
+    BootstrapPeerRetrySchedule schedule(3, 3);
+    const size_t expectedPeers[] = { 0, 1, 2, 0, 1, 2, 0, 1, 2 };
+    const int expectedAttempts[] = { 1, 1, 1, 2, 2, 2, 3, 3, 3 };
+    for (size_t i = 0; i < sizeof(expectedPeers) / sizeof(expectedPeers[0]); ++i) {
+        size_t peer = 99;
+        int attempt = 99;
+        BOOST_REQUIRE(schedule.Next(peer, attempt));
+        BOOST_CHECK_EQUAL(peer, expectedPeers[i]);
+        BOOST_CHECK_EQUAL(attempt, expectedAttempts[i]);
+    }
+    size_t peer = 99;
+    int attempt = 99;
+    BOOST_CHECK(!schedule.Next(peer, attempt));
+
+    BootstrapPeerRetrySchedule empty(0, 3);
+    BOOST_CHECK(!empty.Next(peer, attempt));
+    BootstrapPeerRetrySchedule disabled(3, 0);
+    BOOST_CHECK(!disabled.Next(peer, attempt));
+}
+
 // The trustless-bootstrap finalization hold (option B consensus-safety mitigation):
 // a node holding an as-yet-unvalidated imported snapshot must PAUSE auto-finalization
 // so the reorg-depth rule cannot permanently pin it to an unproven (possibly forged

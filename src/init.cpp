@@ -2440,8 +2440,10 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
                     InitWarning(_("EXPERIMENTAL: -bootstrapmode=trustless accepts a peer's self-snapshot provisionally and re-derives the UTXO set from genesis in the background, reindexing if it does not validate. WARNING: until validation completes (which can take as long as a full sync), the node operates on an UNVERIFIED UTXO set; do not rely on balances or spend received funds until getblockchaininfo reports bootstrap_validation state \"validated\"."));
                 else
                     InitWarning(_("Bootstrap snapshots are trusted input; the snapshot tip is verified against the compiled anchor."));
-                // Retry each peer a few times before giving up. A single transient
-                // hiccup (a brief connection blip, a serve-side snapshot refresh, a
+                // Retry sources a few times before giving up, but round-robin the
+                // attempts: a reconnecting source must not delay a healthy second
+                // source by two full bootstrap timeouts. A single transient hiccup
+                // (a brief connection blip, a serve-side snapshot refresh, a
                 // momentary stall on a lossy link) otherwise drops a fresh node
                 // SILENTLY into peerless P2P sync and it appears to hang at 0 blocks.
                 // Each BootstrapFromPeer attempt is self-contained (it stages into a
@@ -2449,38 +2451,38 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
                 const int nBootstrapAttempts = 3;
                 const std::vector<std::string> bootstrapPeers = GetBootstrapPeerList();
                 const int nBootstrapPeers = (int)bootstrapPeers.size();
-                int peerIndex = 0;
-                BOOST_FOREACH(const std::string& peer, bootstrapPeers) {
-                    ++peerIndex;
-                    if (ShutdownRequested())
+                BootstrapPeerRetrySchedule retrySchedule(bootstrapPeers.size(), nBootstrapAttempts);
+                size_t peerOffset = 0;
+                int attempt = 0;
+                while (!ShutdownRequested() && retrySchedule.Next(peerOffset, attempt)) {
+                    const std::string& peer = bootstrapPeers[peerOffset];
+                    const int peerIndex = (int)peerOffset + 1;
+                    // Keep the UI alive during connect/handshake/failover. The GUI
+                    // surfaces this warmup status via getinfo; without it a dead or
+                    // stalled peer leaves the wallet frozen on the prior message
+                    // (e.g. "Verifying wallet...") for the whole failover window.
+                    uiInterface.InitMessage(strprintf(
+                        _("Connecting to bootstrap server %d of %d (attempt %d of %d)..."),
+                        peerIndex, nBootstrapPeers, attempt, nBootstrapAttempts));
+                    // Stamp the structured getbootstrapinfo status with the
+                    // peer/attempt/mode this iteration is trying (the download
+                    // loops fill in percent/bytes/streams). phase becomes
+                    // "active"; mode mirrors the anchor/trustless choice.
+                    SetBootstrapInfoProgress(-1, 0, 0, -1.0, 0, peer,
+                                             peerIndex, nBootstrapPeers,
+                                             attempt, nBootstrapAttempts,
+                                             fTrustlessMode ? "trustless" : "anchor", 0);
+                    if (BootstrapFromPeer(peer, GetDataDir(), bootstrap_error)) {
+                        bootstrap_snapshot_ran = true;
                         break;
-                    for (int attempt = 1; attempt <= nBootstrapAttempts && !ShutdownRequested(); ++attempt) {
-                        // Keep the UI alive during connect/handshake/failover. The GUI
-                        // surfaces this warmup status via getinfo; without it a dead or
-                        // stalled peer leaves the wallet frozen on the prior message
-                        // (e.g. "Verifying wallet...") for the whole failover window.
-                        uiInterface.InitMessage(strprintf(
-                            _("Connecting to bootstrap server %d of %d (attempt %d of %d)..."),
-                            peerIndex, nBootstrapPeers, attempt, nBootstrapAttempts));
-                        // Stamp the structured getbootstrapinfo status with the
-                        // peer/attempt/mode this iteration is trying (the download
-                        // loops fill in percent/bytes/streams). phase becomes
-                        // "active"; mode mirrors the anchor/trustless choice.
-                        SetBootstrapInfoProgress(-1, 0, 0, -1.0, 0, peer,
-                                                 peerIndex, nBootstrapPeers,
-                                                 attempt, nBootstrapAttempts,
-                                                 fTrustlessMode ? "trustless" : "anchor", 0);
-                        if (BootstrapFromPeer(peer, GetDataDir(), bootstrap_error)) {
-                            bootstrap_snapshot_ran = true;
-                            break;
-                        }
-                        LogPrintf("Bootstrap snapshot from %s failed (attempt %d/%d): %s\n",
-                                  peer, attempt, nBootstrapAttempts, bootstrap_error);
-                        if (attempt < nBootstrapAttempts)
-                            MilliSleep(3000); // brief backoff before retrying
                     }
-                    if (bootstrap_snapshot_ran)
-                        break;
+                    LogPrintf("Bootstrap snapshot from %s failed (attempt %d/%d): %s\n",
+                              peer, attempt, nBootstrapAttempts, bootstrap_error);
+                    // A retry delay belongs between rounds, not between distinct
+                    // sources: a healthy second peer should get its first chance
+                    // immediately after a failed first peer.
+                    if (attempt < nBootstrapAttempts && peerOffset + 1 == bootstrapPeers.size())
+                        MilliSleep(3000);
                 }
                 // If the explicit/compiled peers didn't work and the operator did
                 // not pin a specific peer, OPTIONALLY fall back to peers discovered

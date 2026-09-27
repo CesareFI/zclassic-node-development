@@ -120,6 +120,22 @@ std::vector<std::string> DiscoverBootstrapPeers();
 //! set, else the compiled per-network defaults (CChainParams::BootstrapPeers).
 std::vector<std::string> GetBootstrapPeerList();
 
+// Bounded round-robin retry order for bootstrap sources. A source gets its
+// second attempt only after every source received its first, so one reconnecting
+// peer cannot monopolize the initial fast-sync failover window.
+class BootstrapPeerRetrySchedule
+{
+public:
+    BootstrapPeerRetrySchedule(size_t peerCount, int maxAttempts);
+    bool Next(size_t& peerIndex, int& attempt);
+
+private:
+    size_t peerCount;
+    int maxAttempts;
+    size_t nextPeer;
+    int nextAttempt;
+};
+
 //! Auto-serve (-bootstrapserve=auto): activate serving from the immutable copy
 //! this node retained when it fast-synced (data_dir/bootstrap-serve-source).
 //! Returns true and points the serve machinery (-bootstrapsourcedir) at that

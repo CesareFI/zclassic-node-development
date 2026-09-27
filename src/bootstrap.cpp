@@ -438,6 +438,27 @@ std::vector<std::string> GetBootstrapPeerList()
     return UniqueBootstrapPeers(Params().BootstrapPeers());
 }
 
+BootstrapPeerRetrySchedule::BootstrapPeerRetrySchedule(size_t peerCountIn, int maxAttemptsIn)
+    : peerCount(peerCountIn), maxAttempts(maxAttemptsIn), nextPeer(0), nextAttempt(1)
+{
+}
+
+bool BootstrapPeerRetrySchedule::Next(size_t& peerIndex, int& attempt)
+{
+    if (peerCount == 0 || maxAttempts < 1 || nextAttempt > maxAttempts) {
+        return false;
+    }
+
+    peerIndex = nextPeer;
+    attempt = nextAttempt;
+    ++nextPeer;
+    if (nextPeer == peerCount) {
+        nextPeer = 0;
+        ++nextAttempt;
+    }
+    return true;
+}
+
 static bool IsSafeBootstrapSnapshotPath(const boost::filesystem::path& relative);
 static bool IsBootstrapSnapshotDataPath(const boost::filesystem::path& relative);
 static bool HashBootstrapSnapshotFile(const boost::filesystem::path& path, uint256& hash, std::string& error);

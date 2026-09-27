@@ -493,3 +493,42 @@ are untouched. Worldstream's latest accessible C23 head
 there is no overlap. Remaining risk: inspect a distinct bootstrap
 manifest-source diversity/reconnect condition rather than broaden scheduler
 policy without a measured failure.
+
+## Bootstrap retry rounds preserve source diversity
+
+Baseline and root cause: a fresh node with several configured bootstrap
+sources tried source A three times before source B once. A reconnecting or
+slow A could consume two full bootstrap timeout windows after its first
+failure, delaying a healthy B and making a multi-source configuration behave
+like a single-source configuration during the most failure-prone startup
+period.
+
+Fix and after-result: the bounded retry budget is unchanged (three attempts
+per source), but `BootstrapPeerRetrySchedule` emits attempt one for every
+source before attempt two for any source. The 3-second backoff is now between
+failed rounds, never between distinct sources; a healthy B receives its first
+attempt immediately after failed A. One configured peer retains exactly the
+previous retry and backoff behavior. Each failed attempt still uses the
+existing self-contained staging cleanup, and no peer is trusted beyond the
+unchanged manifest and imported-state checks.
+
+Regression proof: the deterministic scheduler regression proves the exact
+three-source sequence A1, B1, C1, A2, B2, C2, A3, B3, C3 and refuses empty or
+zero-budget schedules. It passes together with all 60
+`bootstrap_snapshot_protocol_tests` cases and all 57 `block_download_tests`
+cases after an incremental C++ rebuild. The make-driven broad legacy suite
+also reported 327 failures in unrelated `rpc_wallet_tests`: concurrent/global
+ECC context initialization trips `ECC_Start()`'s existing assertion. That
+failure is recorded as failed and unrun for this networking slice; it is not
+masked or attributed to this change. `git diff --check` passes. ASan/UBSan is
+unrun because 11 GB free preserves the 10 GB reserve but cannot safely hold a
+cold sanitizer build; this legacy checkout has no cyclomatic-complexity gate.
+
+Consensus impact: NONE. Only local bootstrap attempt order and backoff timing
+change; chain history, peer wire compatibility, imported snapshot validation,
+block/header and transaction validation, PoW, serialization, monetary policy,
+upgrades, and cryptography are untouched. Worldstream's accessible C23 head
+`d9f5153be8fc59d140db9b6f59e796a7c668160a` is storage/restart-only and does
+not overlap. Remaining risk: establish whether parallel snapshot streams can
+recover individual transient stream failures without discarding verified
+staging, before considering any broader source-mixing policy.
