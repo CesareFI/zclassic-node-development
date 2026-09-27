@@ -1514,6 +1514,19 @@ BOOST_AUTO_TEST_CASE(inventory_trailing_bytes_do_not_schedule_block_download)
     BOOST_CHECK_GE(after.nMisbehavior - before.nMisbehavior, 20);
 }
 
+BOOST_AUTO_TEST_CASE(getdata_trailing_bytes_do_not_queue_service_work)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "getdata", true);
+    PrepareTransport(peer);
+    CDataStream malformed(SER_NETWORK, PROTOCOL_VERSION);
+    malformed << std::vector<CInv>();
+    malformed << uint8_t{0};
+    BOOST_CHECK(peer.vRecvGetData.empty());
+    BOOST_CHECK(!ProcessMessage(&peer, "getdata", malformed, GetTime()));
+    BOOST_CHECK(peer.vRecvGetData.empty());
+    BOOST_CHECK_GE(Stats(peer).nMisbehavior, 20);
+}
+
 BOOST_AUTO_TEST_CASE(inventory_send_abort_releases_only_unsent_requests)
 {
     CNode announced(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "inv", true);

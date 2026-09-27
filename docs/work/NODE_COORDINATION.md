@@ -365,3 +365,16 @@ pass with 69,276 assertions. Consensus impact: NONE. No block, transaction,
 PoW, chain-selection, serialization, monetary, or upgrade rule changed.
 Worldstream remains non-overlapping storage/restart work. No cold sanitizer
 build was run with 13 GB free and the 10 GB reserve.
+
+## Trailing getdata payloads are rejected before service
+
+The `getdata` handler accepted trailing bytes after a declared inventory list.
+A bounded regression established that malformed input returned success without
+the standard malformed-message score. The handler now requires payload
+exhaustion before logging, queuing service work, or calling `ProcessGetData`.
+
+The focused regression passes 527 assertions; all 51 `block_download_tests`
+cases pass with 69,803 assertions. Consensus impact: NONE. No validation,
+PoW, chain selection, serialization, monetary, or upgrade rule changed.
+Worldstream remains non-overlapping and no cold sanitizer build was started
+within the preserved 13 GB free-space headroom.

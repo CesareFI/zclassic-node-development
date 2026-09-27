@@ -6749,6 +6749,10 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
             Misbehaving(pfrom->GetId(), 20);
             return error("message getdata size() = %u", vInv.size());
         }
+        if (!vRecv.empty()) {
+            Misbehaving(pfrom->GetId(), 20);
+            return error("getdata message has trailing bytes");
+        }
 
         if (fDebug || (vInv.size() != 1))
             LogPrint("net", "received getdata (%u invsz) peer=%d\n", vInv.size(), pfrom->id);
