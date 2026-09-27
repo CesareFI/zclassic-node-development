@@ -678,3 +678,13 @@ upgrades, block/transaction rules, and cryptography are unchanged. Worldstream
 remains non-overlap storage/restart work. Remaining risk: a disconnect after a
 stream has begun a chunk subset still falls through to the existing outer
 snapshot retry; resume semantics require separate byte-accurate evidence.
+
+### CI checkpoint
+
+GitHub Actions run
+[`36348225710`](https://github.com/CesareFI/zclassic-node-development/actions/runs/36348225710)
+completed successfully for `15a741ab25297486bd3a5da2a7c737ee331c543a` on
+2026-09-27. Dependency restore/build, CCache, the full Zclassic build, and
+artifact upload all passed. This confirms both the bounded stream-open retry
+implementation and the still-pinned native_ccache dependency path in the
+published C++ development head; it does not claim sanitizer coverage.
