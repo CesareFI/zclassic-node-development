@@ -857,3 +857,23 @@ Worldstream remains non-overlap C23 storage/startup work at
 `d9f5153be8fc59d140db9b6f59e796a7c668160a`. Remaining risk: routable address
 diversity is not autonomous-system diversity; measure source concentration
 before considering more complex selection policy.
+
+## Discovered bootstrap peers get bounded round-robin recovery
+
+Baseline and root cause: configured bootstrap peers receive three round-robin
+attempts, but opt-in discovered peers were attempted only once. A source reset
+during its initial connection could therefore discard the entire discovered
+fallback despite other recovery paths being bounded and restart-safe.
+
+Fix and after-result: discovered peers now use the existing retry scheduler for
+two rounds. Every source receives its first attempt before any source receives
+a second; the existing three-second pause remains only between rounds.
+
+Regression proof: incremental compilation passes; the deterministic retry
+schedule regression and all 67 `bootstrap_snapshot_protocol_tests` pass.
+
+Consensus impact: NONE. This changes optional bootstrap transport availability
+only; chain history, consensus serialization, PoW, monetary policy, upgrades,
+block/transaction validity, and cryptography are unchanged. Worldstream
+remains non-overlap C23 storage/startup work. Remaining risk: discovery still
+depends on available seed responses; normal P2P fallback remains unchanged.

@@ -2499,14 +2499,32 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
                 // peer cannot feed a forged chain.)
                 if (!bootstrap_snapshot_ran && !explicit_peer &&
                     GetBoolArg("-bootstrapdiscover", false)) {
-                    BOOST_FOREACH(const std::string& peer, DiscoverBootstrapPeers()) {
+                    // Discovery is an availability fallback, so keep its retry
+                    // budget smaller than configured peers while still giving a
+                    // transiently resetting source another chance. Round-robin
+                    // sources: one bad peer must not delay every other newly
+                    // discovered peer by a second full transfer timeout.
+                    const int nDiscoveredBootstrapAttempts = 2;
+                    const std::vector<std::string> discoveredPeers = DiscoverBootstrapPeers();
+                    BootstrapPeerRetrySchedule discoveredRetrySchedule(discoveredPeers.size(),
+                                                                        nDiscoveredBootstrapAttempts);
+                    size_t discoveredOffset = 0;
+                    int discoveredAttempt = 0;
+                    while (!ShutdownRequested() &&
+                           discoveredRetrySchedule.Next(discoveredOffset, discoveredAttempt)) {
+                        const std::string& peer = discoveredPeers[discoveredOffset];
                         if (ShutdownRequested())
                             break;
                         if (BootstrapFromPeer(peer, GetDataDir(), bootstrap_error)) {
                             bootstrap_snapshot_ran = true;
                             break;
                         }
-                        LogPrintf("Bootstrap snapshot from discovered peer %s failed: %s\n", peer, bootstrap_error);
+                        LogPrintf("Bootstrap snapshot from discovered peer %s failed (attempt %d/%d): %s\n",
+                                  peer, discoveredAttempt, nDiscoveredBootstrapAttempts, bootstrap_error);
+                        if (discoveredAttempt < nDiscoveredBootstrapAttempts &&
+                            discoveredOffset + 1 == discoveredPeers.size()) {
+                            MilliSleep(3000);
+                        }
                     }
                 }
                 if (!bootstrap_snapshot_ran) {
