@@ -1194,6 +1194,10 @@ BOOST_AUTO_TEST_CASE(bootstrap_socket_frame_deadline_is_monotonic_and_bounded)
     BOOST_CHECK_EQUAL(BootstrapSocketRemainingTimeoutMillisForTest(deadline), 1);
     SetMockSteadyTimeMicros(1060000);
     BOOST_CHECK_EQUAL(BootstrapSocketRemainingTimeoutMillisForTest(deadline), 0);
+    SetMockSteadyTimeMicros(1);
+    BOOST_CHECK_EQUAL(BootstrapSocketRemainingTimeoutMillisForTest(
+                          std::numeric_limits<int64_t>::max()),
+                      std::numeric_limits<int>::max());
     SetMockSteadyTimeMicros(0);
 }
 

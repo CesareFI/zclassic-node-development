@@ -749,10 +749,12 @@ reopened, no message is retried, and no protocol/validation behavior changes.
 
 Regression proof: the deterministic mock-clock case starts a 60 ms budget at
 1,000,000 us, verifies 60 ms remains after one microsecond, one ms remains at
-the final microsecond, and zero remains at expiry. This directly covers the
-helpers used around every partial socket operation. After incremental rebuild,
-the focused case and all 65 `bootstrap_snapshot_protocol_tests` cases pass;
-`git diff --check` passes. ASan/UBSan remains unrun because 11 GB free must
+the final microsecond, and zero remains at expiry; it also proves a saturated
+deadline clamps to `INT_MAX` milliseconds without signed rounding overflow.
+This directly covers the helpers used around every partial socket operation.
+After incremental rebuild, the focused case and all 65
+`bootstrap_snapshot_protocol_tests` cases pass; `git diff --check` passes.
+ASan/UBSan remains unrun because 11 GB free must
 retain the 10 GB reserve; this legacy checkout has no cyclomatic-complexity
 ratchet. The unrelated broad RPC-wallet ECC-context collision remains
 unaddressed and is not hidden.

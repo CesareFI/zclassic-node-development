@@ -246,9 +246,12 @@ static int BootstrapSocketRemainingTimeoutMillis(int64_t deadline_us)
     if (remaining_us <= 0) {
         return 0;
     }
+    const int64_t max_timeout_us = (int64_t)std::numeric_limits<int>::max() * 1000;
+    if (remaining_us > max_timeout_us) {
+        return std::numeric_limits<int>::max();
+    }
     const int64_t remaining_ms = (remaining_us + 999) / 1000;
-    return remaining_ms > std::numeric_limits<int>::max()
-        ? std::numeric_limits<int>::max() : (int)remaining_ms;
+    return (int)remaining_ms;
 }
 
 // Narrow deterministic test seams; neither is node API.
