@@ -728,6 +728,25 @@ static bool ReceiveExpectedBootstrapMessage(SOCKET socket, const char* expected_
     }
 }
 
+bool DecodeBootstrapSnapshotManifestPayload(CDataStream& payload,
+                                            CBootstrapSnapshotManifest& manifest,
+                                            std::string& error)
+{
+    CBootstrapSnapshotManifest decoded;
+    try {
+        payload >> decoded;
+    } catch (const std::exception& e) {
+        error = strprintf("could not decode bootstrap manifest: %s", e.what());
+        return false;
+    }
+    if (!payload.empty()) {
+        error = "bootstrap manifest has trailing bytes";
+        return false;
+    }
+    manifest = decoded;
+    return true;
+}
+
 bool DecodeBootstrapNetworkMessage(const CSerializeData& message, std::string& command, CDataStream& payload, std::string& error)
 {
     command.clear();
@@ -1741,10 +1760,7 @@ static bool OpenBootstrapStreamAndVerifyManifest(const CService& peerAddress, in
         return false;
     }
     CBootstrapSnapshotManifest manifest;
-    try {
-        manifestPayload >> manifest;
-    } catch (const std::exception& e) {
-        error = strprintf("could not decode bootstrap manifest on stream: %s", e.what());
+    if (!DecodeBootstrapSnapshotManifestPayload(manifestPayload, manifest, error)) {
         CloseSocket(socket);
         return false;
     }
@@ -3280,12 +3296,9 @@ bool BootstrapFromPeer(const std::string& peer, const boost::filesystem::path& d
         }
 
         CBootstrapSnapshotManifest manifest;
-        try {
-            manifestPayload >> manifest;
-        } catch (const std::exception& e) {
+        if (!DecodeBootstrapSnapshotManifestPayload(manifestPayload, manifest, error)) {
             CloseSocket(socket);
             boost::filesystem::remove_all(staging);
-            error = strprintf("could not decode bootstrap manifest: %s", e.what());
             return false;
         }
 
@@ -4229,11 +4242,8 @@ bool FetchZcashParamsFromPeer(const std::string& peer, std::string& error)
         }
 
         CBootstrapSnapshotManifest manifest;
-        try {
-            manifestPayload >> manifest;
-        } catch (const std::exception& e) {
+        if (!DecodeBootstrapSnapshotManifestPayload(manifestPayload, manifest, error)) {
             CloseSocket(socket);
-            error = strprintf("could not decode zcash param manifest: %s", e.what());
             return false;
         }
         // Require the exact compiled chunk size (see ValidateBootstrapSnapshotManifest):

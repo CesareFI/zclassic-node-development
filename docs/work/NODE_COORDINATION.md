@@ -532,3 +532,37 @@ upgrades, and cryptography are untouched. Worldstream's accessible C23 head
 not overlap. Remaining risk: establish whether parallel snapshot streams can
 recover individual transient stream failures without discarding verified
 staging, before considering any broader source-mixing policy.
+
+## Bootstrap manifest streams require exact payloads
+
+Baseline and root cause: bootstrap snapshot acquisition has a separate socket
+path from normal `CNode` message processing. Its master-manifest connection,
+parallel reconnect streams, and Zcash-parameter manifest client deserialized a
+manifest but accepted remaining bytes. Thus a source could present a valid
+manifest followed by arbitrary wire data and still enter manifest validation or
+the parallel-stream identity comparison.
+
+Fix and after-result: all three clients now share
+`DecodeBootstrapSnapshotManifestPayload`. It decodes into a temporary,
+requires payload exhaustion, and assigns the caller's manifest only on exact
+success. A malformed payload therefore cannot alter an already-held master
+manifest or start staging work; valid serializations and the existing
+manifest/anchor/hash checks are unchanged.
+
+Regression proof: a deterministic wire fixture proves a valid manifest
+round-trips with complete consumption, then appends one byte and proves
+rejection while preserving the caller's prior v3 manifest. The focused case
+and the complete 61-case `bootstrap_snapshot_protocol_tests` group pass after
+an incremental C++ rebuild. `git diff --check` passes. ASan/UBSan remains
+unrun because 11 GB free must retain the 10 GB reserve and cannot safely hold
+a cold sanitizer build; this legacy checkout has no cyclomatic-complexity
+gate. The known unrelated broad `rpc_wallet_tests` ECC-context collision from
+the previous slice remains failed/unaddressed, not suppressed.
+
+Consensus impact: NONE. This is strict handling of optional bootstrap and
+parameter transfer framing before existing validation; chain history,
+consensus serialization, PoW, monetary policy, upgrades, block/transaction
+validation, and cryptography are untouched. Worldstream remains non-overlap
+storage/restart work at `d9f5153be8fc59d140db9b6f59e796a7c668160a`.
+Remaining risk: a full isolated reconnect fixture is still needed before
+changing parallel-stream retry/resume behavior.

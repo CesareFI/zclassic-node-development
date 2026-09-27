@@ -1100,6 +1100,28 @@ BOOST_AUTO_TEST_CASE(bootstrap_network_message_header_failures)
     BOOST_CHECK(error.find("size mismatch") != std::string::npos);
 }
 
+BOOST_AUTO_TEST_CASE(bootstrap_manifest_payload_requires_exact_wire_consumption)
+{
+    const CBootstrapSnapshotManifest expected = ValidBootstrapManifest();
+    CDataStream valid(SER_NETWORK, PROTOCOL_VERSION);
+    valid << expected;
+    CBootstrapSnapshotManifest decoded;
+    std::string error;
+    BOOST_REQUIRE(DecodeBootstrapSnapshotManifestPayload(valid, decoded, error));
+    BOOST_CHECK(error.empty());
+    BOOST_CHECK(SerializeHash(decoded) == SerializeHash(expected));
+    BOOST_CHECK(valid.empty());
+
+    CDataStream trailing(SER_NETWORK, PROTOCOL_VERSION);
+    trailing << expected;
+    trailing << uint8_t(0);
+    CBootstrapSnapshotManifest preserved = ValidV3BootstrapManifest();
+    const uint256 before = SerializeHash(preserved);
+    BOOST_CHECK(!DecodeBootstrapSnapshotManifestPayload(trailing, preserved, error));
+    BOOST_CHECK(error.find("trailing") != std::string::npos);
+    BOOST_CHECK(SerializeHash(preserved) == before);
+}
+
 BOOST_AUTO_TEST_CASE(bootstrap_discovery_addr_rejects_trailing_wire_bytes)
 {
     const CService source("127.0.0.1", Params().GetDefaultPort());

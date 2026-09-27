@@ -254,6 +254,11 @@ bool ReadBootstrapSnapshotChunk(const CBootstrapSnapshotChunkRequest& request,
 //! gossip/CNode path must always pass false; only the explicit bootstrap driver
 //! (and the server validating its own manifest) may pass true.
 bool ValidateBootstrapSnapshotManifest(const CBootstrapSnapshotManifest& manifest, std::string& error, bool fTrustlessAllowed = false);
+//! Decode one received snapshot/parameter manifest and require the complete
+//! bounded wire payload. On failure `manifest` is left unchanged.
+bool DecodeBootstrapSnapshotManifestPayload(CDataStream& payload,
+                                            CBootstrapSnapshotManifest& manifest,
+                                            std::string& error);
 
 // --- Option B client side: trustless self-snapshot provisional accept ---------
 //! Record that a v2 self-snapshot was just imported and awaits provisional
