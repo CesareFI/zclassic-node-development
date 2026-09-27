@@ -378,3 +378,31 @@ cases pass with 69,803 assertions. Consensus impact: NONE. No validation,
 PoW, chain selection, serialization, monetary, or upgrade rule changed.
 Worldstream remains non-overlapping and no cold sanitizer build was started
 within the preserved 13 GB free-space headroom.
+
+## Trailing chain requests cannot enter service
+
+Baseline and root cause: `getblocks` and `getheaders` decoded their required
+locator and stop hash, but did not require the payload to end before taking
+`cs_main` and entering their serving paths. A bounded direct regression sent a
+valid empty locator and stop hash followed by one byte. Both commands returned
+success and assigned no malformed-message score (four deterministic assertion
+failures), proving that a malformed request could reach service selection.
+
+Fix and after-result: each handler now requires the locator payload to be
+fully consumed immediately after decoding and before taking `cs_main`. A
+trailing byte receives the existing score of 20 and returns an error. The
+regression verifies both commands emit neither inventory nor headers and leave
+per-peer/global block-in-flight accounting unchanged.
+
+Regression proof: the focused direct case passes after an incremental native
+rebuild. The full `block_download_tests` suite passes all 52 cases (`*** No
+errors detected`). `git diff --check` passes. The legacy checkout has no
+cyclomatic-complexity gate; no sanitizer run is claimed because only 11 GB
+remain with a 10 GB reserve and a cold sanitizer build would not fit safely.
+
+Consensus impact: NONE. This rejects malformed P2P framing before ordinary
+serving; block/header acceptance, PoW, chain selection, serialization,
+transaction validity, monetary rules, upgrades, and cryptography are
+unchanged. Worldstream's accessible work remains C23 startup/fresh-sync only.
+Remaining risk: audit the next distinct bounded P2P message path rather than
+changing scheduling policy without a measured stall.

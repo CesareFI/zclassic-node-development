@@ -6770,6 +6770,10 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
         CBlockLocator locator;
         uint256 hashStop;
         vRecv >> locator >> hashStop;
+        if (!vRecv.empty()) {
+            Misbehaving(pfrom->GetId(), 20);
+            return error("getblocks message has trailing bytes");
+        }
 
         LOCK(cs_main);
 
@@ -6814,6 +6818,10 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
         CBlockLocator locator;
         uint256 hashStop;
         vRecv >> locator >> hashStop;
+        if (!vRecv.empty()) {
+            Misbehaving(pfrom->GetId(), 20);
+            return error("getheaders message has trailing bytes");
+        }
 
         LOCK(cs_main);
 

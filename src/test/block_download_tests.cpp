@@ -1527,6 +1527,28 @@ BOOST_AUTO_TEST_CASE(getdata_trailing_bytes_do_not_queue_service_work)
     BOOST_CHECK_GE(Stats(peer).nMisbehavior, 20);
 }
 
+BOOST_AUTO_TEST_CASE(chain_request_trailing_bytes_do_not_enter_service)
+{
+    for (const std::string& command : {"getblocks", "getheaders"}) {
+        CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
+                   command.c_str(), true);
+        PrepareTransport(peer);
+        CDataStream malformed(SER_NETWORK, PROTOCOL_VERSION);
+        malformed << CBlockLocator() << uint256() << uint8_t{0};
+        const auto before = Stats(peer);
+        const unsigned invBefore = Sent(peer, "inv");
+        const unsigned headersBefore = Sent(peer, "headers");
+        BOOST_CHECK(!ProcessMessage(&peer, command, malformed, GetTime()));
+        const auto after = Stats(peer);
+        BOOST_CHECK_EQUAL(Sent(peer, "inv"), invBefore);
+        BOOST_CHECK_EQUAL(Sent(peer, "headers"), headersBefore);
+        BOOST_CHECK_EQUAL(after.nBlocksInFlight, before.nBlocksInFlight);
+        BOOST_CHECK_EQUAL(after.nGlobalBlocksInFlight,
+                          before.nGlobalBlocksInFlight);
+        BOOST_CHECK_GE(after.nMisbehavior - before.nMisbehavior, 20);
+    }
+}
+
 BOOST_AUTO_TEST_CASE(inventory_send_abort_releases_only_unsent_requests)
 {
     CNode announced(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "inv", true);
