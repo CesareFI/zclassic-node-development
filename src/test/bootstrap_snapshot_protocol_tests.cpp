@@ -491,6 +491,39 @@ BOOST_AUTO_TEST_CASE(disconnected_peer_keeps_bootstrap_chunk_queue_for_teardown)
     BOOST_CHECK_EQUAL(queued.nLength, request.nLength);
 }
 
+BOOST_AUTO_TEST_CASE(bootstrap_deferred_chunk_survives_concurrent_queue_refill)
+{
+    CNode node(INVALID_SOCKET, CAddress(CService("127.0.0.1", 0)), "", true);
+    CBootstrapSnapshotChunkRequest request;
+    request.nFileIndex = 1;
+    request.nLength = 512 * 1024;
+    size_t queued = 0;
+    while (true) {
+        request.nOffset = (uint64_t)queued * request.nLength;
+        if (!node.QueueBootstrapChunkRequest(CNode::BOOTSTRAP_CHUNK_SNAPSHOT, request)) break;
+        ++queued;
+    }
+    BOOST_REQUIRE_GT(queued, 1u);
+
+    CNode::BootstrapChunkKind kind = CNode::BOOTSTRAP_CHUNK_PARAMS;
+    CBootstrapSnapshotChunkRequest deferred;
+    BOOST_REQUIRE(node.PopBootstrapChunkRequest(kind, deferred));
+    BOOST_REQUIRE_EQUAL((int)kind, (int)CNode::BOOTSTRAP_CHUNK_SNAPSHOT);
+
+    // Simulate ProcessMessage filling the slot after SendMessages popped the
+    // throttled request but before it can requeue it.
+    request.nOffset = (uint64_t)queued * request.nLength;
+    BOOST_REQUIRE(node.QueueBootstrapChunkRequest(CNode::BOOTSTRAP_CHUNK_PARAMS, request));
+    node.RequeueBootstrapChunkRequest(kind, deferred);
+
+    CBootstrapSnapshotChunkRequest first;
+    BOOST_REQUIRE(node.PopBootstrapChunkRequest(kind, first));
+    BOOST_CHECK_EQUAL((int)kind, (int)CNode::BOOTSTRAP_CHUNK_SNAPSHOT);
+    BOOST_CHECK_EQUAL(first.nOffset, deferred.nOffset);
+    BOOST_CHECK_EQUAL(first.nLength, deferred.nLength);
+    BOOST_CHECK(!node.QueueBootstrapChunkRequest(CNode::BOOTSTRAP_CHUNK_SNAPSHOT, request));
+}
+
 BOOST_AUTO_TEST_CASE(bootstrap_param_chunk_request_queue_preserves_kind_and_order)
 {
     CNode node(INVALID_SOCKET, CAddress(CService("127.0.0.1", 0)), "", true);

@@ -228,3 +228,27 @@ validation rule changed. Consensus impact: NONE. No sanitizer run is claimed;
 the existing 13 GB free-space headroom is reserved against a cold sanitizer
 build. The next investigation remains bootstrap-client source diversity or a
 distinct scheduler condition.
+
+## Bootstrap throttle requeue preserves the deferred request
+
+The per-peer bootstrap serve queue previously admitted requests up to all 32
+slots. If the serving thread popped an older request, then a message thread
+filled that freed slot before a throttle decision requeued it, the requeue was
+silently dropped. The client eventually retried, but a bounded, healthy request
+could lose FIFO service and wait for a timeout under reconnect/queue churn.
+
+Admission now reserves one of the existing 32 bounded slots for a possible
+in-flight requeue. Normal queued depth is 31; a throttle requeue restores the
+older request at the front to reach the unchanged hard cap of 32. The
+deterministic regression fills admission, pops one request, refills the freed
+slot as a concurrent message would, requeues the deferred request, and proves
+that request is served first while further admission is still refused at the
+cap.
+
+The focused regression passes 9 assertions and all 57
+`bootstrap_snapshot_protocol_tests` cases pass. No snapshot acceptance,
+manifest/chunk verification, chain validation, consensus rule, or resource cap
+is weakened. Consensus impact: NONE. Worldstream remains confined to C23
+storage/restart work. With 13 GB free space, no cold sanitizer build was run;
+this incremental native build used existing artifacts. Next investigate a
+distinct client-side source-diversity or ordinary block-scheduler condition.

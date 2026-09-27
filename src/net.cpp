@@ -2164,7 +2164,11 @@ void CNode::AskFor(const CInv& inv)
 bool CNode::QueueBootstrapChunkRequest(BootstrapChunkKind kind, const CBootstrapSnapshotChunkRequest& request)
 {
     LOCK(cs_bootstrap_requests);
-    if (vBootstrapChunkRequests.size() >= MAX_BOOTSTRAP_CHUNK_REQUESTS_PER_PEER) {
+    // Keep one slot for a request that SendQueuedBootstrapSnapshotChunk popped
+    // and must requeue after a throttle decision. That preserves FIFO progress
+    // if the message thread enqueues another request before the serving thread
+    // reacquires this lock, while the queue remains bounded at the same cap.
+    if (vBootstrapChunkRequests.size() >= MAX_BOOTSTRAP_CHUNK_REQUESTS_PER_PEER - 1) {
         return false;
     }
     BootstrapChunkQueueItem item;
@@ -2177,13 +2181,10 @@ bool CNode::QueueBootstrapChunkRequest(BootstrapChunkKind kind, const CBootstrap
 void CNode::RequeueBootstrapChunkRequest(BootstrapChunkKind kind, const CBootstrapSnapshotChunkRequest& request)
 {
     // Put a popped-but-deferred request back at the front so order is preserved
-    // when the serving side throttles. The slot it occupies was normally freed
-    // by the pop that preceded it, so re-adding it keeps the queue at its prior
-    // size. But a concurrent enqueue into that freed slot can push the queue to
-    // the cap before we requeue; in that case adding here would transiently
-    // exceed MAX_BOOTSTRAP_CHUNK_REQUESTS_PER_PEER. If the queue is already at
-    // or over the cap, drop this requeue instead of overflowing it. Dropping is
-    // safe: the client treats an unanswered chunk as missing and re-requests it.
+    // when the serving side throttles. QueueBootstrapChunkRequest reserves one
+    // slot while no request is in flight, so a concurrent enqueue cannot force
+    // this older request to be dropped. The resulting queue remains at the
+    // established per-peer cap.
     LOCK(cs_bootstrap_requests);
     if (vBootstrapChunkRequests.size() >= MAX_BOOTSTRAP_CHUNK_REQUESTS_PER_PEER) {
         return;
