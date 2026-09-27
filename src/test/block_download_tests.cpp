@@ -1495,6 +1495,25 @@ BOOST_AUTO_TEST_CASE(receive_queue_size_accounts_message_overhead)
     }
 }
 
+BOOST_AUTO_TEST_CASE(inventory_trailing_bytes_do_not_schedule_block_download)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "inv", true);
+    PrepareTransport(peer);
+    CDataStream malformed(SER_NETWORK, PROTOCOL_VERSION);
+    malformed << std::vector<CInv>{CInv(MSG_BLOCK, blocks[1].GetHash())};
+    malformed << uint8_t{0};
+    const auto before = Stats(peer);
+    const unsigned headersBefore = Sent(peer, "getheaders");
+    const unsigned getdataBefore = Sent(peer, "getdata");
+    BOOST_CHECK(!ProcessMessage(&peer, "inv", malformed, GetTime()));
+    const auto after = Stats(peer);
+    BOOST_CHECK_EQUAL(after.nBlocksInFlight, before.nBlocksInFlight);
+    BOOST_CHECK_EQUAL(after.nGlobalBlocksInFlight, before.nGlobalBlocksInFlight);
+    BOOST_CHECK_EQUAL(Sent(peer, "getheaders"), headersBefore);
+    BOOST_CHECK_EQUAL(Sent(peer, "getdata"), getdataBefore);
+    BOOST_CHECK_GE(after.nMisbehavior - before.nMisbehavior, 20);
+}
+
 BOOST_AUTO_TEST_CASE(inventory_send_abort_releases_only_unsent_requests)
 {
     CNode announced(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "inv", true);

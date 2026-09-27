@@ -347,3 +347,21 @@ latest accessible C23 head remains storage/restart-only and does not overlap.
 No cold sanitizer build was started with 13 GB free and the 10 GB reserve.
 Next investigate a distinct bounded bootstrap-client or block-scheduler
 recovery condition.
+
+## Trailing inventory payloads cannot schedule downloads
+
+The `inv` handler deserialized its declared inventory vector but accepted
+trailing bytes, then updated block availability and emitted `getheaders` before
+any malformed-message rejection. A focused baseline sent one valid block
+inventory plus a byte and reproduced success plus a scheduled `getheaders`.
+
+The handler now requires complete payload consumption before acquiring
+`cs_main` or touching availability, requests, or inventory state. The direct
+regression proves malformed inventory neither emits `getheaders`/`getdata` nor
+changes local/global in-flight accounting, and assigns the existing score.
+
+The focused case passes 530 assertions; all 50 `block_download_tests` cases
+pass with 69,276 assertions. Consensus impact: NONE. No block, transaction,
+PoW, chain-selection, serialization, monetary, or upgrade rule changed.
+Worldstream remains non-overlapping storage/restart work. No cold sanitizer
+build was run with 13 GB free and the 10 GB reserve.
