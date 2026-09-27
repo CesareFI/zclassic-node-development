@@ -279,6 +279,44 @@ struct DownloadSetup : TestingSetup {
         }
     }
 };
+
+// A bounded index-only branch for scheduler tests. It is never submitted to
+// validation or made active: it merely gives the downloader enough known
+// heights to reach its BLOCK_DOWNLOAD_WINDOW-full path without a chain copy.
+struct BlockWindowFixture {
+    std::vector<uint256> hashes;
+    std::vector<CBlockIndex> indexes;
+
+    BlockWindowFixture() : hashes(BLOCK_DOWNLOAD_WINDOW + 2),
+                           indexes(BLOCK_DOWNLOAD_WINDOW + 1)
+    {
+        CBlockIndex* previous = chainActive.Tip();
+        for (unsigned int height = 1; height <= BLOCK_DOWNLOAD_WINDOW + 1;
+             ++height) {
+            WriteLE32(hashes[height].begin(), height);
+            CBlockIndex& index = indexes[height - 1];
+            index.phashBlock = &hashes[height];
+            index.pprev = previous;
+            index.nHeight = height;
+            index.nChainWork = previous->nChainWork + arith_uint256(1);
+            index.nStatus = BLOCK_VALID_TREE;
+            index.BuildSkip();
+            const bool inserted = mapBlockIndex.insert(
+                std::make_pair(hashes[height], &index)).second;
+            assert(inserted);
+            previous = &index;
+        }
+    }
+
+    ~BlockWindowFixture()
+    {
+        for (unsigned int height = 1; height <= BLOCK_DOWNLOAD_WINDOW + 1;
+             ++height)
+            mapBlockIndex.erase(hashes[height]);
+    }
+
+    const uint256& Tip() const { return hashes.back(); }
+};
 }
 
 BOOST_FIXTURE_TEST_SUITE(block_download_tests, DownloadSetup)
@@ -1502,6 +1540,54 @@ BOOST_DATA_TEST_CASE(block_timeout_ignores_wall_clock_steps,
     BOOST_REQUIRE(SendMessages(&peer, false));
     BOOST_CHECK(peer.fDisconnect);
     BOOST_CHECK_EQUAL(Stats(peer).nBlocksInFlight, 0);
+}
+
+BOOST_DATA_TEST_CASE(block_window_stall_ignores_wall_clock_steps,
+                    boost::unit_test::data::make({-3600, 3600}), wallStep)
+{
+    BlockWindowFixture branch;
+    std::vector<std::unique_ptr<CNode>> owners;
+    owners.reserve(BLOCK_DOWNLOAD_WINDOW / MAX_BLOCKS_IN_TRANSIT_PER_PEER);
+    for (unsigned int count = 0;
+         count < BLOCK_DOWNLOAD_WINDOW / MAX_BLOCKS_IN_TRANSIT_PER_PEER;
+         ++count) {
+        owners.emplace_back(new CNode(
+            INVALID_SOCKET,
+            CAddress(CService("127.0.0.1", static_cast<int>(count + 1))),
+            "window-owner", false));
+        CNode& owner = *owners.back();
+        PrepareTransport(owner);
+        CDataStream inventory(SER_NETWORK, PROTOCOL_VERSION);
+        inventory << std::vector<CInv>{CInv(MSG_BLOCK, branch.Tip())};
+        BOOST_REQUIRE(ProcessMessage(&owner, "inv", inventory, GetTime()));
+        BOOST_REQUIRE(SendMessages(&owner, false));
+        BOOST_REQUIRE_EQUAL(Stats(owner).nBlocksInFlight,
+                            MAX_BLOCKS_IN_TRANSIT_PER_PEER);
+    }
+    BOOST_REQUIRE_EQUAL(GetBlockDownloadStats().nBlocksInFlight,
+                        BLOCK_DOWNLOAD_WINDOW);
+
+    CNode waiting(INVALID_SOCKET, CAddress(CService("127.0.0.2", 1)),
+                  "window-waiting", false);
+    PrepareTransport(waiting);
+    CDataStream inventory(SER_NETWORK, PROTOCOL_VERSION);
+    inventory << std::vector<CInv>{CInv(MSG_BLOCK, branch.Tip())};
+    BOOST_REQUIRE(ProcessMessage(&waiting, "inv", inventory, GetTime()));
+    BOOST_REQUIRE(SendMessages(&waiting, false));
+    const auto stalled = Stats(*owners.front());
+    BOOST_REQUIRE_NE(stalled.nStallingSince, 0);
+
+    SetMockTimeMicros(start + wallStep * 1000000LL);
+    SetMockSteadyTimeMicros(start + (BLOCK_STALLING_TIMEOUT - 1) * 1000000LL);
+    BOOST_REQUIRE(SendMessages(owners.front().get(), false));
+    BOOST_CHECK(!owners.front()->fDisconnect);
+    BOOST_CHECK_EQUAL(Stats(*owners.front()).nStallingSince,
+                      GetTimeMicros() - (BLOCK_STALLING_TIMEOUT - 1) * 1000000LL);
+
+    SetMockSteadyTimeMicros(start + BLOCK_STALLING_TIMEOUT * 1000000LL + 1);
+    BOOST_REQUIRE(SendMessages(owners.front().get(), false));
+    BOOST_CHECK(owners.front()->fDisconnect);
+    BOOST_CHECK_EQUAL(Stats(*owners.front()).nBlocksInFlight, 0);
 }
 
 BOOST_AUTO_TEST_CASE(receive_queue_size_accounts_message_overhead)

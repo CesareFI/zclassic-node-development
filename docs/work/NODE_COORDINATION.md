@@ -425,13 +425,15 @@ estimates are diagnostics only and cannot drive a disconnect. The regression
 proves both clock directions preserve the source until the strict monotonic
 deadline, then disconnect and release its in-flight request after it.
 
-Regression proof: the focused two-case wall-step test passes after the native
-incremental rebuild. The complete `block_download_tests` suite passed all 54
-cases (`*** No errors detected`) before the final comment-only clarification,
-and the focused test was rerun after it. `git diff --check` passes. No cold
-sanitizer build was started: 11 GB free remains above the 10 GB reserve but is
-not enough for a safe cold sanitizer profile; this legacy tree has no
-cyclomatic-complexity gate.
+Regression proof: the focused two-case request-deadline test passes after the
+native incremental rebuild. A separate two-case full-window fixture builds
+only 4,097 in-memory index entries (no block bodies, PoW, validation, or chain
+activation), fills the real 4,096-block scheduler window, and proves the
+recorded staller also ignores both civil-clock directions until its strict
+monotonic timeout. The complete `block_download_tests` suite is rerun after
+that coverage. `git diff --check` passes. No cold sanitizer build was started:
+11 GB free remains above the 10 GB reserve but is not enough for a safe cold
+sanitizer profile; this legacy tree has no cyclomatic-complexity gate.
 
 Consensus impact: NONE. This is local operational timeout accounting only;
 block/header validation, PoW, chain selection, serialization, transaction
