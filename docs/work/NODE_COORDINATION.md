@@ -297,3 +297,29 @@ changed. Consensus impact: NONE. Worldstream remains separate C23
 storage/restart work. No sanitizer result is claimed; the incremental normal
 build fits within the preserved 13 GB free-space headroom. Next target a
 distinct peer-scheduler or bootstrap-client recovery condition.
+
+## Trailing headers payloads cannot publish peer availability
+
+The native `headers` handler decoded the declared header count but did not
+require the payload to be exhausted before applying header-derived peer state.
+A peer could append bytes after a syntactically valid header response and have
+its availability updated before the message was rejected elsewhere, making
+malformed traffic appear to be usable IBD progress.
+
+The handler now rejects remaining bytes immediately after decoding the declared
+headers and their required zero transaction counts. It assigns the existing
+malformed-message score and returns before taking `cs_main` or updating header
+availability, block requests, or peer progress. A deterministic regression
+sends one valid header followed by a byte of trailing data, proves peer sync
+height and in-flight accounting do not change, then proves a following valid
+response advances the peer normally.
+
+The focused regression passes 531 assertions. The complete
+`block_download_tests` group passes 48 cases and 68,218 assertions after an
+incremental native rebuild. Consensus impact: NONE: no header/block acceptance,
+PoW, chain selection, transaction, serialization, monetary, or upgrade rule
+changed. Worldstream's latest accessible C23 head remains
+`d9f5153be8fc59d140db9b6f59e796a7c668160a` and has no overlapping C++
+networking change. With 13 GB free and a 10 GB reserve, no cold sanitizer build
+was started. Next investigate a distinct bootstrap-client source-diversity or
+ordinary block-scheduler recovery condition.

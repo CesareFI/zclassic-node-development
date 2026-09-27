@@ -6993,6 +6993,10 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
             vRecv >> headers[n];
             ReadCompactSize(vRecv); // ignore tx count; assume it is 0.
         }
+        if (!vRecv.empty()) {
+            Misbehaving(pfrom->GetId(), 20);
+            return error("headers message has trailing bytes");
+        }
 
         LOCK(cs_main);
 
