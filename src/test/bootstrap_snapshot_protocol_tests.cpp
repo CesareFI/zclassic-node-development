@@ -233,6 +233,7 @@ static bool SendTestBootstrapMessage(SOCKET socket, const char* command, const C
 
 static CService StartManifestLoopbackPeer(const CBootstrapSnapshotManifest& manifest,
                                           bool trailingManifest,
+                                          bool dropFirstConnection,
                                           boost::thread& server,
                                           bool& serverOk)
 {
@@ -257,6 +258,14 @@ static CService StartManifestLoopbackPeer(const CBootstrapSnapshotManifest& mani
         SOCKET client = INVALID_SOCKET;
         serverOk = false;
         try {
+            if (dropFirstConnection) {
+                client = accept(listener, NULL, NULL);
+                if (client == INVALID_SOCKET) {
+                    throw std::runtime_error("missing dropped bootstrap connection");
+                }
+                CloseSocket(client);
+                client = INVALID_SOCKET;
+            }
             client = accept(listener, NULL, NULL);
             std::string command;
             if (client == INVALID_SOCKET || !ReceiveTestBootstrapMessage(client, command) || command != "version") {
@@ -1258,14 +1267,14 @@ BOOST_AUTO_TEST_CASE(bootstrap_loopback_reconnect_stream_requires_exact_manifest
 
     bool validServerOk = false;
     boost::thread validServer;
-    const CService validPeer = StartManifestLoopbackPeer(manifest, false, validServer, validServerOk);
+    const CService validPeer = StartManifestLoopbackPeer(manifest, false, false, validServer, validServerOk);
     BOOST_CHECK(BootstrapOpenStreamAndVerifyManifestForTest(validPeer, 1000, manifest, error));
     validServer.join();
     BOOST_CHECK(validServerOk);
 
     bool malformedServerOk = false;
     boost::thread malformedServer;
-    const CService malformedPeer = StartManifestLoopbackPeer(manifest, true, malformedServer, malformedServerOk);
+    const CService malformedPeer = StartManifestLoopbackPeer(manifest, true, false, malformedServer, malformedServerOk);
     BOOST_CHECK(!BootstrapOpenStreamAndVerifyManifestForTest(malformedPeer, 1000, manifest, error));
     BOOST_CHECK(error.find("trailing") != std::string::npos);
     malformedServer.join();
@@ -1275,11 +1284,18 @@ BOOST_AUTO_TEST_CASE(bootstrap_loopback_reconnect_stream_requires_exact_manifest
     ++divergent.nSnapshotBytes;
     bool divergentServerOk = false;
     boost::thread divergentServer;
-    const CService divergentPeer = StartManifestLoopbackPeer(divergent, false, divergentServer, divergentServerOk);
+    const CService divergentPeer = StartManifestLoopbackPeer(divergent, false, false, divergentServer, divergentServerOk);
     BOOST_CHECK(!BootstrapOpenStreamAndVerifyManifestForTest(divergentPeer, 1000, manifest, error));
     BOOST_CHECK(error.find("differs") != std::string::npos);
     divergentServer.join();
     BOOST_CHECK(divergentServerOk);
+
+    bool retryServerOk = false;
+    boost::thread retryServer;
+    const CService retryPeer = StartManifestLoopbackPeer(manifest, false, true, retryServer, retryServerOk);
+    BOOST_CHECK(BootstrapOpenStreamAndVerifyManifestForTest(retryPeer, 1000, manifest, error));
+    retryServer.join();
+    BOOST_CHECK(retryServerOk);
 }
 
 BOOST_AUTO_TEST_CASE(bootstrap_chunk_payload_requires_exact_wire_consumption)

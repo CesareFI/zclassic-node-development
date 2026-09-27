@@ -1753,8 +1753,9 @@ static bool DownloadBootstrapSnapshot(SOCKET socket, const CBootstrapSnapshotMan
 // the caller. Each parallel download stream calls this, so a peer that serves a
 // divergent manifest on a second connection is rejected before any chunk from
 // that stream is trusted.
-static bool OpenBootstrapStreamAndVerifyManifest(const CService& peerAddress, int timeout_ms, const CBootstrapSnapshotManifest& masterManifest, SOCKET& outSocket, std::string& error)
+static bool OpenBootstrapStreamAndVerifyManifestOnce(const CService& peerAddress, int timeout_ms, const CBootstrapSnapshotManifest& masterManifest, SOCKET& outSocket, bool& retryable, std::string& error)
 {
+    retryable = true;
     SOCKET socket = INVALID_SOCKET;
     bool proxyConnectionFailed = false;
     if (!ConnectSocket(peerAddress, socket, nConnectTimeout, &proxyConnectionFailed)) {
@@ -1765,6 +1766,10 @@ static bool OpenBootstrapStreamAndVerifyManifest(const CService& peerAddress, in
         CloseSocket(socket);
         return false;
     }
+    // Once the peer finished a handshake, a malformed or divergent manifest is
+    // a semantic source failure, not a reconnect hiccup. Preserve that exact
+    // error and let the outer peer policy choose a different source.
+    retryable = false;
     CDataStream empty(SER_NETWORK, PROTOCOL_VERSION);
     if (!SendBootstrapMessage(socket, NetMsgType::GETBSMAN, empty, timeout_ms, error)) {
         CloseSocket(socket);
@@ -1787,6 +1792,31 @@ static bool OpenBootstrapStreamAndVerifyManifest(const CService& peerAddress, in
     }
     outSocket = socket;
     return true;
+}
+
+// A parallel stream is independent of every other stream, so one transient
+// connect/handshake reset should not discard the whole snapshot immediately.
+// Keep this deliberately small and bounded: a persistently bad source still
+// fails promptly and falls through to the existing outer peer retry policy.
+static const int BOOTSTRAP_STREAM_OPEN_ATTEMPTS = 2;
+
+static bool OpenBootstrapStreamAndVerifyManifest(const CService& peerAddress, int timeout_ms, const CBootstrapSnapshotManifest& masterManifest, SOCKET& outSocket, std::string& error)
+{
+    outSocket = INVALID_SOCKET;
+    std::string lastError;
+    for (int attempt = 0; attempt < BOOTSTRAP_STREAM_OPEN_ATTEMPTS; ++attempt) {
+        bool retryable = false;
+        if (OpenBootstrapStreamAndVerifyManifestOnce(peerAddress, timeout_ms,
+                                                     masterManifest, outSocket, retryable, error)) {
+            return true;
+        }
+        lastError = error;
+        if (!retryable || ShutdownRequested()) {
+            break;
+        }
+    }
+    error = lastError;
+    return false;
 }
 
 // Kept out of bootstrap.h: the native unit fixture uses this narrow seam to

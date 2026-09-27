@@ -644,3 +644,37 @@ unchanged. Worldstream remains non-overlap storage/restart work at
 `d9f5153be8fc59d140db9b6f59e796a7c668160a`. Remaining risk: use this fixture
 to establish a bounded reconnect-after-transient-failure case before changing
 parallel-stream retry behavior.
+
+## Parallel bootstrap streams recover one transport reset
+
+Baseline and root cause: every parallel snapshot stream opened exactly one
+connection. A transient pre-handshake TCP reset on any one of the independent
+streams aborted the whole download and discarded its staging, even when the
+same source was immediately reachable again. The new loopback fixture made
+this concrete by accepting then closing the first connection before a
+handshake and serving the matching manifest on the second.
+
+Fix and after-result: reconnect-stream opening now has a strict two-attempt
+budget, but only for failures before a completed bootstrap handshake. Once a
+peer has handshaken, malformed or divergent manifest input remains fail-fast
+with its precise existing error; it is never retried as a transport blip. The
+outer peer policy still owns broader source failover, staging cleanup, and all
+snapshot validation. This recovers a one-off connection reset without turning
+malformed source behavior into extra network work.
+
+Regression proof: the localhost fixture proves a matching manifest succeeds
+after exactly one pre-handshake drop, while its existing cases prove trailing
+and divergent manifests still fail immediately. The focused case and all 63
+`bootstrap_snapshot_protocol_tests` cases pass after an incremental C++ build.
+`git diff --check` passes. ASan/UBSan is unrun: 11 GB free preserves the 10 GB
+reserve but cannot safely fit a cold sanitizer build; this legacy checkout has
+no cyclomatic-complexity gate. The unrelated broad RPC-wallet ECC-context
+failure remains unaddressed and is not hidden.
+
+Consensus impact: NONE. Only a bounded pre-validation socket reconnect changes;
+the compiled anchor, manifest identity check, per-file hashes, imported-state
+verification, chain history, consensus serialization, PoW, monetary policy,
+upgrades, block/transaction rules, and cryptography are unchanged. Worldstream
+remains non-overlap storage/restart work. Remaining risk: a disconnect after a
+stream has begun a chunk subset still falls through to the existing outer
+snapshot retry; resume semantics require separate byte-accurate evidence.
