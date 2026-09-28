@@ -1931,7 +1931,11 @@ receive loop now rejects invalid magic or command bytes before payload reads.
 so protocol extension interoperability remains intact. Deterministic tests
 prove an invalid command header fails with zero payload storage and a printable
 unknown command remains accepted as a complete zero-length frame. The existing
-fragmented malformed-frame takeover regression also passes.
+fragmented malformed-frame takeover regression also passes. The complete
+bounded `block_download_tests` group passed 92/92 after both receive-ingress
+changes, measuring 0.0242 seconds for 125 idle peers and 0.1631 seconds for
+750 idle peers over 1,000 scheduler rounds; this is a regression observation,
+not a throughput claim.
 
 Consensus impact: NONE. This is P2P header framing before dispatch; chain
 history, message semantics for valid/unknown commands, block and transaction
