@@ -2001,3 +2001,36 @@ negotiate a separate bounded message rather than silently raising this legacy
 request limit. Recommended next investigation: measure whether a disconnected
 or `notfound` source can retain any non-block request state that delays a
 healthy peer, without altering ordinary peer compatibility.
+
+## Negative block responses retire unlinked provenance immediately
+
+Baseline and root cause: `ProcessNotFound` correctly stopped a source's block
+download role as soon as it explicitly denied an assigned block, but a valid
+out-of-order body previously received from that source could remain in
+`mapBlockSource` until the outer socket dispatcher or finalizer ran. Ordinary
+framed dispatch calls that teardown promptly, but the handler itself had a
+different cleanup invariant from timeout teardown while a retained node
+reference remained observable.
+
+Fix and regression proof: after the ordinary request/role cleanup, the
+negative-response handler now removes that peer's unlinked block provenance.
+The deterministic regression requests a window, retains valid child block 2
+while parent block 1 is absent, then supplies a `notfound` for block 1. It
+proves immediate disconnect, zero requests, and zero tracked sources before
+either deferred callback; both later callbacks remain idempotent. Existing
+immediate healthy-peer takeover and bounded/malformed `notfound` regressions
+also pass. A bounded complete block-download group run follows this focused
+evidence. The bounded complete group passed 96/96 under its 110-second limit,
+with its existing idle-peer measurements at 0.0236 s for 125 peers and 0.1841
+s for 750 peers over 1,000 rounds. Sanitizers remain unrun because free space
+is 11 GB and the required 10 GB reserve forbids a cold sanitizer build.
+
+Consensus impact: NONE. This changes only peer-source lifetime bookkeeping
+after an explicit P2P negative response. Block/header/transaction validation,
+serialization, chain history, PoW, monetary policy, upgrades, and cryptography
+are unchanged. Worldstream C23 `origin/main` at `6df88b2fe` remains
+complementary. Remaining risk: other disconnect paths must retain the same
+idempotent cleanup ordering; the timeout, socket-dispatch, and finalization
+paths already do. Recommended next investigation: look for peer-controlled
+queued service work that is not included in an existing bounded accounting
+metric, without changing valid request semantics.

@@ -642,6 +642,9 @@ bool ProcessNotFound(CNode& peer, CDataStream& payload)
     CNodeState* state = State(peer.GetId());
     assert(state != NULL);
     StopBlockDownload(*state);
+    // A negative response makes this source unusable immediately. Do not keep
+    // provenance for an unlinked body until the outer socket teardown runs.
+    EraseBlockSources(peer.GetId());
     return !malformed;
 }
 

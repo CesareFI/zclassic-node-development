@@ -1362,6 +1362,32 @@ BOOST_AUTO_TEST_CASE(timeout_releases_unlinked_block_source_before_socket_cleanu
     BOOST_CHECK_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 0);
 }
 
+BOOST_AUTO_TEST_CASE(notfound_releases_unlinked_block_source_before_socket_cleanup)
+{
+    CNode unavailable(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
+                      "notfound-source", true);
+    Headers(unavailable);
+    BOOST_REQUIRE(SendMessages(&unavailable, false));
+    BOOST_REQUIRE_EQUAL(Stats(unavailable).nBlocksInFlight, 128);
+
+    // A valid child is retained while its parent is missing and therefore has
+    // source provenance. An explicit negative response for its parent makes
+    // this peer unusable before deferred socket teardown.
+    Deliver(unavailable, 2);
+    BOOST_REQUIRE_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 1);
+    CDataStream missing(SER_NETWORK, PROTOCOL_VERSION);
+    missing << std::vector<CInv>{CInv(MSG_BLOCK, blocks[1].GetHash())};
+    BOOST_REQUIRE(ProcessMessage(&unavailable, "notfound", missing, GetTime()));
+    BOOST_CHECK(unavailable.fDisconnect);
+    BOOST_CHECK_EQUAL(Stats(unavailable).nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 0);
+
+    // Usual socket/finalization cleanup remains safe when it follows later.
+    GetNodeSignals().DisconnectNode(unavailable.GetId());
+    GetNodeSignals().FinalizeNode(unavailable.GetId());
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 0);
+}
+
 BOOST_AUTO_TEST_CASE(requested_unlinked_sources_are_bounded_and_connect_cleanup)
 {
     CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "source", true);
