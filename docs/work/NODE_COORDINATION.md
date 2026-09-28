@@ -1517,3 +1517,24 @@ reserve (11 GB free).
 Consensus impact: NONE. This is P2P request framing only; chain history,
 consensus serialization, PoW, monetary policy, upgrades, block/transaction
 validity, and cryptography are unchanged.
+
+## Trailing mempool payloads avoid unnecessary relay work
+
+Baseline and root cause: `mempool` is an empty request, but the handler accepted
+residual bytes before querying and iterating the transaction pool. A malformed
+peer holding block requests could consume relay work and retain its window.
+
+Fix and regression proof: exact payload exhaustion now precedes the mempool
+query. A fragmented one-byte request disconnects, clears block ownership, and
+lets a healthy peer take the full window. The focused case and complete
+`block_download_tests` group pass 79/79 after incremental build; idle
+scheduling measured 0.0242 seconds for 125 peers and 0.1553 seconds for 750
+peers over existing 1,000 rounds. No performance claim is made. `git diff
+--check` passes. ASan/UBSan remains unrun to preserve the 10 GB reserve (11 GB
+free).
+
+Consensus impact: NONE. This is P2P request framing only; chain history,
+consensus serialization, PoW, monetary policy, upgrades, block/transaction
+validity, and cryptography are unchanged. Worldstream's latest C23
+`origin/main` remains `8ef06fa6b276aab0318a097a8b711c91718b90fa`, with no
+overlap.
