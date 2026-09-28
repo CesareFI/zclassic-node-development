@@ -7388,6 +7388,13 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
         vector<unsigned char> vData;
         vRecv >> vData;
 
+        // The element vector is the whole filteradd payload. Do not mutate a
+        // peer's filter after accepting an ambiguous trailing suffix.
+        if (!vRecv.empty()) {
+            Misbehaving(pfrom->GetId(), 20);
+            return error("filteradd message has trailing bytes from peer=%d", pfrom->id);
+        }
+
         // Nodes must NEVER send a data item > 520 bytes (the max size for a script data object,
         // and thus, the maximum size any matched object can have) in a filteradd message
         if (vData.size() > MAX_SCRIPT_ELEMENT_SIZE)

@@ -1609,3 +1609,28 @@ block/transaction validity, and cryptography are unchanged. Worldstream's
 latest C23 `origin/main` remains `8ef06fa6b276aab0318a097a8b711c91718b90fa`,
 with no overlap. Remaining risk: `filteradd` has a separate bounded payload
 and state-mutation path and should be investigated independently.
+
+## Filteradd rejects trailing bytes before mutating an installed filter
+
+Baseline and root cause: `filteradd` decoded the element vector but ignored a
+residual suffix before inserting into an already installed peer bloom filter.
+The bounded bloom-capable regression failed against that handler: a fragmented
+one-element `filteradd` with one trailing byte remained connected and held its
+128-request block window.
+
+Fix and regression proof: `filteradd` now requires payload exhaustion before
+size checks and filter mutation. The same fixture disconnects and releases all
+requests immediately, then a healthy peer takes the full window. The focused
+regression and complete `block_download_tests` group pass 82/82 after an
+incremental build; existing idle scheduling checks measured 0.0232 seconds for
+125 peers and 0.1704 seconds for 750 peers over 1,000 rounds. No performance
+claim is made. `git diff --check` passes. ASan/UBSan remains unrun to preserve
+the 10 GB reserve (11 GB free).
+
+Consensus impact: NONE. This is optional legacy P2P bloom framing only; chain
+history, consensus serialization, PoW, monetary policy, upgrades,
+block/transaction validity, and cryptography are unchanged. Worldstream's
+latest C23 `origin/main` remains `8ef06fa6b276aab0318a097a8b711c91718b90fa`,
+with no overlap. Remaining risk: malformed `pong` and `reject` messages use
+different compatibility/error-reporting semantics and need an independent
+review rather than a blanket framing rule.
