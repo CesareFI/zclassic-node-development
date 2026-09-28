@@ -7513,8 +7513,13 @@ bool ProcessMessages(CNode* pfrom)
             PrintExceptionContinue(NULL, "ProcessMessages()");
         }
 
-        if (!fRet)
+        if (!fRet) {
             LogPrintf("%s(%s, %u bytes) FAILED peer=%d\n", __func__, SanitizeString(strCommand), nMessageSize, pfrom->id);
+            // Command handlers return false only for malformed or invalid
+            // protocol input. Leaving such a peer connected can strand its
+            // outstanding block window until timeout.
+            pfrom->fDisconnect = true;
+        }
 
         break;
     }

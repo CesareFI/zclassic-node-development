@@ -1190,3 +1190,39 @@ risk: valid but silent block sources continue through the existing monotonic
 timeout/reassignment path. Recommended next investigation: use bounded
 offline tests to examine whether duplicate unsolicited valid inventory can
 distort peer availability without changing block ownership.
+
+## Command failures release assigned downloads consistently
+
+Baseline and root cause: framed dispatch logged every `ProcessMessage` false
+result but only deserialization exceptions for `block`, `headers`, and now
+`inv` explicitly disconnected the peer. A source holding block bodies could
+send another malformed command, such as `getheaders` with trailing bytes, and
+retain its assigned window until the ordinary timeout.
+
+Fix and after-result: a command-handler failure now tears down the sending
+peer after the existing failure log. This is the common failure boundary for
+malformed and invalid P2P command input; normal disconnect cleanup releases
+only that peer's outstanding block requests and leaves other sources intact.
+
+Regression proof: a fragmented, checksummed `getheaders` frame with one
+trailing byte is sent by a peer owning 128 requested blocks. It disconnects,
+clears per-peer and global accounting, and a healthy peer receives the full
+window. The new case and the refactored trailing-inventory takeover case pass
+after an incremental `test_bitcoin` build. The complete
+`block_download_tests` group passed 66/66 with an explicit zero exit status;
+the measured idle scheduler was 0.0244 seconds for 125 peers and 0.1602
+seconds for 750 peers over 1,000 rounds. This is validation coverage, not a
+claimed scheduler performance improvement. `git diff --check` passes.
+ASan/UBSan remains unrun because 11 GB free preserves the required 10 GB
+reserve.
+
+Consensus impact: NONE. This changes P2P teardown after a local command
+failure only; chain history, consensus serialization, PoW, monetary policy,
+upgrades, block/transaction validity, and cryptography are unchanged.
+Worldstream's latest C23 `origin/main` is
+`ab1deafdcc35d1cdec30148327dd935636ccbe67` (test RAM scratch reservation),
+with no overlap. Remaining risk: valid, non-progressing block sources still
+use the existing monotonic timeout/reassignment path. Recommended next
+investigation: bounded peer-availability tests for repeated unknown inventory
+under reconnect churn, without changing source ownership unless evidence
+shows a scheduling defect.

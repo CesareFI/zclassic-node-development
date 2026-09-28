@@ -66,6 +66,18 @@ std::vector<char> TruncatedPayloadFrame(const char* command)
     return {encoded.begin(), encoded.end()};
 }
 
+std::vector<char> FramePayload(const char* command, const CDataStream& payload)
+{
+    CMessageHeader header(Params().MessageStart(), command, payload.size());
+    const uint256 checksum = Hash(payload.begin(), payload.end());
+    header.nChecksum = ReadLE32(checksum.begin());
+    CDataStream encoded(SER_NETWORK, PROTOCOL_VERSION);
+    encoded << header;
+    if (!payload.empty())
+        encoded.write(&payload[0], payload.size());
+    return {encoded.begin(), encoded.end()};
+}
+
 void FeedFragments(CNode& peer, const std::vector<char>& frame, std::mt19937& random)
 {
     LOCK(peer.cs_vRecvMsg);
@@ -1655,16 +1667,33 @@ BOOST_AUTO_TEST_CASE(trailing_inventory_releases_requests_for_takeover)
 
     CDataStream payload(SER_NETWORK, PROTOCOL_VERSION);
     payload << std::vector<CInv>() << uint8_t{0};
-    CMessageHeader header(Params().MessageStart(), "inv", payload.size());
-    const uint256 checksum = Hash(payload.begin(), payload.end());
-    header.nChecksum = ReadLE32(checksum.begin());
-    CDataStream frame(SER_NETWORK, PROTOCOL_VERSION);
-    frame << header;
-    frame.write(&payload[0], payload.size());
-    const std::vector<char> encoded(frame.begin(), frame.end());
-
     std::mt19937 random(0x494e5654);
-    FeedFragments(malformed, encoded, random);
+    FeedFragments(malformed, FramePayload("inv", payload), random);
+    BOOST_REQUIRE(malformed.fDisconnect);
+    BOOST_REQUIRE(SendMessages(&malformed, false));
+    BOOST_CHECK_EQUAL(Stats(malformed).nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 0);
+
+    Headers(healthy);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_CHECK_EQUAL(Stats(healthy).nBlocksInFlight, 128);
+}
+
+BOOST_AUTO_TEST_CASE(malformed_nonresponse_releases_requests_for_takeover)
+{
+    CNode malformed(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "malformed", true);
+    CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "healthy", true);
+    Headers(malformed);
+    BOOST_REQUIRE(SendMessages(&malformed, false));
+    BOOST_REQUIRE_EQUAL(Stats(malformed).nBlocksInFlight, 128);
+
+    // A malformed request is not a block response, but it is still a complete
+    // protocol failure from a source that currently owns requested blocks.
+    CDataStream payload(SER_NETWORK, PROTOCOL_VERSION);
+    payload << CBlockLocator() << uint256() << uint8_t{0};
+    std::mt19937 random(0x47455448);
+    FeedFragments(malformed, FramePayload("getheaders", payload), random);
     BOOST_REQUIRE(malformed.fDisconnect);
     BOOST_REQUIRE(SendMessages(&malformed, false));
     BOOST_CHECK_EQUAL(Stats(malformed).nBlocksInFlight, 0);
