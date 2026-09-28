@@ -1226,3 +1226,34 @@ use the existing monotonic timeout/reassignment path. Recommended next
 investigation: bounded peer-availability tests for repeated unknown inventory
 under reconnect churn, without changing source ownership unless evidence
 shows a scheduling defect.
+
+## Inventory send-buffer abort releases existing assignments
+
+Baseline and root cause: repeated unknown inventory is bounded by the existing
+MRU and request caps, and the command handler already cancels only reservations
+that have not been queued when its send buffer aborts. The newly centralized
+framed command-failure teardown needed a wire-level proof that an older,
+actually queued block request is also released when the peer is disconnected.
+
+After-result and regression proof: a localhost-only framed `inv` sequence
+first obtains one block request, then triggers the existing 1,000-byte
+send-buffer abort with a bounded historical inventory batch. Framed dispatch
+disconnects the source, clears all per-peer and global accounting, and a
+healthy source immediately takes 128 requests including the formerly queued
+block. The new wire test and the existing direct reservation-preservation test
+pass after incremental build. The complete `block_download_tests` group passed
+67/67 with explicit zero exit status; idle scheduling measured 0.0233 seconds
+for 125 peers and 0.1544 seconds for 750 peers over 1,000 rounds. No scheduler
+performance gain is claimed. `git diff --check` passes. ASan/UBSan remains
+unrun because 11 GB free preserves the required 10 GB reserve.
+
+Consensus impact: NONE. This adds deterministic P2P scheduler coverage only;
+chain history, consensus serialization, PoW, monetary policy, upgrades,
+block/transaction validity, and cryptography are unchanged. Worldstream's
+latest C23 `origin/main` remains
+`ab1deafdcc35d1cdec30148327dd935636ccbe67` (test RAM scratch reservation),
+with no overlap. Remaining risk: a valid, slow source remains governed by the
+existing monotonic timeout/reassignment path. Recommended next investigation:
+exercise peer availability after reconnect churn with bounded valid headers
+and unknown inventory, then change scheduling only if ownership or availability
+evidence is lost.

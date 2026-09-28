@@ -89,6 +89,26 @@ void FeedFragments(CNode& peer, const std::vector<char>& frame, std::mt19937& ra
     }
 }
 
+class ScopedSendBuffer {
+    bool existed;
+    std::string value;
+
+public:
+    ScopedSendBuffer()
+    {
+        const auto previous = mapArgs.find("-maxsendbuffer");
+        existed = previous != mapArgs.end();
+        if (existed) value = previous->second;
+        mapArgs["-maxsendbuffer"] = "1";
+    }
+
+    ~ScopedSendBuffer()
+    {
+        if (existed) mapArgs["-maxsendbuffer"] = value;
+        else mapArgs.erase("-maxsendbuffer");
+    }
+};
+
 struct DownloadSetup : TestingSetup {
     std::vector<CBlock> blocks;
     const int savedDownloadLimit = nMaxBlocksInTransitPerPeer;
@@ -1705,6 +1725,40 @@ BOOST_AUTO_TEST_CASE(malformed_nonresponse_releases_requests_for_takeover)
     BOOST_CHECK_EQUAL(Stats(healthy).nBlocksInFlight, 128);
 }
 
+BOOST_AUTO_TEST_CASE(inventory_send_abort_releases_requests_for_takeover)
+{
+    CNode overloaded(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "overloaded", true);
+    CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "healthy", true);
+    PrepareTransport(overloaded);
+    SetMockTime(blocks.front().GetBlockTime() + 1);
+    {
+        ScopedSendBuffer sendBuffer;
+        BOOST_REQUIRE_EQUAL(SendBufferSize(), 1000);
+        CDataStream first(SER_NETWORK, PROTOCOL_VERSION);
+        first << std::vector<CInv>{CInv(MSG_BLOCK, blocks[1].GetHash())};
+        BOOST_REQUIRE(ProcessMessage(&overloaded, "inv", first, GetTime()));
+        BOOST_REQUIRE_EQUAL(Stats(overloaded).nBlocksInFlight, 1);
+
+        CDataStream payload(SER_NETWORK, PROTOCOL_VERSION);
+        std::vector<CInv> inventory;
+        for (size_t height = 2; height < blocks.size(); ++height)
+            inventory.emplace_back(MSG_BLOCK, blocks[height].GetHash());
+        payload << inventory;
+        std::mt19937 random(0x494e5641);
+        FeedFragments(overloaded, FramePayload("inv", payload), random);
+    }
+    SetMockTime(0);
+    BOOST_REQUIRE(overloaded.fDisconnect);
+    BOOST_REQUIRE(SendMessages(&overloaded, false));
+    BOOST_CHECK_EQUAL(Stats(overloaded).nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 0);
+
+    Headers(healthy);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_CHECK_EQUAL(Stats(healthy).nBlocksInFlight, 128);
+}
+
 BOOST_DATA_TEST_CASE(download_limits_bound_requests_and_recover,
                      boost::unit_test::data::make(std::vector<int>{16, 32, 64, 128}))
 {
@@ -1911,22 +1965,7 @@ BOOST_AUTO_TEST_CASE(inventory_send_abort_releases_only_unsent_requests)
     PrepareTransport(announced);
     SetMockTime(blocks.front().GetBlockTime() + 1);
     {
-        struct ScopedSendBuffer {
-            bool existed;
-            std::string value;
-            ScopedSendBuffer()
-            {
-                const auto previous = mapArgs.find("-maxsendbuffer");
-                existed = previous != mapArgs.end();
-                if (existed) value = previous->second;
-                mapArgs["-maxsendbuffer"] = "1";
-            }
-            ~ScopedSendBuffer()
-            {
-                if (existed) mapArgs["-maxsendbuffer"] = value;
-                else mapArgs.erase("-maxsendbuffer");
-            }
-        } sendBuffer;
+        ScopedSendBuffer sendBuffer;
         BOOST_REQUIRE_EQUAL(SendBufferSize(), 1000);
 
         // This request was actually queued before the later batch aborts.
