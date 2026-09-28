@@ -1711,3 +1711,25 @@ block/transaction validity, and cryptography are unchanged. Worldstream's
 latest C23 `origin/main` is `19aeae4b7`, with no overlap. Remaining risk:
 network discovery remains opt-in and bounded by the existing direct-dial
 budget; this change does not alter source trust or snapshot verification.
+
+## Bootstrap reconnect retains completed verified files
+
+Baseline and root cause: the existing one-file reconnect fixture proved that an
+unfinished `.part` file restarts safely, but it could not establish whether a
+stream reset after a prior file had passed SHA-256 verification caused that
+completed file to be requested again. This was a missing bounded regression in
+the bootstrap retry path, not a demonstrated production code defect.
+
+Fix and regression proof: a localhost-only two-file fixture completes the
+larger first file, forces a socket reset, and accepts on the retry only requests
+for the unfinished second file. It rejects any retry request for file zero and
+verifies both final staged byte streams. The focused loopback bootstrap group
+passes 3/3 after an incremental native test build. `git diff --check` passes.
+ASan/UBSan remains unrun to preserve the 10 GB reserve (11 GB free).
+
+Consensus impact: NONE. This exercises bootstrap transport retry and existing
+per-file SHA-256 verification only; chain history, consensus serialization,
+PoW, monetary policy, upgrades, block/transaction validity, and cryptography
+are unchanged. Worldstream's latest C23 `origin/main` is `19aeae4b7`, with no
+overlap. Remaining risk: this covers a single stream; parallel worker groups
+remain separately bounded by their file partition and existing abort path.

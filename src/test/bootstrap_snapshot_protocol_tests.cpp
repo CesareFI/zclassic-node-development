@@ -393,6 +393,137 @@ static CService StartManifestLoopbackPeer(const CBootstrapSnapshotManifest& mani
     return service;
 }
 
+// A deliberately narrow two-file server for the reconnect retention case. The
+// first connection completes file zero, then drops. The retry must ask only
+// for file one: serving file zero
+// again would prove that an already SHA-256-verified final file was discarded.
+static CService StartTwoFileRetryLoopbackPeer(const CBootstrapSnapshotManifest& manifest,
+                                              const std::vector<std::string>& files,
+                                              boost::thread& server,
+                                              bool& serverOk,
+                                              unsigned int& retryFileZeroRequests)
+{
+    BOOST_REQUIRE_EQUAL(files.size(), 2U);
+    SOCKET listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    BOOST_REQUIRE(listener != INVALID_SOCKET);
+    struct sockaddr_in address;
+    std::memset(&address, 0, sizeof(address));
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    address.sin_port = 0;
+    BOOST_REQUIRE_EQUAL(bind(listener, (struct sockaddr*)&address, sizeof(address)), 0);
+    BOOST_REQUIRE_EQUAL(listen(listener, 1), 0);
+#ifdef WIN32
+    int addressLength = sizeof(address);
+#else
+    socklen_t addressLength = sizeof(address);
+#endif
+    BOOST_REQUIRE_EQUAL(getsockname(listener, (struct sockaddr*)&address, &addressLength), 0);
+    const CService service("127.0.0.1", ntohs(address.sin_port));
+
+    server = boost::thread([=, &serverOk, &retryFileZeroRequests]() mutable {
+        SOCKET client = INVALID_SOCKET;
+        serverOk = false;
+        retryFileZeroRequests = 0;
+        try {
+            for (int session = 0; session < 2; ++session) {
+                if (!AcceptTestBootstrapClient(listener, client)) {
+                    throw std::runtime_error("missing bootstrap retry client");
+                }
+                std::string command;
+                if (!ReceiveTestBootstrapMessage(client, command) || command != "version") {
+                    throw std::runtime_error("missing bootstrap retry version");
+                }
+                CDataStream version(SER_NETWORK, INIT_PROTO_VERSION);
+                const CAddress remote(service, NODE_BOOTSTRAP);
+                version << PROTOCOL_VERSION << uint64_t(NODE_BOOTSTRAP) << GetTime()
+                        << remote << remote << uint64_t(1) << std::string("/loopback/") << 0 << true;
+                CDataStream empty(SER_NETWORK, PROTOCOL_VERSION);
+                if (!SendTestBootstrapMessage(client, "version", version) ||
+                    !ReceiveTestBootstrapMessage(client, command) || command != "verack" ||
+                    !SendTestBootstrapMessage(client, "verack", empty) ||
+                    !ReceiveTestBootstrapMessage(client, command) || command != NetMsgType::GETBSMAN) {
+                    throw std::runtime_error("invalid bootstrap retry handshake");
+                }
+                CDataStream manifestPayload(SER_NETWORK, PROTOCOL_VERSION);
+                manifestPayload << manifest;
+                if (!SendTestBootstrapMessage(client, NetMsgType::BSMAN, manifestPayload)) {
+                    throw std::runtime_error("could not send bootstrap retry manifest");
+                }
+
+                if (session == 0) {
+                    CDataStream requestPayload(SER_NETWORK, PROTOCOL_VERSION);
+                    if (!ReceiveTestBootstrapMessage(client, command, &requestPayload) || command != NetMsgType::GETBSCHK) {
+                        throw std::runtime_error("missing bootstrap retry chunk request");
+                    }
+                    CBootstrapSnapshotChunkRequest request;
+                    requestPayload >> request;
+                    if (!requestPayload.empty()) {
+                        throw std::runtime_error("trailing bootstrap retry chunk request");
+                    }
+                    if (request.nFileIndex != 0 || request.nOffset != 0 || request.nLength != files[0].size()) {
+                        throw std::runtime_error("first bootstrap retry request did not complete file zero");
+                    }
+                    CBootstrapSnapshotChunk chunk;
+                    chunk.nFileIndex = 0;
+                    chunk.nOffset = 0;
+                    chunk.vData.assign(files[0].begin(), files[0].end());
+                    CDataStream chunkPayload(SER_NETWORK, PROTOCOL_VERSION);
+                    chunkPayload << chunk;
+                    if (!SendTestBootstrapMessage(client, NetMsgType::BSCHK, chunkPayload)) {
+                        throw std::runtime_error("could not complete bootstrap retry file zero");
+                    }
+                    CloseSocket(client);
+                    client = INVALID_SOCKET;
+                    continue;
+                }
+
+                for (size_t offset = 0; offset < files[1].size();) {
+                    CDataStream requestPayload(SER_NETWORK, PROTOCOL_VERSION);
+                    if (!ReceiveTestBootstrapMessage(client, command, &requestPayload) || command != NetMsgType::GETBSCHK) {
+                        throw std::runtime_error("missing bootstrap retry chunk request");
+                    }
+                    CBootstrapSnapshotChunkRequest request;
+                    requestPayload >> request;
+                    if (!requestPayload.empty()) {
+                        throw std::runtime_error("trailing bootstrap retry chunk request");
+                    }
+                    if (request.nFileIndex == 0) {
+                        ++retryFileZeroRequests;
+                        throw std::runtime_error("retry re-requested verified bootstrap file zero");
+                    }
+                    const size_t length = std::min<size_t>(manifest.nChunkSize, files[1].size() - offset);
+                    if (request.nFileIndex != 1 || request.nOffset != offset || request.nLength != length) {
+                        throw std::runtime_error("invalid bootstrap retry file one request");
+                    }
+                    CBootstrapSnapshotChunk chunk;
+                    chunk.nFileIndex = 1;
+                    chunk.nOffset = offset;
+                    chunk.vData.assign(files[1].begin() + offset, files[1].begin() + offset + length);
+                    CDataStream chunkPayload(SER_NETWORK, PROTOCOL_VERSION);
+                    chunkPayload << chunk;
+                    if (!SendTestBootstrapMessage(client, NetMsgType::BSCHK, chunkPayload)) {
+                        throw std::runtime_error("could not send bootstrap retry file one chunk");
+                    }
+                    offset += length;
+                }
+                if (client != INVALID_SOCKET) {
+                    CloseSocket(client);
+                    client = INVALID_SOCKET;
+                }
+            }
+            serverOk = true;
+        } catch (const std::exception&) {
+            serverOk = false;
+        }
+        if (client != INVALID_SOCKET) {
+            CloseSocket(client);
+        }
+        CloseSocket(listener);
+    });
+    return service;
+}
+
 BOOST_FIXTURE_TEST_SUITE(bootstrap_snapshot_protocol_tests, BasicTestingSetup)
 
 BOOST_AUTO_TEST_CASE(bootstrap_snapshot_file_serialization)
@@ -1460,6 +1591,44 @@ BOOST_AUTO_TEST_CASE(bootstrap_loopback_chunk_reset_retries_verified_manifest_st
     boost::filesystem::ifstream staged(staging / file.strPath, std::ios::binary);
     const std::string got((std::istreambuf_iterator<char>(staged)), std::istreambuf_iterator<char>());
     BOOST_CHECK_EQUAL(got, bytes);
+    boost::filesystem::remove_all(staging);
+}
+
+BOOST_AUTO_TEST_CASE(bootstrap_loopback_retry_retains_verified_prior_file)
+{
+    // The scheduler assigns the largest file first, so file zero must be the
+    // larger one for this fixture to complete it before the forced reset.
+    const std::string first = DeterministicBytes(127, 151);
+    const std::string second = DeterministicBytes(97, 152);
+    const std::vector<std::string> files = {first, second};
+    CBootstrapSnapshotManifest manifest;
+    manifest.nChunkSize = 128;
+    manifest.nSnapshotBytes = first.size() + second.size();
+    for (size_t i = 0; i < files.size(); ++i) {
+        CBootstrapSnapshotFile file;
+        file.strPath = i == 0 ? "blocks/blk00000.dat" : "blocks/blk00001.dat";
+        file.nSize = files[i].size();
+        file.hashSha256 = Sha256OfBytes(std::vector<unsigned char>(files[i].begin(), files[i].end()));
+        manifest.vFiles.push_back(file);
+    }
+
+    bool serverOk = false;
+    unsigned int retryFileZeroRequests = 0;
+    boost::thread server;
+    const CService peer = StartTwoFileRetryLoopbackPeer(manifest, files, server, serverOk, retryFileZeroRequests);
+    const boost::filesystem::path staging = boost::filesystem::current_path() /
+        boost::filesystem::unique_path("zclassic-bootstrap-retain-%%%%-%%%%-%%%%");
+    std::string error;
+    BOOST_CHECK_MESSAGE(BootstrapDownloadSnapshotParallelForTest(peer, manifest, staging, 1000, error), error);
+    server.join();
+    BOOST_CHECK(serverOk);
+    BOOST_CHECK_EQUAL(retryFileZeroRequests, 0U);
+
+    for (size_t i = 0; i < files.size(); ++i) {
+        boost::filesystem::ifstream staged(staging / manifest.vFiles[i].strPath, std::ios::binary);
+        const std::string got((std::istreambuf_iterator<char>(staged)), std::istreambuf_iterator<char>());
+        BOOST_CHECK_EQUAL(got, files[i]);
+    }
     boost::filesystem::remove_all(staging);
 }
 
