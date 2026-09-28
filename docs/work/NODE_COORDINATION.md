@@ -927,6 +927,19 @@ failure. No fixture defect is demonstrated, so no assertion or security check
 was changed. Recommended next investigation: retain the original broad-suite
 command/output, then reproduce its first failing case in the same process.
 
+### September-report follow-up
+
+The original September 9 broad-suite transcript is still absent from preserved
+evidence, so no earlier failure preceding its repeated `ECC_Start()` assertions
+can be named without inventing evidence. Current source confirms that each
+`TestingSetup` owns an isolated temporary datadir, joins script-check threads
+in its destructor, and only then allows `BasicTestingSetup` to call `ECC_Stop`.
+Using the existing binary, the two registered in-process parallel wallet cases
+(`rpc_wallet_async_operations_parallel_*`) pass together in 5.9 seconds. This
+does not prove the unavailable historical broad suite; it demonstrates that
+the suspected same-process fixture lifecycle currently reproduces cleanly. No
+ECC assertion, cleanup, consensus rule, or wallet safeguard was changed.
+
 ## Loopback bootstrap reconnect fixture is deadline-bounded
 
 Baseline and root cause: an externally owned run of the chunk-reset loopback
