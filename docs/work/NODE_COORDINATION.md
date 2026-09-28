@@ -1475,3 +1475,25 @@ Consensus impact: NONE. This is P2P handshake framing only. Chain history,
 consensus serialization, PoW, monetary policy, upgrades, block/transaction
 validity, and cryptography are unchanged. Worldstream's latest C23
 `origin/main` is `8cdab5ac0f8fef43ca7538e13728980df35b0a78`, with no overlap.
+
+## Trailing version payloads fail before handshake completion
+
+Baseline and root cause: after parsing the optional version fields, the native
+handler accepted residual wire bytes and could mark the peer successfully
+connected. The ordinary framed dispatcher then had no failure signal for this
+malformed handshake.
+
+Fix and regression proof: the handler now requires exact payload exhaustion.
+A fragmented valid version frame with one trailing byte disconnects before
+sync state is established. The focused regression passes, and the complete
+`block_download_tests` group passes 77/77 after the committed incremental
+build; idle scheduling measured 0.0235 seconds for 125 peers and 0.1564
+seconds for 750 peers over existing 1,000-round checks. No performance claim
+is made. `git diff --check` passes. ASan/UBSan remains unrun to preserve the
+10 GB reserve (11 GB free).
+
+Consensus impact: NONE. This is P2P handshake framing only; chain history,
+consensus serialization, PoW, monetary policy, upgrades, block/transaction
+validity, and cryptography are unchanged. Worldstream's latest C23
+`origin/main` remains `8cdab5ac0f8fef43ca7538e13728980df35b0a78`, with no
+overlap.
