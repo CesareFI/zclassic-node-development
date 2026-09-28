@@ -452,6 +452,17 @@ void CNode::CloseSocketDisconnect()
         // rather than retaining it until its final CNode reference is gone.
         vRecvGetData.clear();
     }
+
+    // EndMessage may be attempting an optimistic write while holding this
+    // lock. Reclaim queued outbound frames when it is safe to do so, and let
+    // the existing final-reference path handle the rare contended case.
+    TRY_LOCK(cs_vSend, lockSend);
+    if (lockSend) {
+        vSendMsg.clear();
+        ssSend.clear();
+        nSendSize = 0;
+        nSendOffset = 0;
+    }
 }
 
 void CNode::PushVersion()

@@ -2612,6 +2612,28 @@ BOOST_AUTO_TEST_CASE(socket_disconnect_releases_pending_getdata_buffer)
     BOOST_CHECK(peer.vRecvGetData.empty());
 }
 
+BOOST_AUTO_TEST_CASE(socket_disconnect_releases_buffered_send_work)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
+               "pending-send", true);
+    PrepareTransport(peer);
+    {
+        LOCK(peer.cs_vSend);
+        peer.vSendMsg.push_back(CSerializeData(64, 0));
+        peer.ssSend.write("x", 1);
+        peer.nSendSize = 64;
+        peer.nSendOffset = 7;
+    }
+
+    peer.CloseSocketDisconnect();
+    BOOST_CHECK(peer.fDisconnect);
+    LOCK(peer.cs_vSend);
+    BOOST_CHECK(peer.vSendMsg.empty());
+    BOOST_CHECK(peer.ssSend.empty());
+    BOOST_CHECK_EQUAL(peer.nSendSize, 0U);
+    BOOST_CHECK_EQUAL(peer.nSendOffset, 0U);
+}
+
 BOOST_AUTO_TEST_CASE(address_trailing_bytes_do_not_mutate_peer_discovery)
 {
     CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),

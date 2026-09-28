@@ -2092,3 +2092,25 @@ receive lock is busy, existing behavior still defers cleanup to final node
 destruction; no unsafe lock acquisition was added. Recommended next
 investigation: inspect whether long-lived buffered send work has an equivalent
 bounded, lock-safe teardown path.
+
+## Socket disconnect releases buffered send work when uncontended
+
+Baseline and root cause: a disconnected peer could retain queued outbound
+frames and an in-progress send stream until final destruction, even when no
+sender held the send lock. This is bounded by existing send-side backpressure,
+but unnecessarily keeps peer-owned memory while references delay deletion.
+
+Fix and regression proof: `CloseSocketDisconnect()` now tries the existing
+send lock after receive cleanup and, when available, clears queued frames,
+partial stream state, and both send offsets. The deterministic no-socket
+regression seeds a queued frame and partial stream, disconnects, and proves
+all buffered send state is immediately empty/zero. Focused test passed after
+an incremental native rebuild. The full block-download group is unrun for
+this final micro-slice because its bounded 110-second run exceeds the remaining
+safe execution window; no sanitizer build was started with only 11 GB free.
+
+Consensus impact: NONE. Post-disconnect memory cleanup only; P2P wire bytes
+already queued are intentionally abandoned with the closed connection, while
+validation, serialization, chain history, PoW, monetary policy, upgrades, and
+cryptography are unchanged. Worldstream C23 remains complementary. Remaining
+risk: a contended sender retains the old deferred cleanup behavior by design.
