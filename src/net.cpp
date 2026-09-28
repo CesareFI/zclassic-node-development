@@ -444,8 +444,14 @@ void CNode::CloseSocketDisconnect()
 
     // in case this fails, we'll empty the recv buffer when the CNode is deleted
     TRY_LOCK(cs_vRecvMsg, lockRecv);
-    if (lockRecv)
+    if (lockRecv) {
         vRecvMsg.clear();
+        // Decoded getdata is protected by the same receive lock and can be
+        // retained while send backpressure defers serving it. Once this peer
+        // is disconnected, release that peer-controlled work immediately
+        // rather than retaining it until its final CNode reference is gone.
+        vRecvGetData.clear();
+    }
 }
 
 void CNode::PushVersion()

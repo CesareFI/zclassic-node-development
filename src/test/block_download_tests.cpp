@@ -2594,6 +2594,24 @@ BOOST_AUTO_TEST_CASE(deferred_inventory_relay_queue_is_bounded_and_preserves_blo
                             }));
 }
 
+BOOST_AUTO_TEST_CASE(socket_disconnect_releases_pending_getdata_buffer)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
+               "pending-getdata", true);
+    PrepareTransport(peer);
+    {
+        LOCK(peer.cs_vRecvMsg);
+        peer.vRecvGetData.push_back(CInv(MSG_BLOCK, uint256S("01")));
+        peer.vRecvGetData.push_back(CInv(MSG_TX, uint256S("02")));
+        BOOST_REQUIRE_EQUAL(peer.vRecvGetData.size(), 2U);
+    }
+
+    peer.CloseSocketDisconnect();
+    BOOST_CHECK(peer.fDisconnect);
+    LOCK(peer.cs_vRecvMsg);
+    BOOST_CHECK(peer.vRecvGetData.empty());
+}
+
 BOOST_AUTO_TEST_CASE(address_trailing_bytes_do_not_mutate_peer_discovery)
 {
     CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),

@@ -2065,3 +2065,30 @@ transactions through ordinary inventory/mempool synchronization, while block
 announcements retain priority. Recommended next investigation: bound any other
 peer-controlled deferred queue only if its owner and normal backpressure path
 can be demonstrated with a deterministic regression.
+
+## Socket disconnect releases pending getdata work
+
+Baseline and root cause: `CloseSocketDisconnect()` immediately cleared framed
+receive messages when it obtained the receive lock, but left already-decoded
+`vRecvGetData` entries behind until the final `CNode` reference was destroyed.
+Those entries are bounded, yet originate with the disconnected peer and may
+remain while other references defer destruction.
+
+Fix and regression proof: the existing locked disconnect cleanup now clears
+both framed and decoded receive work. The deterministic no-socket test queues
+a block and transaction request under the receive lock, calls
+`CloseSocketDisconnect()`, and proves the disconnect flag and immediate empty
+getdata queue. The existing pending-getdata receive-accounting regression also
+passes. The bounded complete block-download group passed 98/98 under its
+110-second limit, with existing idle-peer observations at 0.0237 s for 125
+peers and 0.1567 s for 750 peers over 1,000 rounds. Sanitizers remain unrun
+because 11 GB free space preserves only the required 10 GB reserve.
+
+Consensus impact: NONE. This is post-disconnect memory lifetime cleanup only;
+normal serving, P2P wire behavior, validation, serialization, chain history,
+PoW, monetary policy, upgrades, and cryptography are unchanged. Worldstream
+C23 `origin/main` at `dc286ed32` remains complementary. Remaining risk: if the
+receive lock is busy, existing behavior still defers cleanup to final node
+destruction; no unsafe lock acquisition was added. Recommended next
+investigation: inspect whether long-lived buffered send work has an equivalent
+bounded, lock-safe teardown path.
