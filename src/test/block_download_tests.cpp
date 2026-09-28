@@ -1090,6 +1090,24 @@ BOOST_AUTO_TEST_CASE(trailing_mempool_releases_requests_for_takeover)
     BOOST_CHECK_EQUAL(Stats(healthy).nBlocksInFlight, 128);
 }
 
+BOOST_AUTO_TEST_CASE(trailing_filterclear_releases_requests_for_takeover)
+{
+    CNode malformed(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "malformed", true);
+    CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "healthy", true);
+    Headers(malformed);
+    BOOST_REQUIRE(SendMessages(&malformed, false));
+    CDataStream payload(SER_NETWORK, PROTOCOL_VERSION);
+    payload << uint8_t{0};
+    std::mt19937 random(0x46434c52);
+    FeedFragments(malformed, FramePayload("filterclear", payload), random);
+    BOOST_REQUIRE(malformed.fDisconnect);
+    BOOST_REQUIRE(SendMessages(&malformed, false));
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
+    Headers(healthy);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_CHECK_EQUAL(Stats(healthy).nBlocksInFlight, 128);
+}
+
 BOOST_AUTO_TEST_CASE(block_reject_uses_single_byte_wire_code)
 {
     CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "reject-block", true);

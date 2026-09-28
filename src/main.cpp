@@ -7398,6 +7398,10 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
 
     else if (strCommand == "filterclear")
     {
+        if (!vRecv.empty()) {
+            Misbehaving(pfrom->GetId(), 20);
+            return error("filterclear message has trailing bytes from peer=%d", pfrom->id);
+        }
         LOCK(pfrom->cs_filter);
         if (nLocalServices & NODE_BLOOM) {
             delete pfrom->pfilter;
