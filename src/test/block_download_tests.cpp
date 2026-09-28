@@ -2377,6 +2377,21 @@ BOOST_AUTO_TEST_CASE(address_trailing_bytes_do_not_mutate_peer_discovery)
     BOOST_CHECK_GE(Stats(peer).nMisbehavior, 20);
 }
 
+BOOST_AUTO_TEST_CASE(address_oversized_count_is_rejected_before_deserialization)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
+               "addr-oversized", true);
+    PrepareTransport(peer);
+    CDataStream oversized(SER_NETWORK, PROTOCOL_VERSION);
+    // No CAddress bodies follow. A 1,001-entry declaration must be rejected
+    // at the protocol cap rather than allocating/deserializing peer data first.
+    WriteCompactSize(oversized, 1001);
+    const size_t before = addrman.size();
+    BOOST_CHECK_NO_THROW(BOOST_CHECK(!ProcessMessage(&peer, "addr", oversized, GetTime())));
+    BOOST_CHECK_EQUAL(addrman.size(), before);
+    BOOST_CHECK_GE(Stats(peer).nMisbehavior, 20);
+}
+
 BOOST_AUTO_TEST_CASE(inventory_send_abort_releases_only_unsent_requests)
 {
     CNode announced(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "inv", true);

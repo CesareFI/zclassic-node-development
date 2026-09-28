@@ -1733,3 +1733,26 @@ PoW, monetary policy, upgrades, block/transaction validity, and cryptography
 are unchanged. Worldstream's latest C23 `origin/main` is `19aeae4b7`, with no
 overlap. Remaining risk: this covers a single stream; parallel worker groups
 remain separately bounded by their file partition and existing abort path.
+
+## P2P address count is bounded before allocation
+
+Baseline and root cause: ordinary `addr` processing deserialized the
+peer-declared vector before checking its existing 1,000-address policy cap. A
+truncated declaration of 1,001 entries reproduced an `ios_base::failure` in
+the direct handler and did not record the malformed-peer score there.
+
+Fix and regression proof: the handler now reads CompactSize, rejects a count
+above 1,000 with the existing misbehavior score, and only then reserves and
+decodes the bounded address list. The new truncated-count regression and the
+existing trailing-address regression pass 2/2 after an incremental native
+build. The bounded complete `block_download_tests` group passes 85/85; its
+existing idle scheduler measurements were 0.0234 seconds for 125 peers and
+0.1521 seconds for 750 peers over 1,000 rounds. No performance gain is claimed.
+
+Consensus impact: NONE. This changes untrusted P2P peer discovery resource
+handling only; chain history, consensus serialization, PoW, monetary policy,
+upgrades, block/transaction validity, and cryptography are unchanged.
+Worldstream's latest C23 `origin/main` is `19aeae4b7`, with no overlap.
+Remaining risk: valid legacy `addr` messages remain capped at the pre-existing
+1,000-entry policy and malformed under-length messages still follow the
+generic framed-message disconnect path.

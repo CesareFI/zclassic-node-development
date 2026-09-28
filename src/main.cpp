@@ -6690,8 +6690,22 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
 
     else if (strCommand == "addr")
     {
+        // The wire vector's CompactSize count is peer controlled. Apply the
+        // protocol cap before vector deserialization so an oversized (or
+        // deliberately truncated) advertisement cannot allocate/decode work
+        // that the addr policy will reject anyway.
+        const uint64_t nAddr = ReadCompactSize(vRecv);
+        if (nAddr > 1000) {
+            Misbehaving(pfrom->GetId(), 20);
+            return error("message addr size() = %llu", (unsigned long long)nAddr);
+        }
         vector<CAddress> vAddr;
-        vRecv >> vAddr;
+        vAddr.reserve((size_t)nAddr);
+        for (uint64_t i = 0; i < nAddr; ++i) {
+            CAddress addr;
+            vRecv >> addr;
+            vAddr.push_back(addr);
+        }
         if (!vRecv.empty()) {
             Misbehaving(pfrom->GetId(), 20);
             return error("addr message has trailing bytes");
@@ -6700,12 +6714,6 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
         // Don't want addr from older versions unless seeding
         if (pfrom->nVersion < CADDR_TIME_VERSION && addrman.size() > 1000)
             return true;
-        if (vAddr.size() > 1000)
-        {
-            Misbehaving(pfrom->GetId(), 20);
-            return error("message addr size() = %u", vAddr.size());
-        }
-
         // Store the new addresses
         vector<CAddress> vAddrOk;
         int64_t nNow = GetAdjustedTime();
