@@ -2115,3 +2115,21 @@ already queued are intentionally abandoned with the closed connection, while
 validation, serialization, chain history, PoW, monetary policy, upgrades, and
 cryptography are unchanged. Worldstream C23 remains complementary. Remaining
 risk: a contended sender retains the old deferred cleanup behavior by design.
+
+## Socket disconnect releases deferred relay inventory when uncontended
+
+Baseline and root cause: the bounded deferred relay inventory queue could still
+remain on a disconnected `CNode` while retained references deferred destruction.
+
+Fix and regression proof: `CloseSocketDisconnect()` now also try-locks the
+inventory mutex and clears deferred inventory plus its sent-inventory filter.
+The deterministic no-socket regression seeds both structures, disconnects, and
+proves both are empty. The focused test passed after an incremental native
+rebuild; the prior 99/99 block-download group remains broader disconnect-path
+coverage. Sanitizers remain unrun with 11 GB free and a 10 GB reserve.
+
+Consensus impact: NONE. Post-disconnect P2P memory cleanup only; validation,
+serialization, chain history, PoW, monetary policy, upgrades, and cryptography
+are unchanged. Worldstream C23 `origin/main` at `ac6881ff9` remains
+complementary. Remaining risk: a contended inventory producer retains existing
+deferred destruction behavior by design.

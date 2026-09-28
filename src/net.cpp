@@ -463,6 +463,12 @@ void CNode::CloseSocketDisconnect()
         nSendSize = 0;
         nSendOffset = 0;
     }
+
+    TRY_LOCK(cs_inventory, lockInventory);
+    if (lockInventory) {
+        vInventoryToSend.clear();
+        setInventoryKnown.clear();
+    }
 }
 
 void CNode::PushVersion()

@@ -2634,6 +2634,23 @@ BOOST_AUTO_TEST_CASE(socket_disconnect_releases_buffered_send_work)
     BOOST_CHECK_EQUAL(peer.nSendOffset, 0U);
 }
 
+BOOST_AUTO_TEST_CASE(socket_disconnect_releases_deferred_inventory_relay)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
+               "pending-inventory", true);
+    PrepareTransport(peer);
+    {
+        LOCK(peer.cs_inventory);
+        peer.vInventoryToSend.push_back(CInv(MSG_TX, uint256S("01")));
+        peer.setInventoryKnown.insert(CInv(MSG_TX, uint256S("02")));
+    }
+
+    peer.CloseSocketDisconnect();
+    LOCK(peer.cs_inventory);
+    BOOST_CHECK(peer.vInventoryToSend.empty());
+    BOOST_CHECK(peer.setInventoryKnown.empty());
+}
+
 BOOST_AUTO_TEST_CASE(address_trailing_bytes_do_not_mutate_peer_discovery)
 {
     CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
