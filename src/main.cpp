@@ -7462,7 +7462,12 @@ bool ProcessMessages(CNode* pfrom)
         {
             LogPrintf("%s(%s, %u bytes): CHECKSUM ERROR nChecksum=%08x hdr.nChecksum=%08x\n", __func__,
                SanitizeString(strCommand), nMessageSize, nChecksum, hdr.nChecksum);
-            continue;
+            // TCP has already protected the byte stream; a message-level
+            // checksum mismatch is malformed peer framing, not a recoverable
+            // partial read. Release any work this source owns promptly.
+            pfrom->fDisconnect = true;
+            fOk = false;
+            break;
         }
 
         // Process message

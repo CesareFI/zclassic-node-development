@@ -1001,6 +1001,33 @@ block/transaction validity, and cryptography are unchanged. Worldstream remains
 non-overlap C23 checked-store work. Remaining risk: valid checksummed but
 semantically malformed commands use their command-specific validation paths.
 
+## Invalid P2P checksums release assigned downloads
+
+Baseline and root cause: the message loop logged a failed application checksum
+then kept the connection alive. TCP already protects the byte stream, so this
+is a malformed peer frame rather than a recoverable partial read. A source
+could repeatedly send checksum-invalid messages while retaining its block
+window until timeout.
+
+Fix and after-result: checksum mismatch now marks the peer disconnected and
+returns failure from framed dispatch, matching invalid header behavior. Normal
+disconnect cleanup releases only that source's assignments for immediate
+healthy-peer takeover.
+
+Regression proof: a fragmented, otherwise valid message with a corrupt wire
+checksum reaches the framed checksum validator while owning 128 blocks. It
+disconnects, releases accounting on the next scheduler visit, and a healthy
+peer receives the full window. The new checksum regression and invalid-header
+takeover regression pass after an incremental `test_bitcoin` build; `git diff
+--check` passes. ASan/UBSan remains unrun due the 11 GB free / 10 GB reserve
+boundary.
+
+Consensus impact: NONE. This changes malformed P2P framing cleanup only; chain
+history, consensus serialization, PoW, monetary policy, upgrades,
+block/transaction validity, and cryptography are unchanged. Worldstream remains
+non-overlap C23 verification-profile work. Remaining risk: well-formed but
+slow peers continue through the existing monotonic timeout/reassignment path.
+
 ## Broader block-download validation after recovery hardening
 
 The complete registered `block_download_tests` group now runs to completion with

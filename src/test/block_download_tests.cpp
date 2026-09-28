@@ -1525,6 +1525,29 @@ BOOST_AUTO_TEST_CASE(invalid_wire_header_releases_requests_for_takeover)
     BOOST_CHECK_EQUAL(Stats(healthy).nBlocksInFlight, 128);
 }
 
+BOOST_AUTO_TEST_CASE(invalid_wire_checksum_releases_requests_for_takeover)
+{
+    CNode malformed(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "malformed", true);
+    CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "healthy", true);
+    Headers(malformed);
+    BOOST_REQUIRE(SendMessages(&malformed, false));
+    BOOST_REQUIRE_EQUAL(Stats(malformed).nBlocksInFlight, 128);
+
+    // The header and payload are otherwise valid, but the wire checksum does
+    // not match. This reaches the framed checksum validator, not a command
+    // decoder or block-validation path.
+    std::mt19937 random(0x43484b53);
+    FeedFragments(malformed, MalformedFrame(random, 1), random);
+    BOOST_REQUIRE(malformed.fDisconnect);
+    BOOST_REQUIRE(SendMessages(&malformed, false));
+    BOOST_CHECK_EQUAL(Stats(malformed).nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 0);
+
+    Headers(healthy);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_CHECK_EQUAL(Stats(healthy).nBlocksInFlight, 128);
+}
+
 BOOST_AUTO_TEST_CASE(truncated_block_frame_releases_requests_for_takeover)
 {
     CNode malformed(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "malformed", true);
