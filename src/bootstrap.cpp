@@ -312,7 +312,22 @@ bool DecodeBootstrapDiscoveryAddresses(CDataStream& addrPayload, const CService&
 {
     std::vector<CAddress> vAddr;
     try {
-        addrPayload >> vAddr;
+        const uint64_t count = ReadCompactSize(addrPayload);
+        // Reject the declared count before reserving a peer-controlled vector.
+        // Discovery runs before addrman, so even a failed advertisement must
+        // not consume a large temporary allocation or decode budget.
+        if (count > 1000) {
+            error = strprintf("oversized addr (%llu) from %s",
+                              (unsigned long long)count,
+                              peerAddress.ToStringIPPort());
+            return false;
+        }
+        vAddr.reserve((size_t)count);
+        for (uint64_t index = 0; index < count; ++index) {
+            CAddress addr;
+            addrPayload >> addr;
+            vAddr.push_back(addr);
+        }
     } catch (const std::exception& e) {
         error = strprintf("malformed addr from %s: %s", peerAddress.ToStringIPPort(), e.what());
         return false;
@@ -321,13 +336,6 @@ bool DecodeBootstrapDiscoveryAddresses(CDataStream& addrPayload, const CService&
         error = strprintf("addr from %s has trailing bytes", peerAddress.ToStringIPPort());
         return false;
     }
-    // Mirror the addr-message bound enforced by the normal net handler so a
-    // misbehaving peer cannot make us iterate an enormous list.
-    if (vAddr.size() > 1000) {
-        error = strprintf("oversized addr (%u) from %s", (unsigned int)vAddr.size(), peerAddress.ToStringIPPort());
-        return false;
-    }
-
     appended = 0;
     for (size_t i = 0; i < vAddr.size() && out.size() < BOOTSTRAP_DISCOVERY_MAX_RESULTS; ++i) {
         const CAddress& addr = vAddr[i];

@@ -1684,3 +1684,30 @@ block/transaction validity, and cryptography are unchanged. Worldstream's
 latest C23 `origin/main` is `19aeae4b7`, with no overlap. Remaining risk:
 the per-peer oldest-request deadline is still the separate final backstop and
 should remain covered by its monotonic timeout tests.
+
+## Bootstrap discovery bounds advertised address decoding before allocation
+
+Baseline and root cause: the pre-database bootstrap discovery path decoded a
+peer-controlled `addr` vector before applying its 1,000-address policy cap.
+An oversized declaration therefore entered vector deserialization and was only
+rejected later (or as a truncated generic malformed frame), wasting bounded
+startup memory and decode work.
+
+Fix and regression proof: the decoder now reads and caps the CompactSize count
+before reserving or deserializing addresses, then preserves the existing
+transactional result behavior. A 1,001-entry declaration with no address body
+now produces the explicit oversized error while preserving the caller's prior
+candidate list and append count. The focused oversized case and the existing
+discovery-address regression group passed after an incremental build. No
+full bootstrap suite was repeated because the unrelated deleted-binary process
+remains blocked in its own historical loopback test; a current-binary bounded
+run of that exact loopback test completed with no child left behind. `git diff
+--check` passes. ASan/UBSan remains unrun to preserve the 10 GB reserve (11 GB
+free).
+
+Consensus impact: NONE. This is pre-database bootstrap peer discovery only;
+chain history, consensus serialization, PoW, monetary policy, upgrades,
+block/transaction validity, and cryptography are unchanged. Worldstream's
+latest C23 `origin/main` is `19aeae4b7`, with no overlap. Remaining risk:
+network discovery remains opt-in and bounded by the existing direct-dial
+budget; this change does not alter source trust or snapshot verification.

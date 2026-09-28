@@ -1527,6 +1527,23 @@ BOOST_AUTO_TEST_CASE(bootstrap_discovery_addr_rejects_trailing_wire_bytes)
     BOOST_CHECK_EQUAL(appended, 99U);
 }
 
+BOOST_AUTO_TEST_CASE(bootstrap_discovery_addr_rejects_oversized_count_before_decode)
+{
+    const CService source("127.0.0.1", Params().GetDefaultPort());
+    CDataStream payload(SER_NETWORK, PROTOCOL_VERSION);
+    WriteCompactSize(payload, 1001);
+    std::vector<std::string> discovered;
+    discovered.push_back("1.1.1.1:8033");
+    const std::vector<std::string> before = discovered;
+    size_t appended = 99;
+    std::string error;
+
+    BOOST_CHECK(!DecodeBootstrapDiscoveryAddresses(payload, source, discovered, appended, error));
+    BOOST_CHECK(error.find("oversized") != std::string::npos);
+    BOOST_CHECK_EQUAL_COLLECTIONS(discovered.begin(), discovered.end(), before.begin(), before.end());
+    BOOST_CHECK_EQUAL(appended, 99U);
+}
+
 BOOST_AUTO_TEST_CASE(bootstrap_discovery_addr_keeps_valid_unique_bootstrap_peers)
 {
     const CService source("127.0.0.1", Params().GetDefaultPort());
