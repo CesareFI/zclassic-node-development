@@ -1054,6 +1054,11 @@ Worldstream's latest C23 `origin/main` is
 `fd9f5217de6e5f80bb45abf05bd503c7f89ef602` (GCC14 verification profile/staging
 contract), which remains non-overlap work.
 
+Complementary native networking validation: the existing binary also passed
+all 8 `netbase_tests` cases and all 6 `net_selection_tests` cases under
+60-second bounds. These cover address/network primitives and peer-selection
+behavior; they do not claim full end-to-end IBD acceptance.
+
 Read-only follow-up evidence: the pre-existing process's main thread is in a
 futex wait while joining its test server, and that server thread is blocked in
 `accept` on the loopback listener (socket inode `61033212`). It is waiting for
