@@ -2105,9 +2105,10 @@ send lock after receive cleanup and, when available, clears queued frames,
 partial stream state, and both send offsets. The deterministic no-socket
 regression seeds a queued frame and partial stream, disconnects, and proves
 all buffered send state is immediately empty/zero. Focused test passed after
-an incremental native rebuild. The full block-download group is unrun for
-this final micro-slice because its bounded 110-second run exceeds the remaining
-safe execution window; no sanitizer build was started with only 11 GB free.
+an incremental native rebuild. The deferred bounded full block-download group
+then passed 99/99 under its 110-second limit, with existing idle-peer
+observations at 0.0232 s for 125 peers and 0.1491 s for 750 peers over 1,000
+rounds; no sanitizer build was started with only 11 GB free.
 
 Consensus impact: NONE. Post-disconnect memory cleanup only; P2P wire bytes
 already queued are intentionally abandoned with the closed connection, while
