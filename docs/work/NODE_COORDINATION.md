@@ -940,6 +940,12 @@ does not prove the unavailable historical broad suite; it demonstrates that
 the suspected same-process fixture lifecycle currently reproduces cleanly. No
 ECC assertion, cleanup, consensus rule, or wallet safeguard was changed.
 
+The complete same-process `rpc_wallet_tests` group was subsequently captured
+under a 120-second bound with the existing binary: all 21 cases passed in 28.2
+seconds and emitted no ECC assertion. This resolves the current reproduction;
+the historical report's first failure remains unavailable evidence rather than
+a demonstrated current defect.
+
 ## Loopback bootstrap reconnect fixture is deadline-bounded
 
 Baseline and root cause: an externally owned run of the chunk-reset loopback
