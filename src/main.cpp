@@ -495,12 +495,27 @@ void InitializeNode(NodeId nodeid, const CNode *pnode) {
 
 void StopBlockDownload(CNodeState& state);
 
+// Requires cs_main. Once a socket is disconnected, its source attribution can
+// no longer result in a reject or a penalty and must not retain block hashes.
+static void EraseBlockSources(NodeId nodeid)
+{
+    AssertLockHeld(cs_main);
+    for (auto source = mapBlockSource.begin(); source != mapBlockSource.end();) {
+        if (source->second == nodeid)
+            source = mapBlockSource.erase(source);
+        else
+            ++source;
+    }
+}
+
 void DisconnectNode(NodeId nodeid)
 {
     LOCK(cs_main);
     CNodeState* state = State(nodeid);
-    if (state != NULL)
+    if (state != NULL) {
         StopBlockDownload(*state);
+        EraseBlockSources(nodeid);
+    }
 }
 
 void FinalizeNode(NodeId nodeid) {
@@ -515,12 +530,7 @@ void FinalizeNode(NodeId nodeid) {
 
     StopBlockDownload(*state);
     EraseOrphansFor(nodeid);
-    for (auto source = mapBlockSource.begin(); source != mapBlockSource.end();) {
-        if (source->second == nodeid)
-            source = mapBlockSource.erase(source);
-        else
-            ++source;
-    }
+    EraseBlockSources(nodeid);
 
     mapNodeState.erase(nodeid);
 }

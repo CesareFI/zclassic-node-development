@@ -1258,7 +1258,7 @@ exercise peer availability after reconnect churn with bounded valid headers
 and unknown inventory, then change scheduling only if ownership or availability
 evidence is lost.
 
-## Finalized peers release unlinked block provenance
+## Disconnected peers release unlinked block provenance
 
 Baseline and root cause: `mapBlockSource` retains the NodeId that supplied an
 accepted body until that block connects. A valid child body can remain unlinked
@@ -1266,28 +1266,29 @@ while its parent is still missing; if its source disconnects, retaining that
 NodeId cannot produce a reject or a penalty, but consumes tracking memory for
 the rest of the process.
 
-Fix and after-result: `FinalizeNode` now removes provenance entries belonging
-to the finalized NodeId after releasing its download work and orphans. The
-existing downloader diagnostic snapshot now exposes the bounded tracked-source
-count, making this lifecycle state directly testable without changing P2P or
-consensus behavior.
+Fix and after-result: `DisconnectNode` now removes provenance entries as soon
+as socket teardown releases download work; deferred `FinalizeNode` repeats the
+same cleanup idempotently. The existing downloader diagnostic snapshot exposes
+the bounded tracked-source count, making this lifecycle state directly testable
+without changing P2P or consensus behavior.
 
 Regression proof: a peer supplies requested block 2 before block 1, producing
 one valid unlinked body and one tracked source while the active chain remains
-at height zero. Finalizing that peer reduces the tracked-source count to zero.
-The new teardown case and existing foreign-invalid-body ownership case pass
-after incremental build. The complete `block_download_tests` group passed
-68/68 with explicit zero exit status; idle scheduling measured 0.0239 seconds
-for 125 peers and 0.1631 seconds for 750 peers over 1,000 rounds. No scheduler
-performance gain is claimed. `git diff --check` passes. ASan/UBSan remains
-unrun because 11 GB free preserves the required 10 GB reserve.
+at height zero. Socket-disconnect cleanup reduces the tracked-source count to
+zero, and deferred finalization preserves zero. The new teardown case and
+existing foreign-invalid-body ownership case pass after incremental build. The
+complete `block_download_tests` group passed 68/68 with explicit zero exit
+status; idle scheduling measured 0.0238 seconds for 125 peers and 0.1601
+seconds for 750 peers over 1,000 rounds. No scheduler performance gain is
+claimed. `git diff --check` passes. ASan/UBSan remains unrun because 11 GB free
+preserves the required 10 GB reserve.
 
 Consensus impact: NONE. This releases disconnected-peer provenance metadata
 only; chain history, consensus serialization, PoW, monetary policy, upgrades,
 block/transaction validity, and cryptography are unchanged. Worldstream's
 latest C23 `origin/main` is
-`ab1deafdcc35d1cdec30148327dd935636ccbe67` (test RAM scratch reservation),
-with no overlap. Remaining risk: connected peers can still retain provenance
-for valid unlinked bodies until normal chain processing resolves them.
-Recommended next investigation: bounded accounting for prolonged connected
-unlinked-body sources, only if live fixture evidence shows measurable growth.
+`e55ca12385d26e6f3ed5b1d47c47537e47a11b21` (CAS proof-head recovery), with no
+overlap. Remaining risk: connected peers can still retain provenance for valid
+unlinked bodies until normal chain processing resolves them. Recommended next
+investigation: bounded accounting for prolonged connected unlinked-body
+sources, only if live fixture evidence shows measurable growth.

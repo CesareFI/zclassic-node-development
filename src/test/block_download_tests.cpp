@@ -1101,7 +1101,7 @@ BOOST_AUTO_TEST_CASE(invalid_owned_block_releases_request_for_reassignment)
     BOOST_CHECK_EQUAL(chainActive.Height(), 1);
 }
 
-BOOST_AUTO_TEST_CASE(finalized_peer_releases_unlinked_block_source)
+BOOST_AUTO_TEST_CASE(disconnected_peer_releases_unlinked_block_source)
 {
     CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "source", true);
     Headers(peer);
@@ -1114,7 +1114,9 @@ BOOST_AUTO_TEST_CASE(finalized_peer_releases_unlinked_block_source)
     BOOST_CHECK_EQUAL(chainActive.Height(), 0);
     BOOST_CHECK_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 1);
 
-    GetNodeSignals().FinalizeNode(peer.GetId());
+    GetNodeSignals().DisconnectNode(peer.GetId());
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 0);
+    GetNodeSignals().FinalizeNode(peer.GetId()); // Deferred finalization is idempotent.
     BOOST_CHECK_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 0);
 }
 
