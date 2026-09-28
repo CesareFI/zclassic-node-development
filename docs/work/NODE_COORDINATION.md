@@ -949,6 +949,32 @@ NONE. Worldstream remains non-overlap C23 startup/storage work. Remaining risk:
 the pre-existing external process must be diagnosed by its owning session; it
 was not terminated or modified here.
 
+## Peer misbehavior scoring owns its node-state lock
+
+Baseline and root cause: `Misbehaving()` reads and mutates `mapNodeState`, and
+its contract said callers must hold `cs_main`. The normal message thread holds
+only the peer receive-buffer lock while dispatching `ProcessMessage()`, leaving
+many malformed-message score paths unsynchronized with disconnect, RPC, and
+validation state changes.
+
+Fix and after-result: `Misbehaving()` now acquires the recursive `cs_main`
+itself. Callers already inside validation continue safely through recursive
+locking; receive-thread parsing paths now use the same state ownership rule.
+No scoring thresholds, bans, wire rules, or validation decisions changed.
+
+Regression proof: incremental `test_bitcoin` rebuild plus malformed-header
+takeover, trailing-block takeover, malformed-`notfound` cleanup, and malformed
+bootstrap-chunk scoring cases pass. `git diff --check` passes. The initial
+unqualified bootstrap filter was rejected by Boost and is explicitly not counted
+as a test result; the suite-qualified case passed. ASan/UBSan remains unrun due
+the 11 GB free / 10 GB reserve boundary.
+
+Consensus impact: NONE. This serializes existing peer-state accounting only;
+chain history, consensus serialization, PoW, monetary policy, upgrades,
+block/transaction validity, and cryptography are unchanged. Worldstream remains
+non-overlap C23 checked-store work. Remaining risk: full race exploration still
+requires a sanitizer-capable build profile.
+
 Read-only follow-up evidence: the pre-existing process's main thread is in a
 futex wait while joining its test server, and that server thread is blocked in
 `accept` on the loopback listener (socket inode `61033212`). It is waiting for

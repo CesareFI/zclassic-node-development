@@ -2243,9 +2243,12 @@ void CheckForkWarningConditionsOnNewFork(CBlockIndex* pindexNewForkTip)
     CheckForkWarningConditions();
 }
 
-// Requires cs_main.
+// Thread-safe: callers may already hold cs_main while validating a message.
+// CCriticalSection is recursive, so centralizing this lock also protects the
+// receive-thread parsing paths that only hold a peer receive-buffer lock.
 void Misbehaving(NodeId pnode, int howmuch)
 {
+    LOCK(cs_main);
     if (howmuch == 0)
         return;
 
@@ -7046,10 +7049,7 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
         // Bypass the normal CBlock deserialization, as we don't want to risk deserializing 2000 full blocks.
         unsigned int nCount = ReadCompactSize(vRecv);
         if (nCount > MAX_HEADERS_RESULTS) {
-            {
-                LOCK(cs_main);
-                Misbehaving(pfrom->GetId(), 20);
-            }
+            Misbehaving(pfrom->GetId(), 20);
             pfrom->fDisconnect = true;
             return error("headers message size = %u", nCount);
         }
@@ -7057,19 +7057,13 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
         for (unsigned int n = 0; n < nCount; n++) {
             vRecv >> headers[n];
             if (ReadCompactSize(vRecv) != 0) {
-                {
-                    LOCK(cs_main);
-                    Misbehaving(pfrom->GetId(), 20);
-                }
+                Misbehaving(pfrom->GetId(), 20);
                 pfrom->fDisconnect = true;
                 return error("headers message has nonzero transaction count");
             }
         }
         if (!vRecv.empty()) {
-            {
-                LOCK(cs_main);
-                Misbehaving(pfrom->GetId(), 20);
-            }
+            Misbehaving(pfrom->GetId(), 20);
             pfrom->fDisconnect = true;
             return error("headers message has trailing bytes");
         }
@@ -7126,10 +7120,7 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
         if (!vRecv.empty()) {
             // A block message carries exactly one serialized block. Do not
             // accept a valid prefix from a malformed peer frame.
-            {
-                LOCK(cs_main);
-                Misbehaving(pfrom->GetId(), 20);
-            }
+            Misbehaving(pfrom->GetId(), 20);
             pfrom->fDisconnect = true;
             return error("block message has trailing bytes");
         }
