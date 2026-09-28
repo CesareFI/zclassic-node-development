@@ -7244,6 +7244,10 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
         {
             uint64_t nonce = 0;
             vRecv >> nonce;
+            if (!vRecv.empty()) {
+                Misbehaving(pfrom->GetId(), 20);
+                return error("ping message has trailing bytes from peer=%d", pfrom->id);
+            }
             // Echo the message back with the nonce. This allows for two useful features:
             //
             // 1) A remote node can quickly check if the connection is operational
@@ -7256,6 +7260,10 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
             // seconds to respond to each, the 5th ping the remote sends would appear to
             // return very quickly.
             pfrom->PushMessage("pong", nonce);
+        }
+        else if (!vRecv.empty()) {
+            Misbehaving(pfrom->GetId(), 20);
+            return error("pre-BIP31 ping message has payload from peer=%d", pfrom->id);
         }
     }
 

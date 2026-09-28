@@ -1428,3 +1428,29 @@ no overlap. Remaining risk: provenance can grow only with bodies admitted by
 the bounded request scheduler or separately accepted chain work; investigate a
 different scheduler/peer diversity bottleneck rather than broadening this
 metadata path without new evidence.
+
+## Trailing ping payloads release block ownership
+
+Baseline and root cause: the ordinary P2P `ping` handler decoded its BIP31
+nonce but did not require payload exhaustion. A peer holding a block window
+could send a checksum-valid nonce plus trailing bytes, remain connected, and
+hold its requests until normal timeout despite violating the fixed-shape wire
+message.
+
+Fix and regression proof: modern pings now require exactly one nonce, while
+pre-BIP31 pings require an empty payload. A fragmented wire regression gives a
+peer 128 requested blocks, supplies a nonce plus one byte, and proves normal
+teardown clears all accounting before a healthy peer takes the entire window.
+The focused case and full `block_download_tests` group pass 75/75 after an
+incremental rebuild; idle scheduling measured 0.0238 seconds for 125 peers and
+0.1517 seconds for 750 peers over existing 1,000-round checks. No performance
+gain is claimed. `git diff --check` passes. ASan/UBSan remains unrun to retain
+the 10 GB disk reserve (11 GB free).
+
+Consensus impact: NONE. This is bounded P2P framing validation only; chain
+history, consensus serialization, PoW, monetary policy, upgrades,
+block/transaction validity, and cryptography are unchanged. Worldstream's
+latest C23 `origin/main` remains `3a3caa86c0d9afec3a60954f12353c78c80750f6`,
+with no overlap. Remaining risk: malformed `pong` remains diagnostic-only by
+design; it cannot advance block ownership and should not be treated as an IBD
+source failure without evidence.
