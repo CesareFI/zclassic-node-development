@@ -1001,6 +1001,18 @@ block/transaction validity, and cryptography are unchanged. Worldstream remains
 non-overlap C23 checked-store work. Remaining risk: valid checksummed but
 semantically malformed commands use their command-specific validation paths.
 
+## Broader block-download validation after recovery hardening
+
+The complete registered `block_download_tests` group now runs to completion with
+the existing binary: 62 cases passed in approximately 60 seconds under a
+120-second bounded terminal session. It covers the new malformed wire/header
+cleanup paths alongside timeout, reassignment, ownership, peer-priority,
+header-progress, import-pause, reconnect, and bounded-request regressions.
+The measured idle scheduler remained 0.0237 seconds for 125 peers and 0.1617
+seconds for 750 peers over 1,000 rounds; no scheduler optimization is claimed
+from this measurement. Consensus impact: NONE. ASan/UBSan remains unrun due the
+11 GB free / 10 GB reserve boundary.
+
 Read-only follow-up evidence: the pre-existing process's main thread is in a
 futex wait while joining its test server, and that server thread is blocked in
 `accept` on the loopback listener (socket inode `61033212`). It is waiting for
