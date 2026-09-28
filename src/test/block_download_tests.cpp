@@ -1042,6 +1042,17 @@ BOOST_AUTO_TEST_CASE(trailing_verack_releases_requests_for_takeover)
     BOOST_CHECK_EQUAL(Stats(healthy).nBlocksInFlight, 128);
 }
 
+BOOST_AUTO_TEST_CASE(trailing_version_frame_disconnects_before_sync)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "malformed", true);
+    CDataStream payload(SER_NETWORK, PROTOCOL_VERSION);
+    payload << PROTOCOL_VERSION << uint64_t(NODE_NETWORK) << GetTime() << CAddress() << uint8_t{0};
+    std::mt19937 random(0x56455253);
+    FeedFragments(peer, FramePayload("version", payload), random);
+    BOOST_CHECK(peer.fDisconnect);
+    BOOST_CHECK_EQUAL(Stats(peer).nBlocksInFlight, 0);
+}
+
 BOOST_AUTO_TEST_CASE(block_reject_uses_single_byte_wire_code)
 {
     CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "reject-block", true);
