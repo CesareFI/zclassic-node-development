@@ -2340,6 +2340,20 @@ BOOST_AUTO_TEST_CASE(inventory_trailing_bytes_do_not_schedule_block_download)
     BOOST_CHECK_GE(after.nMisbehavior - before.nMisbehavior, 20);
 }
 
+BOOST_AUTO_TEST_CASE(inventory_oversized_count_is_rejected_before_deserialization)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "inv-oversized", true);
+    PrepareTransport(peer);
+    CDataStream oversized(SER_NETWORK, PROTOCOL_VERSION);
+    WriteCompactSize(oversized, MAX_INV_SZ + 1);
+    const auto before = Stats(peer);
+    BOOST_CHECK_NO_THROW(BOOST_CHECK(!ProcessMessage(&peer, "inv", oversized, GetTime())));
+    const auto after = Stats(peer);
+    BOOST_CHECK_EQUAL(after.nBlocksInFlight, before.nBlocksInFlight);
+    BOOST_CHECK_EQUAL(after.nGlobalBlocksInFlight, before.nGlobalBlocksInFlight);
+    BOOST_CHECK_GE(after.nMisbehavior - before.nMisbehavior, 20);
+}
+
 BOOST_AUTO_TEST_CASE(getdata_trailing_bytes_do_not_queue_service_work)
 {
     CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "getdata", true);

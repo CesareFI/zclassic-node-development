@@ -6769,13 +6769,18 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
 
     else if (strCommand == "inv")
     {
-        vector<CInv> vInv;
-        vRecv >> vInv;
-        if (vInv.size() > MAX_INV_SZ)
-        {
+        const uint64_t nInvCount = ReadCompactSize(vRecv);
+        if (nInvCount > MAX_INV_SZ) {
             Misbehaving(pfrom->GetId(), 20);
             pfrom->fDisconnect = true;
-            return error("message inv size() = %u", vInv.size());
+            return error("message inv size() = %llu", (unsigned long long)nInvCount);
+        }
+        vector<CInv> vInv;
+        vInv.reserve((size_t)nInvCount);
+        for (uint64_t i = 0; i < nInvCount; ++i) {
+            CInv inv;
+            vRecv >> inv;
+            vInv.push_back(inv);
         }
         if (!vRecv.empty()) {
             Misbehaving(pfrom->GetId(), 20);

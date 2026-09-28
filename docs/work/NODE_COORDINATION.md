@@ -1793,3 +1793,13 @@ the existing trailing-`getdata` regression pass 2/2 after an incremental build.
 Consensus impact: NONE. This is untrusted P2P service-request framing only;
 chain history, transaction/block validity, serialization, PoW, monetary policy,
 upgrades, and cryptography are unchanged. Worldstream remains non-overlapping.
+
+## P2P inventory count is bounded before IBD scheduling
+
+Baseline and root cause: `inv` decoded its peer-controlled inventory vector
+before applying `MAX_INV_SZ`; a truncated oversized count threw before the
+handler could score it or preserve scheduling state.
+
+Fix and regression proof: CompactSize is now checked before reserve/decode.
+The new no-body oversized-inventory regression passes after an incremental
+native build. Consensus impact: NONE; this is P2P scheduling input only.
