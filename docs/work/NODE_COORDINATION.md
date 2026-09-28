@@ -1943,3 +1943,24 @@ validation, serialization, PoW, monetary policy, upgrades, and cryptography
 are unchanged. Worldstream C23 `origin/main` at `a04a93ff6` remains
 non-overlapping. Remaining risk: checksum validation correctly still requires
 payload bytes and remains in the subsequent receive/dispatch path.
+
+## Receive-flood accounting includes pending getdata work
+
+Baseline and root cause: receive-flood backpressure counted framed receive
+messages but omitted decoded `getdata` inventory retained while the peer's send
+buffer was full. A peer could therefore hold its bounded pending request queue
+in addition to the full framed-message budget before socket reads paused.
+
+Fix and regression proof: `GetTotalRecvSize()` now adds the pending `CInv`
+footprint with overflow-safe arithmetic under the existing receive lock. The
+new deterministic case proves a 1,024-byte framed message plus two queued
+requests has the exact combined accounting. Existing message-overhead and
+bounded/trailing `getdata` regressions pass after the required incremental
+native rebuild.
+
+Consensus impact: NONE. This is socket receive backpressure only; P2P request
+semantics, block/header/transaction validation, serialization, chain history,
+PoW, monetary policy, upgrades, and cryptography are unchanged. Worldstream
+C23 `origin/main` at `e3983a56d` remains non-overlapping. Remaining risk: the
+queue stays bounded by the existing message and inventory caps; this makes that
+bound visible to the existing flood gate rather than creating a new queue cap.

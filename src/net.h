@@ -408,6 +408,14 @@ public:
                 return std::numeric_limits<size_t>::max();
             total += msg.vRecv.size() + overhead;
         }
+        // Decoded getdata entries remain pending while a peer's send buffer
+        // applies backpressure. Include their in-memory representation in the
+        // same receive-flood accounting so framed-message limits cannot hide
+        // an additional peer-controlled request queue.
+        if (vRecvGetData.size() >
+            (std::numeric_limits<size_t>::max() - total) / sizeof(CInv))
+            return std::numeric_limits<size_t>::max();
+        total += vRecvGetData.size() * sizeof(CInv);
         return total;
     }
 

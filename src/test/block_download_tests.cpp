@@ -2348,6 +2348,24 @@ BOOST_AUTO_TEST_CASE(receive_queue_size_accounts_message_overhead)
     }
 }
 
+BOOST_AUTO_TEST_CASE(receive_queue_size_accounts_pending_getdata)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
+               "queue-getdata", true);
+    CNetMessage message(Params().MessageStart(), SER_NETWORK, PROTOCOL_VERSION);
+    message.vRecv.resize(1024);
+    {
+        LOCK(peer.cs_vRecvMsg);
+        peer.vRecvMsg.push_back(message);
+        peer.vRecvGetData.push_back(CInv(MSG_BLOCK, uint256S("01")));
+        peer.vRecvGetData.push_back(CInv(MSG_TX, uint256S("02")));
+        BOOST_CHECK_EQUAL(peer.GetTotalRecvSize(),
+                          1024 + 24 + 2 * sizeof(CInv));
+        peer.vRecvGetData.clear();
+        peer.vRecvMsg.clear();
+    }
+}
+
 BOOST_AUTO_TEST_CASE(oversized_frame_is_rejected_before_receive_buffer_allocation)
 {
     CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
