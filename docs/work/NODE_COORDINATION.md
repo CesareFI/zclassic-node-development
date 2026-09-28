@@ -926,3 +926,25 @@ session's bounded command runner stops it at 30 seconds; that is not a pass or
 failure. No fixture defect is demonstrated, so no assertion or security check
 was changed. Recommended next investigation: retain the original broad-suite
 command/output, then reproduce its first failing case in the same process.
+
+## Loopback bootstrap reconnect fixture is deadline-bounded
+
+Baseline and root cause: an externally owned run of the chunk-reset loopback
+regression remained active for more than 15 hours. The current source could not
+attribute that job's state without interfering with it, but its test server had
+unbounded `accept`, `recv`, and `send` calls. A missing reconnect could therefore
+block the test harness indefinitely and hide the first failed protocol step.
+
+Fix and after-result: the localhost-only fixture now uses a five-second
+readiness deadline for accepts and each socket read/write. It reports its
+existing protocol failure instead of waiting indefinitely; production bootstrap
+socket code is unchanged. A new bounded local run of the exact chunk-reset
+regression completed successfully in 15.7 seconds with `timeout 20s`.
+
+Regression proof: incremental `test_bitcoin` rebuild plus the one-case
+loopback reset/reconnect test passed. The broader bootstrap group is not rerun
+because an unrelated session owns a long-running instance and the 10 GB disk
+reserve forbids sanitizer builds. `git diff --check` passes. Consensus impact:
+NONE. Worldstream remains non-overlap C23 startup/storage work. Remaining risk:
+the pre-existing external process must be diagnosed by its owning session; it
+was not terminated or modified here.

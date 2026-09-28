@@ -178,10 +178,25 @@ static std::string DeterministicBytes(size_t n, unsigned int seed)
     return s;
 }
 
+static bool WaitForTestSocket(SOCKET socket, bool write)
+{
+    fd_set fdset;
+    FD_ZERO(&fdset);
+    FD_SET(socket, &fdset);
+    struct timeval timeout;
+    timeout.tv_sec = 5;
+    timeout.tv_usec = 0;
+    return select((int)socket + 1, write ? NULL : &fdset,
+                  write ? &fdset : NULL, NULL, &timeout) > 0;
+}
+
 static bool SendAllTestBytes(SOCKET socket, const char* data, size_t size)
 {
     size_t sent = 0;
     while (sent < size) {
+        if (!WaitForTestSocket(socket, true)) {
+            return false;
+        }
         const int n = send(socket, data + sent, (int)(size - sent), MSG_NOSIGNAL);
         if (n <= 0) {
             return false;
@@ -195,6 +210,9 @@ static bool ReceiveAllTestBytes(SOCKET socket, char* data, size_t size)
 {
     size_t received = 0;
     while (received < size) {
+        if (!WaitForTestSocket(socket, false)) {
+            return false;
+        }
         const int n = recv(socket, data + received, (int)(size - received), 0);
         if (n <= 0) {
             return false;
@@ -202,6 +220,15 @@ static bool ReceiveAllTestBytes(SOCKET socket, char* data, size_t size)
         received += n;
     }
     return true;
+}
+
+static bool AcceptTestBootstrapClient(SOCKET listener, SOCKET& client)
+{
+    if (!WaitForTestSocket(listener, false)) {
+        return false;
+    }
+    client = accept(listener, NULL, NULL);
+    return client != INVALID_SOCKET;
 }
 
 static bool ReceiveTestBootstrapMessage(SOCKET socket, std::string& command, CDataStream* outputPayload = NULL)
@@ -276,8 +303,7 @@ static CService StartManifestLoopbackPeer(const CBootstrapSnapshotManifest& mani
         serverOk = false;
         try {
             if (dropFirstConnection) {
-                client = accept(listener, NULL, NULL);
-                if (client == INVALID_SOCKET) {
+                if (!AcceptTestBootstrapClient(listener, client)) {
                     throw std::runtime_error("missing dropped bootstrap connection");
                 }
                 CloseSocket(client);
@@ -285,9 +311,11 @@ static CService StartManifestLoopbackPeer(const CBootstrapSnapshotManifest& mani
             }
             const int sessions = (dropAfterHandshake || dropAfterFirstChunkResponse) ? 2 : 1;
             for (int session = 0; session < sessions; ++session) {
-                client = accept(listener, NULL, NULL);
+                if (!AcceptTestBootstrapClient(listener, client)) {
+                    throw std::runtime_error("missing bootstrap connection");
+                }
                 std::string command;
-                if (client == INVALID_SOCKET || !ReceiveTestBootstrapMessage(client, command) || command != "version") {
+                if (!ReceiveTestBootstrapMessage(client, command) || command != "version") {
                     throw std::runtime_error("missing bootstrap version");
                 }
                 CDataStream version(SER_NETWORK, INIT_PROTO_VERSION);
