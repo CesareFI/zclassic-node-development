@@ -1402,3 +1402,29 @@ regeneration), with no overlap. Remaining risk: accepted unlinked bodies
 properly retain provenance until connection or chain-processing cleanup;
 investigate source retention only with evidence that those accepted bodies
 exceed the scheduler's bounded request windows.
+
+## Accepted unlinked bodies retain bounded provenance until connection
+
+Baseline evidence: source attribution must remain available for a valid
+requested body whose parent is missing, because later contextual processing can
+still require a reject or penalty. The preceding ignored-body fix deliberately
+does not alter this accepted-body path.
+
+Regression proof: one peer receives its normal 128-block request window, then
+delivers children 2 through 128 before block 1. The active chain remains at
+zero, one request remains outstanding, and exactly 127 source entries are
+retained. Delivery of block 1 connects the complete range through height 128
+and consumes every entry. The focused case and complete
+`block_download_tests` group pass 74/74 after incremental compilation; idle
+scheduling measured 0.0234 seconds for 125 peers and 0.1803 seconds for 750
+peers over the existing 1,000-round checks. The timing is observability only,
+not a performance claim. `git diff --check` passes. ASan/UBSan remains unrun:
+11 GB free preserves the required 10 GB reserve.
+
+Consensus impact: NONE. This regression documents existing non-consensus
+metadata lifetime only; no production behavior changed. Worldstream's latest
+C23 `origin/main` remains `3a3caa86c0d9afec3a60954f12353c78c80750f6`, with
+no overlap. Remaining risk: provenance can grow only with bodies admitted by
+the bounded request scheduler or separately accepted chain work; investigate a
+different scheduler/peer diversity bottleneck rather than broadening this
+metadata path without new evidence.

@@ -1122,6 +1122,30 @@ BOOST_AUTO_TEST_CASE(disconnected_peer_releases_unlinked_block_source)
     BOOST_CHECK_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 0);
 }
 
+BOOST_AUTO_TEST_CASE(requested_unlinked_sources_are_bounded_and_connect_cleanup)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "source", true);
+    Headers(peer);
+    BOOST_REQUIRE(SendMessages(&peer, false));
+    BOOST_REQUIRE_EQUAL(Stats(peer).nBlocksInFlight, 128);
+
+    // The scheduler admits at most its 128-request window. Deliver every
+    // requested child before its parent: attribution is needed while they are
+    // unlinked, but cannot grow beyond the admitted bodies.
+    for (size_t height = 2; height <= 128; ++height) {
+        Deliver(peer, height);
+    }
+    BOOST_CHECK_EQUAL(chainActive.Height(), 0);
+    BOOST_CHECK_EQUAL(Stats(peer).nBlocksInFlight, 1);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 127);
+
+    // Once the missing parent connects, all buffered descendants connect and
+    // their source provenance is consumed by the existing chain path.
+    Deliver(peer, 1);
+    BOOST_CHECK_EQUAL(chainActive.Height(), 128);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 0);
+}
+
 BOOST_AUTO_TEST_CASE(unrequested_far_ahead_block_does_not_retain_provenance)
 {
     CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "far-ahead", true);
