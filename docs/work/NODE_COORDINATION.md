@@ -1634,3 +1634,28 @@ latest C23 `origin/main` remains `8ef06fa6b276aab0318a097a8b711c91718b90fa`,
 with no overlap. Remaining risk: malformed `pong` and `reject` messages use
 different compatibility/error-reporting semantics and need an independent
 review rather than a blanket framing rule.
+
+## Oversized pong payloads cannot retain a block source
+
+Baseline and root cause: BIP31 `pong` parsed the leading nonce but accepted a
+trailing suffix. A malformed response could therefore remain a block source
+after sending a noncanonical ping measurement frame. The bounded fragmented
+fixture reproduced this: a source with 128 validated requests remained
+connected after a nonce plus one extra byte.
+
+Fix and regression proof: the handler rejects payloads larger than the nonce
+before taking the ping-state lock or updating latency accounting. The fixture
+now disconnects and releases all requests immediately, and a healthy peer
+takes the complete window. The focused regression and complete
+`block_download_tests` group pass 83/83 after an incremental build; existing
+idle scheduling checks measured 0.0239 seconds for 125 peers and 0.1594
+seconds for 750 peers over 1,000 rounds. No performance claim is made.
+`git diff --check` passes. ASan/UBSan remains unrun to preserve the 10 GB
+reserve (11 GB free).
+
+Consensus impact: NONE. This is P2P ping framing only; chain history,
+consensus serialization, PoW, monetary policy, upgrades, block/transaction
+validity, and cryptography are unchanged. Worldstream's latest C23
+`origin/main` remains `8ef06fa6b276aab0318a097a8b711c91718b90fa`, with no
+overlap. Remaining risk: short/unsolicited `pong` behavior remains compatible
+with the existing latency semantics and was intentionally not changed.

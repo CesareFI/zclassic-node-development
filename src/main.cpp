@@ -7286,6 +7286,12 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
 
     else if (strCommand == "pong")
     {
+        // BIP31 pong carries at most its nonce. Reject an oversized payload
+        // before touching ping state, rather than accepting a valid prefix.
+        if (vRecv.in_avail() > sizeof(uint64_t)) {
+            Misbehaving(pfrom->GetId(), 20);
+            return error("pong message has trailing bytes from peer=%d", pfrom->id);
+        }
         LOCK(pfrom->cs_ping);
         int64_t pingUsecEnd = nTimeReceived;
         uint64_t nonce = 0;
