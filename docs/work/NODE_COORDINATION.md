@@ -1364,3 +1364,41 @@ timeout/reassignment path. Recommended next investigation: use the bounded
 loopback bootstrap driver tests to establish whether reconnect churn can let
 one manifest source monopolize all stream attempts before changing diversity
 policy.
+
+## Ignored far-ahead blocks do not retain source provenance
+
+Baseline and root cause: `ProcessNewBlock` recorded `mapBlockSource` whenever
+`AcceptBlock` returned a block index, including an unrequested body that
+`AcceptBlock` intentionally declined to store because it was too far ahead of
+the active tip. That source entry had no possible later validation or reject
+work, yet could accumulate while a connected peer sent otherwise-valid
+far-ahead bodies.
+
+Fix and after-result: provenance is now retained only when `AcceptBlock`
+succeeds and the index has `BLOCK_HAVE_DATA`. Requested and accepted unlinked
+bodies still retain their source for delayed validation; ignored, unrequested
+bodies do not. No block acceptance predicate, storage decision, or peer wire
+behavior changed.
+
+Regression proof: the downloader fixture validates headers through original
+mainnet height 320, then supplies the authentic 1,587-byte height-320 body as
+an unrequested block while the active chain remains at height zero. The block
+is correctly ignored by the existing far-ahead rule and now leaves tracked
+source accounting at zero. Its compact source vector is checked byte-for-byte
+against the preserved historical archive during this development run. The
+focused case and the complete `block_download_tests` group pass 73/73 after an
+incremental native rebuild; idle scheduling measured 0.0236 seconds for 125
+peers and 0.1532 seconds for 750 peers over the existing 1,000-round checks.
+No throughput improvement is claimed. `git diff --check` passes. ASan/UBSan
+remains unrun: 11 GB free preserves the required 10 GB reserve and no reusable
+sanitizer binary exists.
+
+Consensus impact: NONE. This bounds non-consensus source metadata only; chain
+history, consensus serialization, PoW, monetary policy, upgrades,
+block/transaction validity, and cryptography are unchanged. Worldstream's
+latest C23 `origin/main` is
+`3a3caa86c0d9afec3a60954f12353c78c80750f6` (capability-inventory
+regeneration), with no overlap. Remaining risk: accepted unlinked bodies
+properly retain provenance until connection or chain-processing cleanup;
+investigate source retention only with evidence that those accepted bodies
+exceed the scheduler's bounded request windows.

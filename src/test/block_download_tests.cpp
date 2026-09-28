@@ -12,6 +12,7 @@
 #include "rpc/server.h"
 #include "test/test_bitcoin.h"
 #include "util.h"
+#include "utilstrencodings.h"
 #include "utiltime.h"
 #include "timedata.h"
 
@@ -1118,6 +1119,77 @@ BOOST_AUTO_TEST_CASE(disconnected_peer_releases_unlinked_block_source)
     GetNodeSignals().DisconnectNode(peer.GetId());
     BOOST_CHECK_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 0);
     GetNodeSignals().FinalizeNode(peer.GetId()); // Deferred finalization is idempotent.
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 0);
+}
+
+BOOST_AUTO_TEST_CASE(unrequested_far_ahead_block_does_not_retain_provenance)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "far-ahead", true);
+    const std::vector<CBlockHeader> headers = ExtendedHeaders();
+    Handshake(peer);
+    BOOST_REQUIRE(SendMessages(&peer, false));
+    HeaderBatch(peer, headers, 1, 160);
+    HeaderBatch(peer, headers, 161, 160);
+    BOOST_REQUIRE_EQUAL(chainActive.Height(), 0);
+    BOOST_REQUIRE_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 0);
+
+    // Original mainnet block 320. Its header has been accepted above, but its
+    // body is 320 blocks ahead of our tip and was never requested. AcceptBlock
+    // must ignore it without retaining a source entry for data it did not keep.
+    const std::vector<unsigned char> bytes = ParseHex(
+        "040000005c6d91c46d60e7c794cf12fdacb43f04475f383ae6a6592f6d4367842b0200004e3ed65c"
+        "5994c39dfab31242e2f981e6de1ac89776d30453fcb125b4e0497d80000000000000000000000000"
+        "0000000000000000000000000000000000000000f2131f582ad40e1e000000000000000000000000"
+        "0413f8ce4b000010000000000000000000000000fd400500827efed1b6e06df8cb521be35babc586"
+        "1b7be8b702ee61cada6a43bf93001115eb6f98adf39df530"
+        "770494d357e04663f0ec9e75aa786580aea5379ac57612b39b79d3d244d146bcd51a9bbb301d9"
+        "64f76e95504d506b183a786e9d445041e005ca659e637af81641f0029c2a337b377c6b303d6f1"
+        "61698d9b9356e1cc106554ce78a03dbfdf3433cc05ce6a4906411b581c26ad745b5a93fa4b1a7"
+        "6b27a90d0481b4ced3d125e051b9b41402e7eff9f2dd2ef4479a2767530b84f53054bc9f337cf"
+        "07f6b271c2cf7bf99eea76fdb4ddc70f87db137e93b679af13f183d3215139143c18a38c1bc23"
+        "4d93e084dbf821192debfa4eeb512fd3f8c4c0a320c842115686774ba1110256f5e98ab275ea0"
+        "274cf9c4b729a0e56919f1a92275f3ed3770a25cfe53185cf3804d1de6a54fda4228aa9da9e1f"
+        "621149c2d25a1df32accd1438fb54b5b787ed8b3a869a96631d00a2cfef64defddf4621111ab6"
+        "9ef66eb85bd8e9771723452f8b1e3d6d4bc4cb5a025ed67b33663b00b509c912ab695ac053a9d"
+        "a2193b8d057218bc01b366f216de26086cbf188b96bb51fa1c75cc9548295f16007413be40f8d"
+        "8ddebb5790cfde518f5e806939fb51351315c7cf1e0b4160ab1365135f83851fe99774df0ad03"
+        "968db9d4145580314afdbe877eabedc9bfa231159499995c461baea40d7edf64421f6b9021d8c"
+        "250275d34fdbcbbddff45e919b45c8f5311946b597172513b229ab2119350e05f4c8f2e062e5"
+        "a49678325609424f06c1c2e51c577bb2f5d89df1b0d9fb5b34fe38bf19e36672f397b08b6690b"
+        "04588469fac3ea9d6070a5fefe2a10349970a0a0beed6e1a2b68c1a77980b5d66da1d92cf20d"
+        "07dd20f83460228df7f1949451b56a3533d6c5c61fbbc91e95a714c2b567c7b0a5d2e81634eba"
+        "6e8b45f67003399c6baa6bd2aefeeb8901a99f0fd89088cb7332141c3ccf6af5f67c59b50741c"
+        "7871590571c8f598b269fa5d1222311d6395d522df8f7bc0a2cb6f374e522e0a4515e1189c8f"
+        "5921b593c5c942d61ecd93069e64eb26db591a855cf97480b49246a1f1247a8b17ea6a4423dc"
+        "2c1b41c58829947381d21f214db995a03455499311e52880277fc38271d5ea0ff5326853bd983"
+        "150362d8f1b5b05887712910edd8b92b17019caf56e4dbfb4585c3595fc3e301b1e6901811ba0"
+        "5ff3932b58aa660a9d45f33e2cb0764b8e41fcf9ae2a902125837522197566bdbd12210331fa0"
+        "a12630a73531c314c41c583def599a72b93d1e85c4c0b33b89b10279b03970d662a359da81a30"
+        "9ecd96f979debcf731e8418575ef735f94db76e080d38debc9b23dafd5969843608d97d959174"
+        "7b495323b3f54478d964fb3cb0f5a51ee7c6d61d65b360792836c72c40ce6d3eb59a8787fd6b4"
+        "057627bddf85702545dba42dc4927c05cc1e6d829464ac6299ab85d1ed5e4541410e1999b5c89"
+        "629d6f0452e363b7393c0caa4c3ffd954625663161b42ea727151dfcaedc3b1e06e4425f58bd9"
+        "162c372dbd9ef6102a14ede7db80c234c6e3d8878eeb16c6560db76f64708c8dd14643b384785"
+        "621d2077df54c3c1162f37999586d9ed780da3d175ec4763792b96911bf68d0e1f0b2e98f902"
+        "0fe76a92c7e00069a92c58a40c4ea132422a38a3f0051827289a1fe4e5ec0bd44f61e0822ef95"
+        "d7cad43222389b47eaf7491c71fa5b4cf57c47ad2f91e64e517d04bc8264ebf4fff2f6834d4eb"
+        "c46b15377d72d4349e9ed31299388cedaf943134b870290e5253c0980635db1cfd85260ae7fd6"
+        "14d6232506caaa7fcff8b08b8b1b19c27208782dea43904d3a0b6730293ac790977843f2ea049"
+        "39e2305247c532559975d2f928e3570caef4575aff1dfc671689657ab626bffef9306d01010000"
+        "00010000000000000000000000000000000000000000000000000000000000000000ffffffff0402"
+        "400100ffffffff01807c814a000000002321025ac17db0d2527e601e326dec296338565abbb25b"
+        "20bc79636777d49140deaf70ac00000000");
+    BOOST_REQUIRE_EQUAL(bytes.size(), 1587U);
+    CDataStream payload(bytes, SER_NETWORK, PROTOCOL_VERSION);
+    CBlock block;
+    payload >> block;
+    BOOST_REQUIRE(payload.empty());
+    BOOST_REQUIRE(block.GetHash() == headers[320].GetHash());
+
+    CDataStream message(SER_NETWORK, PROTOCOL_VERSION);
+    message << block;
+    BOOST_REQUIRE(ProcessMessage(&peer, "block", message, GetTime()));
+    BOOST_CHECK_EQUAL(chainActive.Height(), 0);
     BOOST_CHECK_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 0);
 }
 

@@ -4921,7 +4921,11 @@ bool ProcessNewBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, bool
         // Store to disk
         CBlockIndex *pindex = NULL;
         bool ret = AcceptBlock(*pblock, state, &pindex, fRequested, dbp);
-        if (pindex && pfrom) {
+        // Retain provenance only for block data that AcceptBlock actually kept.
+        // An unrequested far-ahead body is deliberately ignored to protect disk
+        // and prune behavior; attributing that ignored body would let a peer
+        // grow mapBlockSource without any later validation work to perform.
+        if (ret && pindex && pfrom && (pindex->nStatus & BLOCK_HAVE_DATA)) {
             mapBlockSource[pindex->GetBlockHash()] = pfrom->GetId();
         }
         CheckBlockIndex();
