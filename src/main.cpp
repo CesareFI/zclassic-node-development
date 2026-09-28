@@ -6972,6 +6972,13 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
         vector<uint256> vEraseQueue;
         CTransaction tx;
         vRecv >> tx;
+        // A tx message carries exactly one transaction. Reject a valid prefix
+        // with a residual suffix before it changes peer inventory or enters
+        // mempool/orphan processing.
+        if (!vRecv.empty()) {
+            Misbehaving(pfrom->GetId(), 20);
+            return error("tx message has trailing bytes from peer=%d", pfrom->id);
+        }
 
         CInv inv(MSG_TX, tx.GetHash());
         pfrom->AddInventoryKnown(inv);

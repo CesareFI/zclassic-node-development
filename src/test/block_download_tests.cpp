@@ -1245,6 +1245,19 @@ BOOST_AUTO_TEST_CASE(transaction_reject_uses_single_byte_wire_code)
     BOOST_CHECK_EQUAL(mempool.size(), 0);
 }
 
+BOOST_AUTO_TEST_CASE(transaction_trailing_bytes_are_rejected_before_mempool_validation)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "tx-trailing", true);
+    Headers(peer);
+    CDataStream payload(SER_NETWORK, PROTOCOL_VERSION);
+    payload << blocks[0].vtx[0] << uint8_t{0};
+    const unsigned rejectsBefore = Sent(peer, "reject");
+    BOOST_CHECK(!ProcessMessage(&peer, "tx", payload, GetTime()));
+    BOOST_CHECK_EQUAL(Sent(peer, "reject"), rejectsBefore);
+    BOOST_CHECK_EQUAL(mempool.size(), 0);
+    BOOST_CHECK_GE(Stats(peer).nMisbehavior, 20);
+}
+
 BOOST_AUTO_TEST_CASE(invalid_foreign_block_preserves_request_ownership)
 {
     CNode owner(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "owner", true);

@@ -1756,3 +1756,25 @@ Worldstream's latest C23 `origin/main` is `19aeae4b7`, with no overlap.
 Remaining risk: valid legacy `addr` messages remain capped at the pre-existing
 1,000-entry policy and malformed under-length messages still follow the
 generic framed-message disconnect path.
+
+## P2P transaction frames require exact consumption
+
+Baseline and root cause: the `tx` handler deserialized one transaction but did
+not require payload exhaustion before adding peer inventory and invoking
+mempool/orphan validation. A coinbase transaction with one trailing byte was
+therefore handled as a normal transaction rejection rather than malformed
+wire input.
+
+Fix and regression proof: `tx` now rejects residual bytes with the existing
+malformed-peer score before any inventory or mempool work. The new regression
+proves no normal `reject` is emitted for that malformed frame; the focused
+transaction tests pass 2/2 after an incremental native build. The complete
+bounded scheduler group passes 86/86; its existing idle scheduler measurements
+were 0.0233 seconds for 125 peers and 0.1475 seconds for 750 peers over 1,000
+rounds. No performance gain is claimed.
+
+Consensus impact: NONE. This is P2P framing prior to mempool admission;
+transaction consensus validity, chain history, serialization, PoW, monetary
+policy, upgrades, and cryptography are unchanged. Worldstream's latest C23
+`origin/main` is `19a56b2e4`, with no overlap. Remaining risk: unknown commands
+remain intentionally extensible and are not treated as transaction frames.
