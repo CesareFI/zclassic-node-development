@@ -535,6 +535,8 @@ void FinalizeNode(NodeId nodeid) {
     mapNodeState.erase(nodeid);
 }
 
+} // anon namespace
+
 // Requires cs_main.
 // Returns whether a request was removed, optionally restricted to its owner.
 bool MarkBlockAsReceived(const uint256& hash, NodeId nodeid = -1) {
@@ -547,16 +549,24 @@ bool MarkBlockAsReceived(const uint256& hash, NodeId nodeid = -1) {
         assert(state->nBlocksInFlight > 0);
         assert(!itInFlight->second.second->fValidatedHeaders ||
                (nQueuedValidatedHeaders > 0 && state->nBlocksInFlightValidHeaders > 0));
+        const bool wasOldestRequest =
+            itInFlight->second.second == state->vBlocksInFlight.begin();
         nQueuedValidatedHeaders -= itInFlight->second.second->fValidatedHeaders;
         state->nBlocksInFlightValidHeaders -= itInFlight->second.second->fValidatedHeaders;
         state->vBlocksInFlight.erase(itInFlight->second.second);
         state->nBlocksInFlight--;
-        state->nStallingSince = 0;
+        // A later out-of-order body cannot advance the blocked download
+        // window. Only completing this source's oldest request is progress
+        // sufficient to reset its stall deadline.
+        if (wasOldestRequest)
+            state->nStallingSince = 0;
         mapBlocksInFlight.erase(itInFlight);
         return true;
     }
     return false;
 }
+
+namespace {
 
 // Cancel owned requests without changing this peer's download eligibility.
 void ReleaseBlockRequests(CNodeState& state)

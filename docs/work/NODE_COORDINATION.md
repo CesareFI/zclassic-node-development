@@ -1659,3 +1659,28 @@ validity, and cryptography are unchanged. Worldstream's latest C23
 `origin/main` remains `8ef06fa6b276aab0318a097a8b711c91718b90fa`, with no
 overlap. Remaining risk: short/unsolicited `pong` behavior remains compatible
 with the existing latency semantics and was intentionally not changed.
+
+## Out-of-order bodies cannot indefinitely reset the download-window stall timer
+
+Baseline and root cause: `MarkBlockAsReceived` reset a peer's two-second
+monotonic window-stall timer for every completed request. A source that withheld
+its earliest body could send later bodies out of order and repeatedly defer
+reassignment, even though the active chain could not advance.
+
+Fix and regression proof: request accounting now resets `nStallingSince` only
+when the completed request was that peer's oldest one. The deterministic
+index-only scheduler fixture fills the 4,096-block global window, starts a
+stall against its first owner, completes that owner's second request through
+the same accounting owner, and proves the original deadline disconnects the
+owner. The focused fixture and complete `block_download_tests` group pass
+84/84 after an incremental build; existing idle scheduling checks measured
+0.0236 seconds for 125 peers and 0.1516 seconds for 750 peers over 1,000
+rounds. No performance claim is made. `git diff --check` passes. ASan/UBSan
+remains unrun to preserve the 10 GB reserve (11 GB free).
+
+Consensus impact: NONE. This changes only P2P download scheduling; chain
+history, consensus serialization, PoW, monetary policy, upgrades,
+block/transaction validity, and cryptography are unchanged. Worldstream's
+latest C23 `origin/main` is `19aeae4b7`, with no overlap. Remaining risk:
+the per-peer oldest-request deadline is still the separate final backstop and
+should remain covered by its monotonic timeout tests.

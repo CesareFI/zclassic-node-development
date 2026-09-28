@@ -28,6 +28,7 @@
 #include <chrono>
 
 extern bool ProcessMessage(CNode*, std::string, CDataStream&, int64_t);
+extern bool MarkBlockAsReceived(const uint256&, NodeId);
 extern UniValue CallRPC(std::string);
 
 namespace {
@@ -1466,6 +1467,50 @@ BOOST_AUTO_TEST_CASE(headers_do_not_hide_stall_and_healthy_peer_advances_chain)
     BOOST_CHECK(chainActive.Tip()->GetBlockHash() == blocks.back().GetHash());
     BOOST_CHECK_EQUAL(Stats(healthy).nGlobalBlocksInFlight, 0);
     BOOST_CHECK_EQUAL(Stats(healthy).nGlobalValidatedBlocksInFlight, 0);
+}
+
+BOOST_AUTO_TEST_CASE(out_of_order_block_does_not_reset_window_stall)
+{
+    BlockWindowFixture branch;
+    std::vector<std::unique_ptr<CNode>> owners;
+    owners.reserve(BLOCK_DOWNLOAD_WINDOW / MAX_BLOCKS_IN_TRANSIT_PER_PEER);
+    for (unsigned int count = 0;
+         count < BLOCK_DOWNLOAD_WINDOW / MAX_BLOCKS_IN_TRANSIT_PER_PEER;
+         ++count) {
+        owners.emplace_back(new CNode(
+            INVALID_SOCKET,
+            CAddress(CService("127.0.0.1", static_cast<int>(count + 1))),
+            "window-owner", false));
+        CNode& owner = *owners.back();
+        PrepareTransport(owner);
+        CDataStream inventory(SER_NETWORK, PROTOCOL_VERSION);
+        inventory << std::vector<CInv>{CInv(MSG_BLOCK, branch.Tip())};
+        BOOST_REQUIRE(ProcessMessage(&owner, "inv", inventory, GetTime()));
+        BOOST_REQUIRE(SendMessages(&owner, false));
+        BOOST_REQUIRE_EQUAL(Stats(owner).nBlocksInFlight,
+                            MAX_BLOCKS_IN_TRANSIT_PER_PEER);
+    }
+
+    CNode waiting(INVALID_SOCKET, CAddress(CService("127.0.0.2", 1)),
+                  "window-waiting", false);
+    PrepareTransport(waiting);
+    CDataStream inventory(SER_NETWORK, PROTOCOL_VERSION);
+    inventory << std::vector<CInv>{CInv(MSG_BLOCK, branch.Tip())};
+    BOOST_REQUIRE(ProcessMessage(&waiting, "inv", inventory, GetTime()));
+    BOOST_REQUIRE(SendMessages(&waiting, false));
+    BOOST_REQUIRE_NE(Stats(*owners.front()).nStallingSince, 0);
+
+    // Complete a later owned request without the earliest body. This is the
+    // accounting event ProcessBlock performs for an out-of-order response;
+    // the index-only fixture deliberately avoids consensus validation here.
+    {
+        LOCK(cs_main);
+        BOOST_REQUIRE(MarkBlockAsReceived(branch.hashes[2], owners.front()->GetId()));
+    }
+    SetMockSteadyTimeMicros(start + (BLOCK_STALLING_TIMEOUT + 1) * 1000000LL);
+    BOOST_REQUIRE(SendMessages(owners.front().get(), false));
+    BOOST_CHECK(owners.front()->fDisconnect);
+    BOOST_CHECK_EQUAL(Stats(*owners.front()).nBlocksInFlight, 0);
 }
 
 BOOST_AUTO_TEST_CASE(socket_disconnect_releases_requests_before_finalization)
