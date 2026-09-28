@@ -1584,3 +1584,28 @@ no overlap. Remaining risk: live socket teardown invokes the same cleanup
 again, so this path intentionally relies on its tested idempotence. Next:
 inspect disconnect paths that set `fDisconnect` outside the message handler
 for similarly delayed block-window release.
+
+## Filterload validates complete wire payload before relay-state mutation
+
+Baseline and root cause: on a node that advertises `NODE_BLOOM`, a valid bloom
+filter followed by one trailing byte was deserialized and installed without
+checking payload exhaustion. The bounded bloom-capable regression failed with
+the old handler: the malformed source remained connected and retained its
+128-request IBD window.
+
+Fix and regression proof: `filterload` now rejects residual payload bytes,
+scores the malformed peer, and does so before replacing its relay filter. The
+fragmented localhost fixture releases the source window immediately and a
+healthy peer takes all 128 requests. The focused regression and complete
+`block_download_tests` group pass 81/81 after an incremental build; existing
+idle scheduling checks measured 0.0232 seconds for 125 peers and 0.1599
+seconds for 750 peers over 1,000 rounds. No performance claim is made.
+`git diff --check` passes. ASan/UBSan remains unrun to preserve the 10 GB
+reserve (11 GB free).
+
+Consensus impact: NONE. This is optional legacy P2P bloom framing only; chain
+history, consensus serialization, PoW, monetary policy, upgrades,
+block/transaction validity, and cryptography are unchanged. Worldstream's
+latest C23 `origin/main` remains `8ef06fa6b276aab0318a097a8b711c91718b90fa`,
+with no overlap. Remaining risk: `filteradd` has a separate bounded payload
+and state-mutation path and should be investigated independently.

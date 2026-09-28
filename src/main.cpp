@@ -7362,6 +7362,13 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
         CBloomFilter filter;
         vRecv >> filter;
 
+        // A complete bloom filter has a single canonical wire shape. Reject
+        // residual bytes before changing per-peer relay state.
+        if (!vRecv.empty()) {
+            Misbehaving(pfrom->GetId(), 20);
+            return error("filterload message has trailing bytes from peer=%d", pfrom->id);
+        }
+
         if (!filter.IsWithinSizeConstraints())
             // There is no excuse for sending a too-large filter
             Misbehaving(pfrom->GetId(), 100);
