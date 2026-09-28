@@ -1013,6 +1013,20 @@ seconds for 750 peers over 1,000 rounds; no scheduler optimization is claimed
 from this measurement. Consensus impact: NONE. ASan/UBSan remains unrun due the
 11 GB free / 10 GB reserve boundary.
 
+## Complete bootstrap protocol regression validation
+
+The complete registered `bootstrap_snapshot_protocol_tests` group now runs to
+completion with the existing binary: all 67 cases passed in 13.8 seconds under
+a 120-second bounded terminal session. This covers bootstrap manifest/chunk
+framing, bounded retries, stream-reset reconnect, discovery endpoint admission,
+peer retry rotation, malformed bootstrap message scoring, and the new
+deadline-bounded localhost fixture. Consensus impact: NONE. ASan/UBSan remains
+unrun because 11 GB free preserves the required 10 GB reserve.
+
+Worldstream's latest C23 `origin/main` is
+`fd9f5217de6e5f80bb45abf05bd503c7f89ef602` (GCC14 verification profile/staging
+contract), which remains non-overlap work.
+
 Read-only follow-up evidence: the pre-existing process's main thread is in a
 futex wait while joining its test server, and that server thread is blocked in
 `accept` on the loopback listener (socket inode `61033212`). It is waiting for
