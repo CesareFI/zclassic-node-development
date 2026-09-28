@@ -872,7 +872,18 @@ bool DecodeBootstrapSnapshotChunkPayload(CDataStream& payload,
 {
     CBootstrapSnapshotChunk decoded;
     try {
-        payload >> decoded;
+        // vData is peer-controlled. The generic vector deserializer permits a
+        // substantially larger allocation than this protocol's one-megabyte
+        // chunk limit, so inspect its CompactSize before allocating it.
+        payload >> decoded.nFileIndex >> decoded.nOffset;
+        const uint64_t dataSize = ReadCompactSize(payload);
+        if (dataSize > BOOTSTRAP_SNAPSHOT_MAX_CHUNK_SIZE) {
+            error = "bootstrap chunk data exceeds maximum size";
+            return false;
+        }
+        decoded.vData.resize((size_t)dataSize);
+        if (dataSize != 0)
+            payload.read(reinterpret_cast<char*>(&decoded.vData[0]), dataSize);
     } catch (const std::exception& e) {
         error = strprintf("could not decode bootstrap chunk: %s", e.what());
         return false;

@@ -1822,3 +1822,30 @@ handler could score it or preserve scheduling state.
 Fix and regression proof: CompactSize is now checked before reserve/decode.
 The new no-body oversized-inventory regression passes after an incremental
 native build. Consensus impact: NONE; this is P2P scheduling input only.
+
+## Bootstrap chunk payloads are bounded before allocation
+
+Baseline and root cause: the shared bootstrap chunk decoder deserialized the
+peer-controlled `vData` vector before applying the protocol's one-megabyte
+chunk cap. An unsolicited `BSCHK` or `BSPCHK`, and the direct bootstrap client
+path using the same decoder, could therefore allocate up to the generic stream
+limit before the later protocol check rejected it.
+
+Fix and regression proof: the decoder now reads the fixed file/offset fields,
+checks the serialized CompactSize length against
+`BOOTSTRAP_SNAPSHOT_MAX_CHUNK_SIZE`, and only then resizes and reads the byte
+buffer. It still requires complete payload consumption and leaves the caller's
+output unchanged on every failure. The CNode handler preserves the former
+unsolicited-overlimit score of 110 and disconnect behavior without first
+allocating the peer-declared excess. Focused decoder, `BSCHK` over-limit, and
+`BSPCHK` malformed-input tests passed after an incremental build.
+
+Consensus impact: NONE. This is bounded bootstrap transport parsing only; the
+manifest, compiled-anchor checks, file hashes, block validation, chain history,
+PoW, monetary policy, upgrades, transaction validity, and cryptography are
+unchanged. Worldstream C23 `origin/main` at `a04a93ff6` remains separate and
+non-overlapping. Remaining risk: the general protocol-frame size cap still
+precedes this decoder; a future bootstrap wire extension must retain this
+pre-allocation bound. Recommended next investigation: measure bootstrap stream
+failover behavior under a diverging manifest source without weakening the
+independent manifest and file-hash checks.

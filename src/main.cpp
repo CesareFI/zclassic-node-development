@@ -6296,9 +6296,17 @@ static bool RecvBootstrapChunk(
     const char* strLogKind, const char* strBadSize)
 {
     CBootstrapSnapshotChunk chunk;
-    try {
-        vRecv >> chunk;
-    } catch (const std::ios_base::failure&) {
+    std::string decodeError;
+    if (!DecodeBootstrapSnapshotChunkPayload(vRecv, chunk, decodeError)) {
+        if (decodeError == "bootstrap chunk data exceeds maximum size") {
+            // This is an unsolicited chunk and an explicit size violation.
+            // Preserve the existing high score without allocating the
+            // peer-declared over-limit vector first.
+            Misbehaving(pfrom->GetId(), 110);
+            pfrom->fDisconnect = true;
+            pfrom->PushMessage("reject", strCommand, REJECT_INVALID, string(strBadSize));
+            return true;
+        }
         // Malformed payload must be scored here; otherwise the throw unwinds
         // to the generic catch in ProcessMessages() which accrues no ban score.
         Misbehaving(pfrom->GetId(), 20);
@@ -6312,24 +6320,12 @@ static bool RecvBootstrapChunk(
     Misbehaving(pfrom->GetId(), 10);
     pfrom->fDisconnect = true;
 
-    if (!vRecv.empty()) {
-        Misbehaving(pfrom->GetId(), 20);
-        return error("%s has trailing bytes from peer=%d", strCommand, pfrom->id);
-    }
-
     if (chunk.vData.empty()) {
         // Out-of-spec value: a chunk with no data shouldn't exist on the wire.
         Misbehaving(pfrom->GetId(), 20);
         pfrom->PushMessage("reject", strCommand, REJECT_INVALID, string(strBadSize));
         return true;
     }
-    if (chunk.vData.size() > BOOTSTRAP_SNAPSHOT_MAX_CHUNK_SIZE) {
-        // Size overflow on a bounded field is obviously hostile.
-        Misbehaving(pfrom->GetId(), 100);
-        pfrom->PushMessage("reject", strCommand, REJECT_INVALID, string(strBadSize));
-        return true;
-    }
-
     LogPrint("net", "received %s chunk file=%u offset=%llu bytes=%u peer=%d\n",
         strLogKind,
         chunk.nFileIndex,

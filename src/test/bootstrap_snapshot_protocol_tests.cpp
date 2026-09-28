@@ -1673,6 +1673,18 @@ BOOST_AUTO_TEST_CASE(bootstrap_chunk_payload_requires_exact_wire_consumption)
     BOOST_CHECK(error.find("decode") != std::string::npos);
     BOOST_CHECK_EQUAL(preserved.nFileIndex, 9U);
     BOOST_CHECK_EQUAL(preserved.nOffset, 8192U);
+
+    // The chunk protocol accepts at most one MiB. A peer must not make the
+    // generic vector decoder allocate before this narrower limit is checked.
+    CDataStream oversized(SER_NETWORK, PROTOCOL_VERSION);
+    oversized << uint32_t{1} << uint64_t{0};
+    WriteCompactSize(oversized, BOOTSTRAP_SNAPSHOT_MAX_CHUNK_SIZE + 1);
+    BOOST_CHECK(!DecodeBootstrapSnapshotChunkPayload(oversized, preserved, error));
+    BOOST_CHECK(error.find("maximum size") != std::string::npos);
+    BOOST_CHECK_EQUAL(preserved.nFileIndex, 9U);
+    BOOST_CHECK_EQUAL(preserved.nOffset, 8192U);
+    BOOST_REQUIRE_EQUAL(preserved.vData.size(), 1U);
+    BOOST_CHECK_EQUAL(preserved.vData[0], 0xff);
 }
 
 BOOST_AUTO_TEST_CASE(bootstrap_discovery_addr_rejects_trailing_wire_bytes)
