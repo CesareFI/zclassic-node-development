@@ -1154,3 +1154,39 @@ Worldstream's latest C23 head is `3556ff3c47ad89dc7a6d8e635b00901aff69cfba`
 (checked-store issuer-log work), so this remains non-overlap networking work.
 Remaining risk: valid block bodies from a silent source still use the existing
 monotonic timeout/reassignment path.
+
+## Malformed inventory cannot retain a block-download window
+
+Baseline and root cause: malformed `inv` input was scored or logged, but a
+source that already owned block bodies was not disconnected. A truncated
+inventory reached the generic deserialization catch, and a trailing or
+oversized inventory returned failure from the command handler; neither path
+released the source's assigned window until the normal timeout.
+
+Fix and after-result: malformed inventory deserialization now follows the
+existing malformed block/header teardown path. Explicit oversized and trailing
+inventory checks also mark the source disconnected. Normal disconnect cleanup
+releases only that peer's assignments, so a healthy peer can take the complete
+128-block window immediately.
+
+Regression proof: two fragmented real-frame tests cover a declared-but-missing
+inventory entry and a valid empty inventory with one trailing byte. Each starts
+with 128 assigned blocks, observes prompt teardown and zero global accounting,
+then verifies a healthy peer receives all 128 requests. Both new cases and the
+existing trailing-inventory no-scheduling regression passed after an
+incremental `test_bitcoin` build; all six `net_selection_tests` cases and
+`git diff --check` also pass. A bounded complete block-download run was
+observed through its scheduler measurements but its detached terminal did not
+preserve an exit receipt, so it is not recorded as a passing validation for
+this slice. ASan/UBSan remains unrun because 11 GB free preserves the required
+10 GB reserve.
+
+Consensus impact: NONE. This is malformed P2P inventory teardown only; chain
+history, consensus serialization, PoW, monetary policy, upgrades,
+block/transaction validity, and cryptography are unchanged. Worldstream's
+latest C23 `origin/main` is `fd9f5217de6e5f80bb45abf05bd503c7f89ef602`
+(GCC14 verification profile/staging contract), with no overlap. Remaining
+risk: valid but silent block sources continue through the existing monotonic
+timeout/reassignment path. Recommended next investigation: use bounded
+offline tests to examine whether duplicate unsolicited valid inventory can
+distort peer availability without changing block ownership.

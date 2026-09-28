@@ -1621,6 +1621,61 @@ BOOST_AUTO_TEST_CASE(truncated_notfound_frame_releases_requests_for_takeover)
     BOOST_CHECK_EQUAL(Stats(healthy).nBlocksInFlight, 128);
 }
 
+BOOST_AUTO_TEST_CASE(malformed_inventory_releases_requests_for_takeover)
+{
+    CNode malformed(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "malformed", true);
+    CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "healthy", true);
+    Headers(malformed);
+    BOOST_REQUIRE(SendMessages(&malformed, false));
+    BOOST_REQUIRE_EQUAL(Stats(malformed).nBlocksInFlight, 128);
+
+    // A valid frame that declares an inventory entry but omits it reaches the
+    // command decoder. It must not leave this source owning its block window
+    // until the ordinary download timeout.
+    std::mt19937 random(0x494e5654);
+    FeedFragments(malformed, TruncatedPayloadFrame("inv"), random);
+    BOOST_REQUIRE(malformed.fDisconnect);
+    BOOST_REQUIRE(SendMessages(&malformed, false));
+    BOOST_CHECK_EQUAL(Stats(malformed).nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 0);
+
+    Headers(healthy);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_CHECK_EQUAL(Stats(healthy).nBlocksInFlight, 128);
+}
+
+BOOST_AUTO_TEST_CASE(trailing_inventory_releases_requests_for_takeover)
+{
+    CNode malformed(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "malformed", true);
+    CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "healthy", true);
+    Headers(malformed);
+    BOOST_REQUIRE(SendMessages(&malformed, false));
+    BOOST_REQUIRE_EQUAL(Stats(malformed).nBlocksInFlight, 128);
+
+    CDataStream payload(SER_NETWORK, PROTOCOL_VERSION);
+    payload << std::vector<CInv>() << uint8_t{0};
+    CMessageHeader header(Params().MessageStart(), "inv", payload.size());
+    const uint256 checksum = Hash(payload.begin(), payload.end());
+    header.nChecksum = ReadLE32(checksum.begin());
+    CDataStream frame(SER_NETWORK, PROTOCOL_VERSION);
+    frame << header;
+    frame.write(&payload[0], payload.size());
+    const std::vector<char> encoded(frame.begin(), frame.end());
+
+    std::mt19937 random(0x494e5654);
+    FeedFragments(malformed, encoded, random);
+    BOOST_REQUIRE(malformed.fDisconnect);
+    BOOST_REQUIRE(SendMessages(&malformed, false));
+    BOOST_CHECK_EQUAL(Stats(malformed).nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 0);
+
+    Headers(healthy);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_CHECK_EQUAL(Stats(healthy).nBlocksInFlight, 128);
+}
+
 BOOST_DATA_TEST_CASE(download_limits_bound_requests_and_recover,
                      boost::unit_test::data::make(std::vector<int>{16, 32, 64, 128}))
 {

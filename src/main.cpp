@@ -6717,10 +6717,12 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
         if (vInv.size() > MAX_INV_SZ)
         {
             Misbehaving(pfrom->GetId(), 20);
+            pfrom->fDisconnect = true;
             return error("message inv size() = %u", vInv.size());
         }
         if (!vRecv.empty()) {
             Misbehaving(pfrom->GetId(), 20);
+            pfrom->fDisconnect = true;
             return error("inv message has trailing bytes");
         }
 
@@ -7480,11 +7482,12 @@ bool ProcessMessages(CNode* pfrom)
         catch (const std::ios_base::failure& e)
         {
             pfrom->PushMessage("reject", strCommand, REJECT_MALFORMED, string("error parsing message"));
-            // A complete but malformed block or headers message cannot make
-            // progress on the peer's outstanding download work. Disconnect
+            // A complete but malformed block, headers, or inventory message
+            // cannot make progress on the peer's outstanding download work.
+            // Disconnect
             // without assigning a ban score so normal teardown immediately
             // makes that work available to another source.
-            if (strCommand == "block" || strCommand == "headers")
+            if (strCommand == "block" || strCommand == "headers" || strCommand == "inv")
                 pfrom->fDisconnect = true;
             if (strstr(e.what(), "end of data"))
             {
