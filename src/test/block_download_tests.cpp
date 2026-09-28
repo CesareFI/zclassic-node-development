@@ -1503,6 +1503,28 @@ BOOST_AUTO_TEST_CASE(fragmented_malformed_messages_release_downloads)
     BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 0);
 }
 
+BOOST_AUTO_TEST_CASE(invalid_wire_header_releases_requests_for_takeover)
+{
+    CNode malformed(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "malformed", true);
+    CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "healthy", true);
+    Headers(malformed);
+    BOOST_REQUIRE(SendMessages(&malformed, false));
+    BOOST_REQUIRE_EQUAL(Stats(malformed).nBlocksInFlight, 128);
+
+    // A validly framed payload with an invalid command byte reaches the real
+    // message-header validation branch before any command is dispatched.
+    std::mt19937 random(0x48445245);
+    FeedFragments(malformed, MalformedFrame(random, 4), random);
+    BOOST_REQUIRE(malformed.fDisconnect);
+    BOOST_REQUIRE(SendMessages(&malformed, false));
+    BOOST_CHECK_EQUAL(Stats(malformed).nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 0);
+
+    Headers(healthy);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_CHECK_EQUAL(Stats(healthy).nBlocksInFlight, 128);
+}
+
 BOOST_AUTO_TEST_CASE(truncated_block_frame_releases_requests_for_takeover)
 {
     CNode malformed(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "malformed", true);

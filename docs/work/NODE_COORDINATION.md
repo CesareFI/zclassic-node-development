@@ -975,6 +975,32 @@ block/transaction validity, and cryptography are unchanged. Worldstream remains
 non-overlap C23 checked-store work. Remaining risk: full race exploration still
 requires a sanitizer-capable build profile.
 
+## Invalid P2P wire headers release assigned downloads
+
+Baseline and root cause: the framed message loop logged an invalid P2P header
+(such as an invalid command byte) and continued the connection. An assigned
+peer could repeatedly send invalid framing while retaining its block window;
+the broad fuzz regression had to force teardown in test code.
+
+Fix and after-result: invalid wire headers now mark the peer disconnected and
+return failure from the framed dispatcher. Normal disconnect cleanup releases
+only that peer's header role and in-flight blocks for immediate healthy-source
+takeover. Checksum-mismatch handling remains unchanged.
+
+Regression proof: a fragmented wire frame with a valid checksum but invalid
+command byte reaches the real header validator while owning 128 requests. It
+disconnects, clears accounting on the next scheduler visit, and a healthy peer
+receives the full window. The new test and existing truncated-block framed
+cleanup case pass after an incremental `test_bitcoin` build; `git diff --check`
+passes. The broad fragmented fuzz group was not rerun after the command runner
+reached its 30-second cap before results; it is not claimed as passing.
+
+Consensus impact: NONE. This is P2P framing and download-lifetime cleanup only;
+chain history, consensus serialization, PoW, monetary policy, upgrades,
+block/transaction validity, and cryptography are unchanged. Worldstream remains
+non-overlap C23 checked-store work. Remaining risk: valid checksummed but
+semantically malformed commands use their command-specific validation paths.
+
 Read-only follow-up evidence: the pre-existing process's main thread is in a
 futex wait while joining its test server, and that server thread is blocked in
 `accept` on the loopback listener (socket inode `61033212`). It is waiting for

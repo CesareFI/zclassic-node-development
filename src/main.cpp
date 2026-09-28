@@ -7443,7 +7443,11 @@ bool ProcessMessages(CNode* pfrom)
         if (!hdr.IsValid(Params().MessageStart()))
         {
             LogPrintf("PROCESSMESSAGE: ERRORS IN HEADER %s peer=%d\n", SanitizeString(hdr.GetCommand()), pfrom->id);
-            continue;
+            // The command framing itself is invalid, so there is no safe
+            // request/response state to preserve on this connection.
+            pfrom->fDisconnect = true;
+            fOk = false;
+            break;
         }
         string strCommand = hdr.GetCommand();
 
