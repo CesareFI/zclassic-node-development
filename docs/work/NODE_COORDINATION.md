@@ -2143,8 +2143,11 @@ the declared maximum.
 Fix and regression proof: use an inclusive pre-insertion bound. The
 deterministic regression fills the map to the exact cap, asks for another
 transaction, and proves neither queue nor dedup set grows. The focused test
-passed after an incremental native build. Sanitizers remain unrun with 11 GB
-free and the required 10 GB reserve.
+passed after an incremental native build. The bounded `block_download_tests`
+group also printed `No errors detected` for all 101 cases under its 110-second
+limit; its existing scheduler observations were 0.0242 s for 125 idle peers
+and 0.1616 s for 750 peers over 1,000 rounds. Sanitizers remain unrun with 11
+GB free and the required 10 GB reserve.
 
 Consensus impact: NONE. Local P2P request-queue accounting only; validation,
 serialization, chain history, PoW, monetary policy, upgrades, and cryptography
