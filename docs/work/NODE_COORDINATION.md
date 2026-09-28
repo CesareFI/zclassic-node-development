@@ -2143,7 +2143,8 @@ the declared maximum.
 Fix and regression proof: use an inclusive pre-insertion bound. The
 deterministic regression fills the map to the exact cap, asks for another
 transaction, and proves neither queue nor dedup set grows. The focused test
-passed after an incremental native build. The bounded `block_download_tests`
+passed after an incremental native build. A companion fills all 100,000 dedup
+slots and proves another request cannot grow either container. The bounded `block_download_tests`
 group also printed `No errors detected` for all 101 cases under its 110-second
 limit; its existing scheduler observations were 0.0242 s for 125 idle peers
 and 0.1616 s for 750 peers over 1,000 rounds. Sanitizers remain unrun with 11
