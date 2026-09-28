@@ -575,6 +575,28 @@ BOOST_AUTO_TEST_CASE(repeated_full_header_batch_does_not_extend_response_deadlin
     BOOST_REQUIRE_EQUAL(Sent(healthy, "getheaders"), 1);
 }
 
+BOOST_AUTO_TEST_CASE(unsolicited_full_headers_do_not_restart_completed_sync)
+{
+    const auto headers = ExtendedHeaders();
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "peer", false);
+    Handshake(peer);
+    BOOST_REQUIRE(SendMessages(&peer, false));
+    BOOST_REQUIRE_EQUAL(Sent(peer, "getheaders"), 1);
+
+    // A short reply completes the request and releases the header-sync role.
+    Headers(peer, 0);
+    BOOST_REQUIRE(!Stats(peer).fHeaderSyncStarted);
+    BOOST_REQUIRE_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 0);
+
+    // A later unsolicited maximum-size batch is still validated and updates
+    // availability, but must not manufacture an unbounded continuation loop.
+    HeaderBatch(peer, headers, 1, MAX_HEADERS_RESULTS);
+    BOOST_CHECK_EQUAL(Sent(peer, "getheaders"), 1);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 0);
+    BOOST_CHECK(!Stats(peer).fHeaderSyncStarted);
+    BOOST_CHECK_EQUAL(Stats(peer).nHeaderSyncDeadline, 0);
+}
+
 BOOST_AUTO_TEST_CASE(advancing_header_batches_keep_slow_discovery_alive)
 {
     const auto headers = ExtendedHeaders();

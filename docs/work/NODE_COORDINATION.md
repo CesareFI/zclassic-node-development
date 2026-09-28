@@ -948,3 +948,33 @@ reserve forbids sanitizer builds. `git diff --check` passes. Consensus impact:
 NONE. Worldstream remains non-overlap C23 startup/storage work. Remaining risk:
 the pre-existing external process must be diagnosed by its owning session; it
 was not terminated or modified here.
+
+## Unsolicited full header batches cannot restart completed discovery
+
+Baseline and root cause: the headers handler requested a continuation after
+every maximum-size valid batch with no check that this peer still owned a
+header-sync role. A peer that had already returned an empty/short response
+could repeatedly send valid historical full batches and make the node emit a
+new `getheaders` request each time, with no active discovery deadline.
+
+Fix and after-result: a continuation is now emitted only while that peer has
+an outstanding header-sync role. Unsolicited headers continue through their
+existing validation and availability tracking path, but cannot create a new
+request loop. Active slow discovery still advances its monotonic deadline only
+when chain work advances, preserving normal headers-first sync.
+
+Regression proof: a deterministic peer completes discovery with an empty
+response, then supplies a valid maximum header batch; it receives no second
+`getheaders`, owns no header role, and has no deadline. The new regression plus
+the existing repeated-full-batch deadline and advancing-slow-discovery cases
+pass after an incremental `test_bitcoin` build. `git diff --check` passes.
+ASan/UBSan remains unrun because 11 GB free preserves the 10 GB reserve; this
+legacy checkout has no cyclomatic-complexity ratchet.
+
+Consensus impact: NONE. This only prevents unsolicited P2P response loops;
+chain history, consensus serialization, PoW, monetary policy, upgrades,
+block/transaction validity, and cryptography are unchanged. Worldstream's
+latest C23 `origin/main` remains capability-inventory-only work at
+`58c38837a637979842dfe84fcfc86d33c6781d52`. Remaining risk: a peer with an
+active requested range can still legitimately provide maximum batches until
+the existing progress or deadline rules end that role.

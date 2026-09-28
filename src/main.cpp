@@ -7088,18 +7088,20 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
             }
         }
 
+        CNodeState* nodeState = State(pfrom->GetId());
+        assert(nodeState != NULL);
         if (pindexLast)
             UpdateBlockAvailability(pfrom->GetId(), pindexLast->GetBlockHash());
 
-        if (nCount == MAX_HEADERS_RESULTS && pindexLast) {
-            UpdateHeaderSyncProgress(*State(pfrom->GetId()), pindexLast->nChainWork);
+        if (nodeState->fSyncStarted && nCount == MAX_HEADERS_RESULTS && pindexLast) {
+            UpdateHeaderSyncProgress(*nodeState, pindexLast->nChainWork);
             // Headers message had its maximum size; the peer may have more headers.
             // TODO: optimize: if pindexLast is an ancestor of chainActive.Tip or pindexBestHeader, continue
             // from there instead.
             LogPrint("net", "more getheaders (%d) to end to peer=%d (startheight:%d)\n", pindexLast->nHeight, pfrom->id, pfrom->nStartingHeight);
             pfrom->PushMessage("getheaders", chainActive.GetLocator(pindexLast), uint256());
         } else {
-            CompleteHeaderSync(*State(pfrom->GetId()));
+            CompleteHeaderSync(*nodeState);
         }
 
         CheckBlockIndex();
