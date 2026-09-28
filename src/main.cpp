@@ -645,6 +645,38 @@ bool ProcessNotFound(CNode& peer, CDataStream& payload)
     return !malformed;
 }
 
+enum class BlockLocatorReadResult {
+    OK,
+    OVERSIZED,
+    MALFORMED,
+};
+
+// The generic CBlockLocator deserializer reads a peer-controlled vector before
+// a caller can apply a serving policy. Decode the unchanged wire format here,
+// with the ordinary P2P locator limit enforced before reserve() or FindFork.
+BlockLocatorReadResult ReadBoundedBlockLocator(CDataStream& payload,
+                                                CBlockLocator& locator)
+{
+    try {
+        int nVersion;
+        payload >> nVersion;
+        const uint64_t count = ReadCompactSize(payload);
+        if (count > MAX_LOCATOR_SZ)
+            return BlockLocatorReadResult::OVERSIZED;
+
+        locator.vHave.clear();
+        locator.vHave.reserve(static_cast<size_t>(count));
+        for (uint64_t index = 0; index < count; ++index) {
+            uint256 hash;
+            payload >> hash;
+            locator.vHave.push_back(hash);
+        }
+    } catch (const std::ios_base::failure&) {
+        return BlockLocatorReadResult::MALFORMED;
+    }
+    return BlockLocatorReadResult::OK;
+}
+
 // Requires cs_main.
 void MarkBlockAsInFlight(NodeId nodeid, const uint256& hash, const Consensus::Params& consensusParams, const CBlockIndex *pindex = NULL) {
     AssertLockHeld(cs_main);
@@ -6882,7 +6914,18 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
     {
         CBlockLocator locator;
         uint256 hashStop;
-        vRecv >> locator >> hashStop;
+        const BlockLocatorReadResult locatorResult = ReadBoundedBlockLocator(vRecv, locator);
+        if (locatorResult != BlockLocatorReadResult::OK) {
+            Misbehaving(pfrom->GetId(), 20);
+            return error("getblocks locator is %s", locatorResult == BlockLocatorReadResult::OVERSIZED ?
+                "oversized" : "malformed");
+        }
+        try {
+            vRecv >> hashStop;
+        } catch (const std::ios_base::failure&) {
+            Misbehaving(pfrom->GetId(), 20);
+            return error("getblocks hash stop is malformed");
+        }
         if (!vRecv.empty()) {
             Misbehaving(pfrom->GetId(), 20);
             return error("getblocks message has trailing bytes");
@@ -6930,7 +6973,18 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
     {
         CBlockLocator locator;
         uint256 hashStop;
-        vRecv >> locator >> hashStop;
+        const BlockLocatorReadResult locatorResult = ReadBoundedBlockLocator(vRecv, locator);
+        if (locatorResult != BlockLocatorReadResult::OK) {
+            Misbehaving(pfrom->GetId(), 20);
+            return error("getheaders locator is %s", locatorResult == BlockLocatorReadResult::OVERSIZED ?
+                "oversized" : "malformed");
+        }
+        try {
+            vRecv >> hashStop;
+        } catch (const std::ios_base::failure&) {
+            Misbehaving(pfrom->GetId(), 20);
+            return error("getheaders hash stop is malformed");
+        }
         if (!vRecv.empty()) {
             Misbehaving(pfrom->GetId(), 20);
             return error("getheaders message has trailing bytes");

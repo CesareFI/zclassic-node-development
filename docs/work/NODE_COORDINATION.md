@@ -1964,3 +1964,40 @@ PoW, monetary policy, upgrades, and cryptography are unchanged. Worldstream
 C23 `origin/main` at `e3983a56d` remains non-overlapping. Remaining risk: the
 queue stays bounded by the existing message and inventory caps; this makes that
 bound visible to the existing flood gate rather than creating a new queue cap.
+
+## Locator requests are bounded before serving work
+
+Baseline and root cause: locally generated block locators reserve 32 hashes and
+grow logarithmically, but inbound `getblocks` and `getheaders` used the generic
+`CBlockLocator` vector decoder. A peer could therefore declare up to the
+transport payload limit of locator hashes before the node applied the fixed
+500-block or 160-header reply limits, allocating and scanning far more state
+than a compatible locator needs.
+
+Fix and regression proof: both request handlers now share a streaming decoder
+that preserves the existing version-plus-CompactSize-plus-hash wire format and
+rejects a declared count above the conventional 101-entry locator bound before
+`reserve()` or `FindForkInGlobalIndex`. The deterministic regression gives each
+command a 102-entry declaration with no hash bodies or stop hash, proving a
+clean rejection, no service reply, no request-accounting change, and a 20-point
+misbehavior increment; its boundary companion accepts exactly 101 hashes. The
+established trailing-bytes regression also passes. The complete bounded
+`block_download_tests` group passed 94/94 before that boundary-only assertion;
+all three focused cases pass after it under the same binary profile and the
+complete group is otherwise unchanged. The group run was under its
+110-second limit; it reported existing scheduler observations of 0.0231 s for
+125 idle peers and 0.1510 s for 750 peers over 1,000 rounds. This is resource
+hardening evidence, not a throughput claim. Sanitizer validation was unrun:
+the host retained 11 GB free, only 1 GB above the mandatory reserve, so no cold
+sanitizer build was started.
+
+Consensus impact: NONE. This is inbound P2P serving-resource policy; valid
+ordinary locator serialization and handling remain unchanged, and chain
+history, block/transaction validation, PoW, monetary policy, upgrades, and
+cryptography are untouched. Worldstream C23 `origin/main` at `6df88b2fe`
+remains complementary and does not modify native C++ networking. Remaining
+risk: a future protocol extension that legitimately needs larger locators must
+negotiate a separate bounded message rather than silently raising this legacy
+request limit. Recommended next investigation: measure whether a disconnected
+or `notfound` source can retain any non-block request state that delays a
+healthy peer, without altering ordinary peer compatibility.

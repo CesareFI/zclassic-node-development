@@ -2496,6 +2496,51 @@ BOOST_AUTO_TEST_CASE(chain_request_trailing_bytes_do_not_enter_service)
     }
 }
 
+BOOST_AUTO_TEST_CASE(chain_request_oversized_locator_is_rejected_before_deserialization)
+{
+    for (const std::string& command : {"getblocks", "getheaders"}) {
+        CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
+                   (command + "-oversized").c_str(), true);
+        PrepareTransport(peer);
+        CDataStream oversized(SER_NETWORK, PROTOCOL_VERSION);
+        // CBlockLocator serializes its stream version before the locator vector.
+        // No hash bodies or stop hash follow: reject the declared count before
+        // it can allocate/deserialise a peer-controlled vector.
+        oversized << PROTOCOL_VERSION;
+        WriteCompactSize(oversized, MAX_LOCATOR_SZ + 1);
+        const auto before = Stats(peer);
+        const unsigned invBefore = Sent(peer, "inv");
+        const unsigned headersBefore = Sent(peer, "headers");
+        BOOST_CHECK_NO_THROW(BOOST_CHECK(!ProcessMessage(&peer, command, oversized, GetTime())));
+        const auto after = Stats(peer);
+        BOOST_CHECK_EQUAL(Sent(peer, "inv"), invBefore);
+        BOOST_CHECK_EQUAL(Sent(peer, "headers"), headersBefore);
+        BOOST_CHECK_EQUAL(after.nBlocksInFlight, before.nBlocksInFlight);
+        BOOST_CHECK_EQUAL(after.nGlobalBlocksInFlight,
+                          before.nGlobalBlocksInFlight);
+        BOOST_CHECK_GE(after.nMisbehavior - before.nMisbehavior, 20);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(chain_request_locator_limit_accepts_conventional_maximum)
+{
+    for (const std::string& command : {"getblocks", "getheaders"}) {
+        CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
+                   (command + "-maximum-locator").c_str(), true);
+        PrepareTransport(peer);
+        std::vector<uint256> hashes(MAX_LOCATOR_SZ);
+        CDataStream request(SER_NETWORK, PROTOCOL_VERSION);
+        request << CBlockLocator(hashes) << uint256();
+        const auto before = Stats(peer);
+        BOOST_CHECK(ProcessMessage(&peer, command, request, GetTime()));
+        const auto after = Stats(peer);
+        BOOST_CHECK_EQUAL(after.nMisbehavior, before.nMisbehavior);
+        BOOST_CHECK_EQUAL(after.nBlocksInFlight, before.nBlocksInFlight);
+        BOOST_CHECK_EQUAL(after.nGlobalBlocksInFlight,
+                          before.nGlobalBlocksInFlight);
+    }
+}
+
 BOOST_AUTO_TEST_CASE(address_trailing_bytes_do_not_mutate_peer_discovery)
 {
     CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
