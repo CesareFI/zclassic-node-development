@@ -1870,3 +1870,28 @@ Recommended next investigation: use the existing deterministic block-download
 fixture to seek a measured per-peer scheduling or disconnect-recovery defect;
 do not introduce cross-source chunk sharing unless an independently verified
 manifest identity and staging ownership design are demonstrated.
+
+## Send-loop timeout retires stale unlinked-block provenance
+
+Baseline and root cause: a valid out-of-order body keeps a peer attribution in
+`mapBlockSource` until its parent connects. A send-loop block timeout released
+that peer's in-flight window, but only the later socket-thread disconnect pass
+erased its provenance. A retained `CNode` reference therefore left stale
+attribution briefly visible after the peer was already unusable.
+
+Fix and regression proof: both send-loop teardown exits now erase the
+disconnecting peer's block sources immediately after ordinary request cleanup.
+The socket and finalization cleanup paths remain idempotent. The deterministic
+regression supplies requested child block 2, advances beyond the peer's normal
+download deadline, and proves the source count is zero before either deferred
+teardown callback. Focused timeout/provenance cases and the complete bounded
+`block_download_tests` group passed 89/89 under a 110-second limit.
+
+Consensus impact: NONE. This changes only disconnected-peer provenance
+bookkeeping; header/block validation, reject policy for connected sources,
+serialization, chain history, PoW, monetary policy, upgrades, and cryptography
+are unchanged. Worldstream C23 `origin/main` at `a04a93ff6` remains
+non-overlapping. Remaining risk: the socket thread normally performs the same
+cleanup shortly afterward; this slice closes the only retained-reference gap.
+Recommended next investigation: keep seeking a measured peer-scheduling or
+reassignment defect, not speculative timeout-policy changes.

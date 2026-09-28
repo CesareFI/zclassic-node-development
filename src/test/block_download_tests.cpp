@@ -1335,6 +1335,33 @@ BOOST_AUTO_TEST_CASE(disconnected_peer_releases_unlinked_block_source)
     BOOST_CHECK_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 0);
 }
 
+BOOST_AUTO_TEST_CASE(timeout_releases_unlinked_block_source_before_socket_cleanup)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
+               "timed-out-source", true);
+    Headers(peer);
+    BOOST_REQUIRE(SendMessages(&peer, false));
+    BOOST_REQUIRE_EQUAL(Stats(peer).nBlocksInFlight, 128);
+
+    // A valid child body is retained while its requested parent is absent, so
+    // it has source attribution that a later timeout must retire immediately.
+    Deliver(peer, 2);
+    BOOST_REQUIRE_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 1);
+    const int64_t deadline = Stats(peer).nDownloadDeadline;
+    BOOST_REQUIRE_GT(deadline, start);
+
+    SetClocks(deadline + 1);
+    BOOST_REQUIRE(SendMessages(&peer, false));
+    BOOST_CHECK(peer.fDisconnect);
+    BOOST_CHECK_EQUAL(Stats(peer).nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 0);
+
+    // The deferred socket/finalization paths remain idempotent.
+    GetNodeSignals().DisconnectNode(peer.GetId());
+    GetNodeSignals().FinalizeNode(peer.GetId());
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 0);
+}
+
 BOOST_AUTO_TEST_CASE(requested_unlinked_sources_are_bounded_and_connect_cleanup)
 {
     CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "source", true);

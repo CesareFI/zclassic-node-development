@@ -7781,6 +7781,8 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         }
         if (pto->fDisconnect || state.fDownloadStopped) {
             StopBlockDownload(state);
+            if (pto->fDisconnect)
+                EraseBlockSources(pto->GetId());
             return true;
         }
 
@@ -7892,8 +7894,13 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             }
         }
 
-        if (pto->fDisconnect)
+        if (pto->fDisconnect) {
             StopBlockDownload(state);
+            // Send-loop timeout/teardown has made this source unusable before
+            // the socket thread may retire its final CNode reference. Do not
+            // retain attribution that can no longer receive a reject or ban.
+            EraseBlockSources(pto->GetId());
+        }
 
         //
         // Message: getdata (blocks)
