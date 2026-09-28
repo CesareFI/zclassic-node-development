@@ -2348,6 +2348,24 @@ BOOST_AUTO_TEST_CASE(receive_queue_size_accounts_message_overhead)
     }
 }
 
+BOOST_AUTO_TEST_CASE(oversized_frame_is_rejected_before_receive_buffer_allocation)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
+               "oversized-frame", true);
+    CMessageHeader header(Params().MessageStart(), "inv",
+                          MAX_PROTOCOL_MESSAGE_LENGTH + 1);
+    CDataStream frame(SER_NETWORK, PROTOCOL_VERSION);
+    frame << header;
+
+    // Header-only ingress is enough to reject the frame. Before this check
+    // moved ahead of readData(), rejection waited for a payload byte and that
+    // byte could reserve the receiver's 256 KiB look-ahead buffer.
+    LOCK(peer.cs_vRecvMsg);
+    BOOST_CHECK(!peer.ReceiveMsgBytes(&frame[0], frame.size()));
+    BOOST_REQUIRE_EQUAL(peer.vRecvMsg.size(), 1U);
+    BOOST_CHECK_EQUAL(peer.vRecvMsg.back().vRecv.size(), 0U);
+}
+
 BOOST_AUTO_TEST_CASE(inventory_trailing_bytes_do_not_schedule_block_download)
 {
     CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "inv", true);

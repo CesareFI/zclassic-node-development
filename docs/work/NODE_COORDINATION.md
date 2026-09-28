@@ -1895,3 +1895,25 @@ non-overlapping. Remaining risk: the socket thread normally performs the same
 cleanup shortly afterward; this slice closes the only retained-reference gap.
 Recommended next investigation: keep seeking a measured peer-scheduling or
 reassignment defect, not speculative timeout-policy changes.
+
+## Oversized frames are rejected before receive-ahead allocation
+
+Baseline and root cause: `readHeader()` accepts the generic stream bound before
+the CNode receive loop applies the stricter 2 MiB P2P frame cap. The old loop
+called `readData()` first, so a peer declaring a 2--32 MiB frame could make the
+receiver reserve its 256 KiB receive-ahead buffer before rejection.
+
+Fix and regression proof: the receive loop now checks the P2P cap immediately
+after a complete header and before any payload read/allocation. A deterministic
+header-only ingress test proves immediate failure with an empty receive buffer.
+The existing fragmented malformed-frame teardown and invalid-wire-header
+takeover tests also pass after an incremental native build.
+
+Consensus impact: NONE. This is pre-dispatch P2P resource handling; message
+limits, block/header/transaction validation, serialization, chain history,
+PoW, monetary policy, upgrades, and cryptography are unchanged. Worldstream
+C23 `origin/main` at `a04a93ff6` remains non-overlapping. Remaining risk: the
+generic stream cap remains intentionally separate for parser safety; any new
+message transport must retain its stricter live-frame check before allocation.
+Recommended next investigation: inspect response delivery accounting and peer
+selection only where deterministic evidence identifies an imbalance.

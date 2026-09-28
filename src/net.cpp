@@ -612,17 +612,20 @@ bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes)
 
         // absorb network data
         int handled;
-        if (!msg.in_data)
+        if (!msg.in_data) {
             handled = msg.readHeader(pch, nBytes);
-        else
-            handled = msg.readData(pch, nBytes);
-
-        if (handled < 0)
+            if (handled < 0)
                 return false;
 
-        if (msg.in_data && msg.hdr.nMessageSize > MAX_PROTOCOL_MESSAGE_LENGTH) {
-            LogPrint("net", "Oversized message from peer=%i, disconnecting\n", GetId());
-            return false;
+            // Reject the protocol-sized message before readData reserves its
+            // receive-ahead buffer. readHeader permits MAX_SIZE for legacy
+            // stream safety, while live P2P framing is deliberately tighter.
+            if (msg.in_data && msg.hdr.nMessageSize > MAX_PROTOCOL_MESSAGE_LENGTH) {
+                LogPrint("net", "Oversized message from peer=%i, disconnecting\n", GetId());
+                return false;
+            }
+        } else {
+            handled = msg.readData(pch, nBytes);
         }
 
         pch += handled;
