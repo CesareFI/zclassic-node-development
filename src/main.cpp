@@ -7114,6 +7114,13 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
     {
         CBlock block;
         vRecv >> block;
+        if (!vRecv.empty()) {
+            // A block message carries exactly one serialized block. Do not
+            // accept a valid prefix from a malformed peer frame.
+            Misbehaving(pfrom->GetId(), 20);
+            pfrom->fDisconnect = true;
+            return error("block message has trailing bytes");
+        }
 
         CInv inv(MSG_BLOCK, block.GetHash());
         LogPrint("net", "received block %s peer=%d\n", inv.hash.ToString(), pfrom->id);

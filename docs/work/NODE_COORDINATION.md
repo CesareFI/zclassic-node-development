@@ -1004,3 +1004,30 @@ history, consensus serialization, PoW, monetary policy, upgrades,
 block/transaction validity, and cryptography are unchanged. Worldstream remains
 non-overlap C23 capability-inventory work. Remaining risk: valid but silent
 sources continue to use the existing bounded download timeout path.
+
+## Block messages require exact wire consumption
+
+Baseline and root cause: the block handler deserialized one `CBlock` but did
+not reject trailing bytes. A peer could append arbitrary data after a valid
+requested block; the valid prefix was accepted and the malformed frame was
+neither scored nor disconnected.
+
+Fix and after-result: the handler now requires the block payload to be fully
+consumed before it records inventory or invokes validation. A trailing byte is
+a malformed P2P frame, scores the sender, and follows normal disconnect cleanup
+so its assigned work is immediately available to another source.
+
+Regression proof: a source holding a 128-block window sends a valid first block
+with one trailing byte. The chain remains at height zero, teardown clears its
+accounting, and a healthy source receives the full window. The new regression,
+invalid-block reject encoding, and foreign-invalid-body ownership regression
+pass after an incremental `test_bitcoin` build. `git diff --check` passes.
+ASan/UBSan remains unrun because 11 GB free preserves the 10 GB reserve.
+
+Consensus impact: NONE. This rejects malformed network framing before block
+validation; chain history, consensus serialization, PoW, monetary policy,
+upgrades, block/transaction validity, and cryptography are unchanged.
+Worldstream's latest C23 head is `3556ff3c47ad89dc7a6d8e635b00901aff69cfba`
+(checked-store issuer-log work), so this remains non-overlap networking work.
+Remaining risk: valid block bodies from a silent source still use the existing
+monotonic timeout/reassignment path.
