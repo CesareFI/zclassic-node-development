@@ -1492,6 +1492,28 @@ BOOST_AUTO_TEST_CASE(truncated_headers_frame_releases_header_role)
     BOOST_REQUIRE_EQUAL(Stats(healthy).nBlocksInFlight, 128);
 }
 
+BOOST_AUTO_TEST_CASE(truncated_notfound_frame_releases_requests_for_takeover)
+{
+    CNode malformed(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "malformed", true);
+    CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "healthy", true);
+    Headers(malformed);
+    BOOST_REQUIRE(SendMessages(&malformed, false));
+    BOOST_REQUIRE_EQUAL(Stats(malformed).nBlocksInFlight, 128);
+
+    // A declared one-entry reply with only its compact-size prefix reaches the
+    // real framed-message dispatcher, then fails while decoding its CInv.
+    std::mt19937 random(0x4e4f5446);
+    FeedFragments(malformed, TruncatedPayloadFrame("notfound"), random);
+    BOOST_REQUIRE(malformed.fDisconnect);
+    BOOST_CHECK_EQUAL(Stats(malformed).nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 0);
+
+    Headers(healthy);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_CHECK_EQUAL(Stats(healthy).nBlocksInFlight, 128);
+}
+
 BOOST_DATA_TEST_CASE(download_limits_bound_requests_and_recover,
                      boost::unit_test::data::make(std::vector<int>{16, 32, 64, 128}))
 {

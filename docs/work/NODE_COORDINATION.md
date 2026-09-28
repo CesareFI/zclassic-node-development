@@ -894,11 +894,13 @@ still remains a non-ban availability failure; unrelated peers cannot release
 another source's work.
 
 Regression proof: the native block-download fixture assigns a 128-block window
-and supplies oversized, truncated, and trailing replies. Each leaves zero
-in-flight validated blocks before a healthy peer can receive the next window.
-The focused regression, valid unavailable-source takeover, forged-`notfound`
-ownership, and socket-disconnect teardown regressions pass after an incremental
-`test_bitcoin` rebuild. `git diff --check` passes. ASan/UBSan is unrun: 11 GB
+and supplies oversized, truncated, and trailing replies. A fragmented wire
+frame with an incomplete `CInv` also reaches the real dispatcher and performs
+the same cleanup. Each leaves zero in-flight validated blocks before a healthy
+peer can receive the next window. The focused regression, valid
+unavailable-source takeover, forged-`notfound` ownership, and
+socket-disconnect teardown regressions pass after an incremental `test_bitcoin`
+rebuild. `git diff --check` passes. ASan/UBSan is unrun: 11 GB
 free must preserve the 10 GB reserve, and this legacy checkout has no
 cyclomatic-complexity gate.
 
