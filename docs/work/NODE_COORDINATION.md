@@ -1917,3 +1917,25 @@ generic stream cap remains intentionally separate for parser safety; any new
 message transport must retain its stricter live-frame check before allocation.
 Recommended next investigation: inspect response delivery accounting and peer
 selection only where deterministic evidence identifies an imbalance.
+
+## Invalid frame headers are rejected before payload buffering
+
+Baseline and root cause: after the size-bound improvement, a structurally
+invalid magic/command header still reached later message dispatch before its
+payload was rejected. A malformed header declaring an otherwise permitted
+frame could therefore allocate receive-ahead storage before failing.
+
+Fix and regression proof: immediately after parsing a complete header, the
+receive loop now rejects invalid magic or command bytes before payload reads.
+`CMessageHeader::IsValid` deliberately permits printable unknown command names,
+so protocol extension interoperability remains intact. Deterministic tests
+prove an invalid command header fails with zero payload storage and a printable
+unknown command remains accepted as a complete zero-length frame. The existing
+fragmented malformed-frame takeover regression also passes.
+
+Consensus impact: NONE. This is P2P header framing before dispatch; chain
+history, message semantics for valid/unknown commands, block and transaction
+validation, serialization, PoW, monetary policy, upgrades, and cryptography
+are unchanged. Worldstream C23 `origin/main` at `a04a93ff6` remains
+non-overlapping. Remaining risk: checksum validation correctly still requires
+payload bytes and remains in the subsequent receive/dispatch path.

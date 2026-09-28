@@ -624,6 +624,14 @@ bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes)
                 LogPrint("net", "Oversized message from peer=%i, disconnecting\n", GetId());
                 return false;
             }
+            // Invalid magic or command bytes are framing failures, not
+            // dispatchable unknown commands. Refuse them before buffering a
+            // payload; IsValid intentionally still permits unknown printable
+            // command names for protocol extensibility.
+            if (msg.in_data && !msg.hdr.IsValid(Params().MessageStart())) {
+                LogPrint("net", "Invalid message header from peer=%i, disconnecting\n", GetId());
+                return false;
+            }
         } else {
             handled = msg.readData(pch, nBytes);
         }

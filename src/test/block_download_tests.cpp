@@ -2366,6 +2366,38 @@ BOOST_AUTO_TEST_CASE(oversized_frame_is_rejected_before_receive_buffer_allocatio
     BOOST_CHECK_EQUAL(peer.vRecvMsg.back().vRecv.size(), 0U);
 }
 
+BOOST_AUTO_TEST_CASE(invalid_frame_header_is_rejected_before_receive_buffer_allocation)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
+               "invalid-frame", true);
+    CMessageHeader header(Params().MessageStart(), "inv",
+                          MAX_PROTOCOL_MESSAGE_LENGTH);
+    header.pchCommand[0] = 0x01;
+    CDataStream frame(SER_NETWORK, PROTOCOL_VERSION);
+    frame << header;
+
+    // Unknown printable commands remain extensible, but a structurally invalid
+    // command header must fail before an attacker can start a large payload.
+    LOCK(peer.cs_vRecvMsg);
+    BOOST_CHECK(!peer.ReceiveMsgBytes(&frame[0], frame.size()));
+    BOOST_REQUIRE_EQUAL(peer.vRecvMsg.size(), 1U);
+    BOOST_CHECK_EQUAL(peer.vRecvMsg.back().vRecv.size(), 0U);
+}
+
+BOOST_AUTO_TEST_CASE(unknown_printable_frame_header_remains_extensible)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
+               "unknown-frame", true);
+    CMessageHeader header(Params().MessageStart(), "zfuture", 0);
+    CDataStream frame(SER_NETWORK, PROTOCOL_VERSION);
+    frame << header;
+
+    LOCK(peer.cs_vRecvMsg);
+    BOOST_CHECK(peer.ReceiveMsgBytes(&frame[0], frame.size()));
+    BOOST_REQUIRE_EQUAL(peer.vRecvMsg.size(), 1U);
+    BOOST_CHECK(peer.vRecvMsg.back().complete());
+}
+
 BOOST_AUTO_TEST_CASE(inventory_trailing_bytes_do_not_schedule_block_download)
 {
     CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "inv", true);
