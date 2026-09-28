@@ -1778,3 +1778,18 @@ transaction consensus validity, chain history, serialization, PoW, monetary
 policy, upgrades, and cryptography are unchanged. Worldstream's latest C23
 `origin/main` is `19a56b2e4`, with no overlap. Remaining risk: unknown commands
 remain intentionally extensible and are not treated as transaction frames.
+
+## P2P getdata count is bounded before service-request decoding
+
+Baseline and root cause: `getdata` deserialized its peer-controlled inventory
+vector before applying `MAX_INV_SZ`. A truncated declaration of `MAX_INV_SZ +
+1` therefore threw during deserialization without recording the handler's
+malformed-peer score.
+
+Fix and regression proof: the handler now reads and bounds CompactSize before
+reserving or decoding inventory entries. The new oversized-count regression and
+the existing trailing-`getdata` regression pass 2/2 after an incremental build.
+
+Consensus impact: NONE. This is untrusted P2P service-request framing only;
+chain history, transaction/block validity, serialization, PoW, monetary policy,
+upgrades, and cryptography are unchanged. Worldstream remains non-overlapping.

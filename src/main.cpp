@@ -6849,12 +6849,17 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
 
     else if (strCommand == "getdata")
     {
-        vector<CInv> vInv;
-        vRecv >> vInv;
-        if (vInv.size() > MAX_INV_SZ)
-        {
+        const uint64_t nInv = ReadCompactSize(vRecv);
+        if (nInv > MAX_INV_SZ) {
             Misbehaving(pfrom->GetId(), 20);
-            return error("message getdata size() = %u", vInv.size());
+            return error("message getdata size() = %llu", (unsigned long long)nInv);
+        }
+        vector<CInv> vInv;
+        vInv.reserve((size_t)nInv);
+        for (uint64_t i = 0; i < nInv; ++i) {
+            CInv inv;
+            vRecv >> inv;
+            vInv.push_back(inv);
         }
         if (!vRecv.empty()) {
             Misbehaving(pfrom->GetId(), 20);

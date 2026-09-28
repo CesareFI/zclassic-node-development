@@ -2353,6 +2353,18 @@ BOOST_AUTO_TEST_CASE(getdata_trailing_bytes_do_not_queue_service_work)
     BOOST_CHECK_GE(Stats(peer).nMisbehavior, 20);
 }
 
+BOOST_AUTO_TEST_CASE(getdata_oversized_count_is_rejected_before_deserialization)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
+               "getdata-oversized", true);
+    PrepareTransport(peer);
+    CDataStream oversized(SER_NETWORK, PROTOCOL_VERSION);
+    WriteCompactSize(oversized, MAX_INV_SZ + 1);
+    BOOST_CHECK_NO_THROW(BOOST_CHECK(!ProcessMessage(&peer, "getdata", oversized, GetTime())));
+    BOOST_CHECK(peer.vRecvGetData.empty());
+    BOOST_CHECK_GE(Stats(peer).nMisbehavior, 20);
+}
+
 BOOST_AUTO_TEST_CASE(chain_request_trailing_bytes_do_not_enter_service)
 {
     for (const std::string& command : {"getblocks", "getheaders"}) {
