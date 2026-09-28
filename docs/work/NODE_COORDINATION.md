@@ -2034,3 +2034,34 @@ idempotent cleanup ordering; the timeout, socket-dispatch, and finalization
 paths already do. Recommended next investigation: look for peer-controlled
 queued service work that is not included in an existing bounded accounting
 metric, without changing valid request semantics.
+
+## Deferred inventory relay is bounded per slow peer
+
+Baseline and root cause: `RelayTransaction` fans a new transaction inventory
+announcement to every relay peer. `PushInventory` only suppressed entries that
+had already been sent, while a slow peer's full send buffer can prevent
+`SendMessages` from draining its deferred inventory vector. That made
+`vInventoryToSend` an unbounded per-peer relay allocation even though incoming
+inventory and queued getdata have protocol bounds.
+
+Fix and regression proof: deferred inventory now stops at one `MAX_INV_SZ`
+(50,000-entry) protocol-sized inventory list. When full, another transaction
+is discarded as best-effort relay work, while a new block replaces one deferred
+transaction if available so transaction pressure cannot hide chain progress.
+The deterministic no-socket regression fills the queue with 50,000 unique
+synthetic transaction inventories, proves a 50,001st transaction does not grow
+it, then proves a block is present at the same fixed size. A bounded complete
+block-download group passed 97/97 under its 110-second limit, with its existing
+idle-peer observations at 0.0240 s for 125 peers and 0.1620 s for 750 peers
+over 1,000 rounds. Sanitizers remain unrun: the host has 11 GB free and the
+10 GB reserve prevents a cold sanitizer build.
+
+Consensus impact: NONE. This is an outbound P2P relay-memory bound; it neither
+changes inventory wire encoding nor block/transaction validation, chain
+history, PoW, monetary policy, upgrades, or cryptography. Worldstream C23
+`origin/main` at `5f86b86d5` remains complementary. Remaining risk: relay is
+intentionally best effort under a slow peer; a peer can learn missed
+transactions through ordinary inventory/mempool synchronization, while block
+announcements retain priority. Recommended next investigation: bound any other
+peer-controlled deferred queue only if its owner and normal backpressure path
+can be demonstrated with a deterministic regression.

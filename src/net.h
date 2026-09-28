@@ -477,7 +477,25 @@ public:
         {
             LOCK(cs_inventory);
             if (!setInventoryKnown.count(inv))
+            {
+                // RelayTransaction can enqueue inventory for every peer while
+                // a slow peer's send buffer prevents SendMessages from
+                // draining this vector. Keep the deferred relay work bounded
+                // to one protocol-sized inventory list. A new block remains
+                // more important than a deferred transaction announcement.
+                if (vInventoryToSend.size() >= MAX_INV_SZ) {
+                    if (inv.type != MSG_BLOCK)
+                        return;
+                    for (CInv& queued : vInventoryToSend) {
+                        if (queued.type == MSG_TX) {
+                            queued = inv;
+                            return;
+                        }
+                    }
+                    return;
+                }
                 vInventoryToSend.push_back(inv);
+            }
         }
     }
 

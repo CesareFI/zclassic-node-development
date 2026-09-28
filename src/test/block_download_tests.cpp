@@ -2567,6 +2567,33 @@ BOOST_AUTO_TEST_CASE(chain_request_locator_limit_accepts_conventional_maximum)
     }
 }
 
+BOOST_AUTO_TEST_CASE(deferred_inventory_relay_queue_is_bounded_and_preserves_blocks)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
+               "inventory-queue", true);
+    PrepareTransport(peer);
+    for (unsigned int index = 0; index < MAX_INV_SZ; ++index) {
+        uint256 hash;
+        hash.SetHex(strprintf("%08x", index + 1));
+        peer.PushInventory(CInv(MSG_TX, hash));
+    }
+    BOOST_REQUIRE_EQUAL(peer.vInventoryToSend.size(), MAX_INV_SZ);
+
+    uint256 extra;
+    extra.SetHex("ffffffff");
+    peer.PushInventory(CInv(MSG_TX, extra));
+    BOOST_CHECK_EQUAL(peer.vInventoryToSend.size(), MAX_INV_SZ);
+
+    const uint256 blockHash = blocks[1].GetHash();
+    peer.PushInventory(CInv(MSG_BLOCK, blockHash));
+    BOOST_CHECK_EQUAL(peer.vInventoryToSend.size(), MAX_INV_SZ);
+    BOOST_CHECK(std::any_of(peer.vInventoryToSend.begin(),
+                            peer.vInventoryToSend.end(),
+                            [&blockHash](const CInv& inv) {
+                                return inv.type == MSG_BLOCK && inv.hash == blockHash;
+                            }));
+}
+
 BOOST_AUTO_TEST_CASE(address_trailing_bytes_do_not_mutate_peer_discovery)
 {
     CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
