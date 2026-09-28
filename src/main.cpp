@@ -6292,8 +6292,11 @@ static bool RecvBootstrapChunk(
     }
 
     // Unsolicited push: the bootstrap client uses its own socket, so any
-    // chunk on a CNode connection was never requested by us.
+    // chunk on a CNode connection was never requested by us. It can consume
+    // up to the bounded chunk limit, so do not let this peer retain block
+    // download ownership while waiting for a ban threshold.
     Misbehaving(pfrom->GetId(), 10);
+    pfrom->fDisconnect = true;
 
     if (!vRecv.empty()) {
         Misbehaving(pfrom->GetId(), 20);

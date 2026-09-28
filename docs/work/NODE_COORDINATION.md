@@ -1292,3 +1292,37 @@ overlap. Remaining risk: connected peers can still retain provenance for valid
 unlinked bodies until normal chain processing resolves them. Recommended next
 investigation: bounded accounting for prolonged connected unlinked-body
 sources, only if live fixture evidence shows measurable growth.
+
+## Unsolicited bootstrap chunks release block ownership
+
+Baseline and root cause: the snapshot bootstrap client uses a dedicated socket,
+so `BSCHK` and `BSPCHK` received over an ordinary CNode connection are never
+requested. They were lightly scored after bounded decoding but remained
+connected, allowing a source that already owned block bodies to retain its
+window until the regular timeout or ban threshold.
+
+Fix and after-result: a valid unsolicited bootstrap chunk now marks the source
+for normal teardown immediately after the existing bounded parse and score.
+Malformed chunks still fail through their existing scored failure path; neither
+path accepts snapshot content into ordinary P2P block processing.
+
+Regression proof: two fragmented wire cases cover snapshot and parameter
+chunks. Each peer first owns 128 requested blocks, sends a valid one-byte
+unsolicited chunk, disconnects, clears per-peer/global accounting, and yields
+the full window to a healthy peer. Both cases pass after incremental build.
+The complete `bootstrap_snapshot_protocol_tests` group passed 67/67 and the
+complete `block_download_tests` group passed 70/70 with explicit zero exit
+status. Idle scheduling measured 0.0243 seconds for 125 peers and 0.1605
+seconds for 750 peers over 1,000 rounds; no performance improvement is
+claimed. `git diff --check` passes. ASan/UBSan remains unrun because 11 GB free
+preserves the required 10 GB reserve.
+
+Consensus impact: NONE. This is ordinary-P2P extension teardown only; chain
+history, consensus serialization, PoW, monetary policy, upgrades,
+block/transaction validity, and cryptography are unchanged. Worldstream's
+latest C23 `origin/main` is
+`e55ca12385d26e6f3ed5b1d47c47537e47a11b21` (CAS proof-head recovery), with no
+overlap. Remaining risk: valid but silent conventional block sources continue
+through the monotonic timeout/reassignment path. Recommended next
+investigation: verify that other non-block extension messages cannot retain an
+assigned block window after a protocol-state violation.
