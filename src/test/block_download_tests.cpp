@@ -1702,6 +1702,35 @@ BOOST_DATA_TEST_CASE(unsolicited_bootstrap_chunk_releases_requests_for_takeover,
     BOOST_CHECK_EQUAL(Stats(healthy).nBlocksInFlight, 128);
 }
 
+BOOST_DATA_TEST_CASE(unsolicited_bootstrap_manifest_releases_requests_for_takeover,
+                     boost::unit_test::data::make(std::vector<std::string>{
+                         NetMsgType::BSMAN, NetMsgType::BSPMAN}), command)
+{
+    CNode unsolicited(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "unsolicited", true);
+    CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "healthy", true);
+    Headers(unsolicited);
+    BOOST_REQUIRE(SendMessages(&unsolicited, false));
+    BOOST_REQUIRE_EQUAL(Stats(unsolicited).nBlocksInFlight, 128);
+
+    // A complete, serializable manifest reaches the CNode extension handler.
+    // Its contents are intentionally not trusted: the CNode path has no
+    // bootstrap client and must release this unusable block source.
+    CBootstrapSnapshotManifest manifest;
+    CDataStream payload(SER_NETWORK, PROTOCOL_VERSION);
+    payload << manifest;
+    std::mt19937 random(command == NetMsgType::BSMAN ? 0x42534d41 : 0x4253504d);
+    FeedFragments(unsolicited, FramePayload(command.c_str(), payload), random);
+    BOOST_REQUIRE(unsolicited.fDisconnect);
+    BOOST_REQUIRE(SendMessages(&unsolicited, false));
+    BOOST_CHECK_EQUAL(Stats(unsolicited).nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 0);
+
+    Headers(healthy);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_CHECK_EQUAL(Stats(healthy).nBlocksInFlight, 128);
+}
+
 BOOST_AUTO_TEST_CASE(malformed_inventory_releases_requests_for_takeover)
 {
     CNode malformed(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "malformed", true);

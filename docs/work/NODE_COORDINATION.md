@@ -1326,3 +1326,41 @@ overlap. Remaining risk: valid but silent conventional block sources continue
 through the monotonic timeout/reassignment path. Recommended next
 investigation: verify that other non-block extension messages cannot retain an
 assigned block window after a protocol-state violation.
+
+## Unsolicited bootstrap manifests release block ownership
+
+Baseline and root cause: the dedicated bootstrap client socket is the only
+consumer of `BSMAN` and `BSPMAN`. Complete replies arriving on an ordinary
+`CNode` socket were lightly scored, but the peer remained usable and could
+retain an assigned 128-block window until normal timeout even though the
+message cannot advance bootstrap work on that connection.
+
+Fix and after-result: after the existing bounded decode and score, both
+ordinary-P2P manifest handlers now request normal disconnect. The established
+teardown releases only scheduler ownership; malformed framing, manifest
+validation, chunk/hash verification, snapshot installation, and all consensus
+checks are unchanged.
+
+Regression proof: two fragmented localhost-only wire cases send complete,
+serializable snapshot and parameter manifests after the source owns 128 block
+requests. Each case proves disconnect, zero per-peer/global request accounting,
+and immediate full-window takeover by a healthy peer. The direct regression
+passes. The full `bootstrap_snapshot_protocol_tests` group passes 67/67 and
+the full `block_download_tests` group passes 72/72 after the incremental native
+rebuild; the latter measured 0.0247 seconds for 125 idle peers and 0.1508
+seconds for 750 peers over its existing 1,000-round scheduling checks. No
+performance gain is claimed. `git diff --check` passes. ASan/UBSan is unrun:
+11 GB free preserves the required 10 GB reserve and no reusable sanitizer
+binary is present.
+
+Consensus impact: NONE. This is CNode protocol-state teardown only; chain
+history, consensus serialization, PoW, monetary policy, upgrades,
+block/transaction validity, and cryptography are unchanged. Worldstream's
+latest C23 `origin/main` is
+`263b06ffd0460b9fd54a7e5e21f23d80463bf8fb` (capability-inventory regeneration
+after CAS proof-head recovery), with no overlap. Remaining risk: conventional
+but silent sources remain governed by the existing monotonic
+timeout/reassignment path. Recommended next investigation: use the bounded
+loopback bootstrap driver tests to establish whether reconnect churn can let
+one manifest source monopolize all stream attempts before changing diversity
+policy.

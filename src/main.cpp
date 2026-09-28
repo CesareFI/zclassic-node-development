@@ -6552,6 +6552,10 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
         // BSMAN arriving on a CNode connection is unsolicited. Score lightly: a
         // buggy peer rebroadcasting is plausible, but clearly out of spec.
         Misbehaving(pfrom->GetId(), 10);
+        // No CNode client consumes this extension reply. Retaining a peer that
+        // sent it only lets an unusable block source hold its download window
+        // until the ordinary timeout; the normal disconnect path releases it.
+        pfrom->fDisconnect = true;
 
         if (!vRecv.empty()) {
             // Trailing garbage after a fixed-shape struct is a clear violation.
@@ -6629,8 +6633,11 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
             return error("bspman has malformed payload from peer=%d", pfrom->id);
         }
 
-        // Unsolicited push on a CNode socket: light ban.
+        // The parameter bootstrap client also uses its own socket. An
+        // unsolicited CNode reply cannot be consumed, so release any block
+        // download ownership through the ordinary disconnect path.
         Misbehaving(pfrom->GetId(), 10);
+        pfrom->fDisconnect = true;
 
         if (!vRecv.empty()) {
             Misbehaving(pfrom->GetId(), 20);
