@@ -1849,3 +1849,24 @@ precedes this decoder; a future bootstrap wire extension must retain this
 pre-allocation bound. Recommended next investigation: measure bootstrap stream
 failover behavior under a diverging manifest source without weakening the
 independent manifest and file-hash checks.
+
+## Bootstrap reconnect manifest-source audit
+
+Audit result: no source-level defect was found. The initial manifest is
+validated before download. Every reopened parallel stream performs a fresh
+handshake and requires a byte-identical manifest before accepting any chunk;
+a divergent manifest is semantic failure, not a transport retry. The enclosing
+bootstrap peer schedule then gives the next configured source its ordinary
+round-robin attempt. Files are deliberately not mixed across divergent
+manifests, while retry within the same validated manifest retains only files
+that already passed their individual SHA-256 checks.
+
+Regression proof: the localhost reconnect fixture passed its exact-manifest
+case, including rejection of a changed manifest, and the bounded retry-schedule
+test passed its 3-by-3 source order. This is an audit result, not a performance
+claim. Consensus impact: NONE; no source, wire, validation, or trust policy was
+changed. Worldstream C23 `origin/main` at `a04a93ff6` remains non-overlapping.
+Recommended next investigation: use the existing deterministic block-download
+fixture to seek a measured per-peer scheduling or disconnect-recovery defect;
+do not introduce cross-source chunk sharing unless an independently verified
+manifest identity and staging ownership design are demonstrated.
