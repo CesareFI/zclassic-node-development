@@ -949,6 +949,13 @@ NONE. Worldstream remains non-overlap C23 startup/storage work. Remaining risk:
 the pre-existing external process must be diagnosed by its owning session; it
 was not terminated or modified here.
 
+Read-only follow-up evidence: the pre-existing process's main thread is in a
+futex wait while joining its test server, and that server thread is blocked in
+`accept` on the loopback listener (socket inode `61033212`). It is waiting for
+the reconnect that never arrived. This confirms the test-fixture hang mechanism
+without inspecting or modifying the process's data; the bounded listener path
+in this branch is the targeted regression prevention.
+
 ## Unsolicited full header batches cannot restart completed discovery
 
 Baseline and root cause: the headers handler requested a continuation after
