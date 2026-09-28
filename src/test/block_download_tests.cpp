@@ -2651,6 +2651,20 @@ BOOST_AUTO_TEST_CASE(socket_disconnect_releases_deferred_inventory_relay)
     BOOST_CHECK(peer.setInventoryKnown.empty());
 }
 
+BOOST_AUTO_TEST_CASE(askfor_queue_does_not_exceed_declared_cap)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
+               "askfor-cap", true);
+    PrepareTransport(peer);
+    const CInv queued(MSG_TX, uint256S("01"));
+    for (size_t index = 0; index < MAPASKFOR_MAX_SZ; ++index)
+        peer.mapAskFor.insert(std::make_pair((int64_t)index, queued));
+    BOOST_REQUIRE_EQUAL(peer.mapAskFor.size(), MAPASKFOR_MAX_SZ);
+    peer.AskFor(CInv(MSG_TX, uint256S("02")));
+    BOOST_CHECK_EQUAL(peer.mapAskFor.size(), MAPASKFOR_MAX_SZ);
+    BOOST_CHECK(peer.setAskFor.empty());
+}
+
 BOOST_AUTO_TEST_CASE(address_trailing_bytes_do_not_mutate_peer_discovery)
 {
     CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),

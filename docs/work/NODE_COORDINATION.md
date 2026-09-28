@@ -2133,3 +2133,20 @@ serialization, chain history, PoW, monetary policy, upgrades, and cryptography
 are unchanged. Worldstream C23 `origin/main` at `ac6881ff9` remains
 complementary. Remaining risk: a contended inventory producer retains existing
 deferred destruction behavior by design.
+
+## AskFor respects its declared queue cap
+
+Baseline and root cause: `CNode::AskFor` tested its deferred-request map with
+`>` before inserting, permitting one entry beyond `MAPASKFOR_MAX_SZ` despite
+the declared maximum.
+
+Fix and regression proof: use an inclusive pre-insertion bound. The
+deterministic regression fills the map to the exact cap, asks for another
+transaction, and proves neither queue nor dedup set grows. The focused test
+passed after an incremental native build. Sanitizers remain unrun with 11 GB
+free and the required 10 GB reserve.
+
+Consensus impact: NONE. Local P2P request-queue accounting only; validation,
+serialization, chain history, PoW, monetary policy, upgrades, and cryptography
+are unchanged. Worldstream C23 `origin/main` at `ac6881ff9` remains
+complementary.
