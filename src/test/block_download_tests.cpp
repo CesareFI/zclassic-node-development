@@ -1009,7 +1009,8 @@ BOOST_AUTO_TEST_CASE(trailing_ping_releases_requests_for_takeover)
     std::mt19937 random(0x50494e47);
     FeedFragments(malformed, FramePayload("ping", payload), random);
     BOOST_REQUIRE(malformed.fDisconnect);
-    BOOST_REQUIRE(SendMessages(&malformed, false));
+    // Framed-message failure must release ownership in the receive path. The
+    // send loop may be delayed behind its own mutex or another peer's work.
     BOOST_CHECK_EQUAL(Stats(malformed).nBlocksInFlight, 0);
     BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
     BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 0);

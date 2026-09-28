@@ -1557,3 +1557,30 @@ consensus serialization, PoW, monetary policy, upgrades, block/transaction
 validity, and cryptography are unchanged. Worldstream's latest C23
 `origin/main` remains `8ef06fa6b276aab0318a097a8b711c91718b90fa`, with no
 overlap.
+
+## Receive-path teardown releases malformed sources immediately
+
+Baseline and root cause: a malformed framed message set `fDisconnect`, but
+left that peer's in-flight block window to a later `SendMessages` pass. The
+new deterministic regression failed against the existing binary: immediately
+after a fragmented trailing-byte `ping`, the malformed source still owned all
+128 validated requests and the healthy peer could claim only one.
+
+Fix and regression proof: `ProcessMessages` now invokes the existing,
+idempotent disconnect accounting when it has marked a peer disconnected. The
+same framed input releases all 128 requests before the send loop runs and lets
+a healthy peer take the complete window. The focused regression and complete
+`block_download_tests` group pass 80/80 after an incremental build; existing
+idle scheduling checks measured 0.0238 seconds for 125 peers and 0.1554
+seconds for 750 peers over 1,000 rounds. No performance claim is made.
+`git diff --check` passes. ASan/UBSan remains unrun to preserve the 10 GB
+reserve (11 GB free).
+
+Consensus impact: NONE. This only advances P2P disconnect cleanup; chain
+history, consensus serialization, PoW, monetary policy, upgrades,
+block/transaction validity, and cryptography are unchanged. Worldstream's
+latest C23 `origin/main` is `8ef06fa6b276aab0318a097a8b711c91718b90fa`, with
+no overlap. Remaining risk: live socket teardown invokes the same cleanup
+again, so this path intentionally relies on its tested idempotence. Next:
+inspect disconnect paths that set `fDisconnect` outside the message handler
+for similarly delayed block-window release.

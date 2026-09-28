@@ -7587,6 +7587,14 @@ bool ProcessMessages(CNode* pfrom)
     if (!pfrom->fDisconnect)
         pfrom->vRecvMsg.erase(pfrom->vRecvMsg.begin(), it);
 
+    // A malformed framed response has already made this source unusable. Do
+    // not wait for a later send-loop pass before returning its block window:
+    // that pass can be delayed by the send mutex while healthy peers need the
+    // same requests for immediate reassignment. DisconnectNode is idempotent
+    // because socket teardown and finalization may arrive afterwards.
+    if (pfrom->fDisconnect)
+        DisconnectNode(pfrom->GetId());
+
     return fOk;
 }
 
