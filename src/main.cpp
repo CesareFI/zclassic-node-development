@@ -7220,6 +7220,10 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
 
     else if (strCommand == "mempool")
     {
+        if (!vRecv.empty()) {
+            Misbehaving(pfrom->GetId(), 20);
+            return error("mempool message has trailing bytes from peer=%d", pfrom->id);
+        }
         int currentHeight = GetHeight();
 
         LOCK2(cs_main, pfrom->cs_filter);
