@@ -1005,6 +1005,12 @@ block/transaction validity, and cryptography are unchanged. Worldstream remains
 non-overlap C23 capability-inventory work. Remaining risk: valid but silent
 sources continue to use the existing bounded download timeout path.
 
+Follow-up safety correction: `Misbehaving()` requires `cs_main`. The explicit
+malformed-header and trailing-block exits now acquire that recursive lock before
+changing the peer score, matching the node-state ownership contract. The same
+malformed-header takeover, nonzero-count header, and trailing-block takeover
+regressions pass after incremental rebuild; consensus impact remains NONE.
+
 ## Block messages require exact wire consumption
 
 Baseline and root cause: the block handler deserialized one `CBlock` but did
