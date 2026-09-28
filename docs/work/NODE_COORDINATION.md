@@ -877,3 +877,50 @@ only; chain history, consensus serialization, PoW, monetary policy, upgrades,
 block/transaction validity, and cryptography are unchanged. Worldstream
 remains non-overlap C23 storage/startup work. Remaining risk: discovery still
 depends on available seed responses; normal P2P fallback remains unchanged.
+
+## Malformed `notfound` releases assigned block work
+
+Baseline and root cause: `ProcessNotFound()` decoded the peer-controlled reply
+directly. A truncated reply threw into generic message handling, which rejected
+it but only performs immediate download teardown for malformed `block` and
+`headers` messages. The malformed `notfound` sender therefore retained its
+assigned block window until the ordinary download deadline, delaying a healthy
+source's takeover.
+
+Fix and after-result: bounded, oversized, truncated, and trailing `notfound`
+replies now score the sender, disconnect it, and synchronously release only
+that node's block requests and download roles. A well-formed owned `notfound`
+still remains a non-ban availability failure; unrelated peers cannot release
+another source's work.
+
+Regression proof: the native block-download fixture assigns a 128-block window
+and supplies oversized, truncated, and trailing replies. Each leaves zero
+in-flight validated blocks before a healthy peer can receive the next window.
+The focused regression, valid unavailable-source takeover, forged-`notfound`
+ownership, and socket-disconnect teardown regressions pass after an incremental
+`test_bitcoin` rebuild. `git diff --check` passes. ASan/UBSan is unrun: 11 GB
+free must preserve the 10 GB reserve, and this legacy checkout has no
+cyclomatic-complexity gate.
+
+Consensus impact: NONE. This is P2P error and ownership cleanup only; chain
+history, consensus serialization, PoW, monetary policy, upgrades,
+block/transaction validity, and cryptography are untouched. Worldstream's
+latest available C23 `origin/main` is
+`58c38837a637979842dfe84fcfc86d33c6781d52` (capability-inventory regeneration),
+so this remains non-overlap networking work. Remaining risk: malformed replies
+still rely on normal transport framing before this handler is reached.
+
+## Wallet-suite ECC report: current bounded reproduction
+
+The historical September broad-suite report itself is unavailable in the
+preserved evidence. Its repeated `ECC_Start()` assertions cannot be explained
+by separate test processes because `secp256k1_context_sign` is process-local.
+Within a `test_bitcoin` process, each `TestingSetup` starts ECC and its derived
+teardown joins script-check threads before the base fixture calls `ECC_Stop()`.
+All 21 registered `rpc_wallet_tests` cases, including both parallel async
+operations cases, pass individually with the existing binary and its isolated
+per-fixture datadir. The complete group could not be observed because this
+session's bounded command runner stops it at 30 seconds; that is not a pass or
+failure. No fixture defect is demonstrated, so no assertion or security check
+was changed. Recommended next investigation: retain the original broad-suite
+command/output, then reproduce its first failing case in the same process.

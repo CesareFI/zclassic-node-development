@@ -1258,31 +1258,46 @@ BOOST_AUTO_TEST_CASE(notfound_cannot_cancel_another_peers_requests)
 BOOST_AUTO_TEST_CASE(notfound_inventory_is_bounded_and_fully_decoded)
 {
     CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "missing", true);
-    Headers(peer);
-    BOOST_REQUIRE(SendMessages(&peer, false));
-    BOOST_REQUIRE_EQUAL(Stats(peer).nBlocksInFlight, 128);
+    CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "healthy", true);
+    const auto malformedNotFound = [&](CDataStream& payload) {
+        Headers(peer);
+        BOOST_REQUIRE(SendMessages(&peer, false));
+        BOOST_REQUIRE_EQUAL(Stats(peer).nBlocksInFlight, 128);
+        BOOST_CHECK(!ProcessMessage(&peer, "notfound", payload, GetTime()));
+        BOOST_CHECK(peer.fDisconnect);
+        BOOST_CHECK_EQUAL(Stats(peer).nBlocksInFlight, 0);
+        BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 0);
+        BOOST_CHECK_GE(Stats(peer).nMisbehavior, 20);
+    };
+
     CDataStream oversized(SER_NETWORK, PROTOCOL_VERSION);
     WriteCompactSize(oversized, MAX_INV_SZ + 1);
-    BOOST_CHECK(!ProcessMessage(&peer, "notfound", oversized, GetTime()));
-    BOOST_CHECK_EQUAL(Stats(peer).nBlocksInFlight, 128);
+    malformedNotFound(oversized);
+
+    // Use a new owner after the malformed source's cleanup has completed.
+    Headers(healthy);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_CHECK_EQUAL(Stats(healthy).nBlocksInFlight, 128);
+
     CDataStream truncated(SER_NETWORK, PROTOCOL_VERSION);
     WriteCompactSize(truncated, 2);
     truncated << CInv(MSG_BLOCK, blocks[1].GetHash()); // Second entry absent.
-    BOOST_CHECK_THROW(ProcessMessage(&peer, "notfound", truncated, GetTime()),
-                      std::ios_base::failure);
-    BOOST_CHECK_EQUAL(Stats(peer).nBlocksInFlight, 128);
-    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 128);
-    CDataStream trailing(SER_NETWORK, PROTOCOL_VERSION);
-    trailing << std::vector<CInv>{CInv(MSG_BLOCK, blocks[1].GetHash())};
-    trailing << uint8_t{0};
-    const auto before = Stats(peer);
-    BOOST_CHECK(!ProcessMessage(&peer, "notfound", trailing, GetTime()));
-    const auto after = Stats(peer);
-    BOOST_CHECK(!peer.fDisconnect);
-    BOOST_CHECK_EQUAL(after.nBlocksInFlight, before.nBlocksInFlight);
-    BOOST_CHECK_EQUAL(after.nGlobalValidatedBlocksInFlight,
-                      before.nGlobalValidatedBlocksInFlight);
-    BOOST_CHECK_GE(after.nMisbehavior - before.nMisbehavior, 20);
+    BOOST_CHECK(!ProcessMessage(&healthy, "notfound", truncated, GetTime()));
+    BOOST_CHECK(healthy.fDisconnect);
+    BOOST_CHECK_EQUAL(Stats(healthy).nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 0);
+
+    CNode trailing(INVALID_SOCKET, CAddress(CService("127.0.0.3", 3)), "trailing", true);
+    Headers(trailing);
+    BOOST_REQUIRE(SendMessages(&trailing, false));
+    BOOST_REQUIRE_EQUAL(Stats(trailing).nBlocksInFlight, 128);
+    CDataStream extra(SER_NETWORK, PROTOCOL_VERSION);
+    extra << std::vector<CInv>{CInv(MSG_BLOCK, blocks[1].GetHash())};
+    extra << uint8_t{0};
+    BOOST_CHECK(!ProcessMessage(&trailing, "notfound", extra, GetTime()));
+    BOOST_CHECK(trailing.fDisconnect);
+    BOOST_CHECK_EQUAL(Stats(trailing).nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 0);
 }
 
 BOOST_AUTO_TEST_CASE(headers_trailing_bytes_do_not_advance_peer_availability)

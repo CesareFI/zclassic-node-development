@@ -570,43 +570,53 @@ void StopBlockDownload(CNodeState& state)
 
 bool ProcessNotFound(CNode& peer, CDataStream& payload)
 {
-    const uint64_t count = ReadCompactSize(payload);
-    LOCK(cs_main);
-    if (count > MAX_INV_SZ) {
-        Misbehaving(peer.GetId(), 20);
-        return error("notfound message size exceeds limit");
+    bool malformed = false;
+    bool unavailable = false;
+    try {
+        const uint64_t count = ReadCompactSize(payload);
+        LOCK(cs_main);
+        if (count > MAX_INV_SZ) {
+            malformed = true;
+        } else {
+            // Decode the complete bounded list before changing request ownership.
+            // Streaming avoids allocating a peer-controlled inventory vector.
+            for (uint64_t index = 0; index < count; ++index) {
+                CInv inv;
+                payload >> inv;
+                if (inv.type != MSG_BLOCK || unavailable)
+                    continue;
+                const auto request = mapBlocksInFlight.find(inv.hash);
+                unavailable = request != mapBlocksInFlight.end() &&
+                              request->second.first == peer.GetId();
+            }
+            // The declared inventory must consume the complete wire payload
+            // before it can be treated as an availability signal.
+            malformed = !payload.empty();
+        }
+    } catch (const std::ios_base::failure&) {
+        malformed = true;
     }
 
-    bool unavailable = false;
-    // Decode the complete bounded list before changing request ownership.
-    // Streaming avoids allocating a peer-controlled inventory vector.
-    for (uint64_t index = 0; index < count; ++index) {
-        CInv inv;
-        payload >> inv;
-        if (inv.type != MSG_BLOCK || unavailable)
-            continue;
-        const auto request = mapBlocksInFlight.find(inv.hash);
-        unavailable = request != mapBlocksInFlight.end() &&
-                      request->second.first == peer.GetId();
-    }
-    if (!payload.empty()) {
-        // Do not let a malformed reply release a peer's work. The declared
-        // inventory must consume the complete wire payload before it can be
-        // treated as an availability signal.
+    if (!malformed && !unavailable)
+        return true;
+
+    if (malformed) {
+        LOCK(cs_main);
         Misbehaving(peer.GetId(), 20);
-        return error("notfound message has trailing bytes");
-    }
-    if (unavailable) {
-        // This source explicitly cannot serve our assigned work. Release its
+        LogPrint("net", "Peer=%d sent malformed notfound, disconnecting\n", peer.GetId());
+    } else {
+        // This source explicitly cannot serve assigned work. Release its
         // requests and sync roles now so another peer can take over. This is
         // an availability failure, not misbehavior and never a ban reason.
         LogPrint("net", "Peer=%d cannot serve a requested block, disconnecting\n", peer.GetId());
-        peer.fDisconnect = true;
-        CNodeState* state = State(peer.GetId());
-        assert(state != NULL); // An outstanding request owns a live node state.
-        StopBlockDownload(*state);
     }
-    return true;
+
+    peer.fDisconnect = true;
+    LOCK(cs_main);
+    CNodeState* state = State(peer.GetId());
+    assert(state != NULL);
+    StopBlockDownload(*state);
+    return !malformed;
 }
 
 // Requires cs_main.
