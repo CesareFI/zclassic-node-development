@@ -2170,3 +2170,17 @@ The focused test passed after an incremental native build.
 Consensus impact: NONE. Local relay-cache accounting only; transaction and
 block validation, serialization, chain history, PoW, monetary policy, upgrades,
 and cryptography are unchanged.
+
+## Relay cache capacity audit
+
+Evidence: the duplicate-expiration correction bounds repeat records, but this
+legacy native tree has no existing operator-configured mempool or relay-memory
+budget from which a distinct-transaction relay-cache cap can safely inherit.
+The cache intentionally keeps newly relayed bytes for 15 minutes to answer
+ordinary getdata requests.
+
+Decision: no arbitrary eviction policy was added. A distinct-entry/byte cap
+would change relay availability and needs an explicit product policy plus an
+end-to-end serving regression, rather than a local cleanup claim. Consensus
+impact: NONE; source unchanged. Recommended next investigation: continue on
+block/header scheduling and peer recovery, not cache policy invention.
