@@ -304,6 +304,7 @@ struct CBlockDownloadStats {
     int nValidatedBlocksInFlight;
     int nPreferredDownloadPeers;
     int nHeaderSyncPeers;
+    uint64_t nTrackedBlockSources;
 };
 
 CBlockDownloadStats GetBlockDownloadStats();

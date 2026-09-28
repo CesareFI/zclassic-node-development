@@ -1101,6 +1101,23 @@ BOOST_AUTO_TEST_CASE(invalid_owned_block_releases_request_for_reassignment)
     BOOST_CHECK_EQUAL(chainActive.Height(), 1);
 }
 
+BOOST_AUTO_TEST_CASE(finalized_peer_releases_unlinked_block_source)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "source", true);
+    Headers(peer);
+    BOOST_REQUIRE(SendMessages(&peer, false));
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 0);
+
+    // Block 2 is requested and valid, but its parent body is still absent, so
+    // it remains unlinked and retains source provenance until peer teardown.
+    Deliver(peer, 2);
+    BOOST_CHECK_EQUAL(chainActive.Height(), 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 1);
+
+    GetNodeSignals().FinalizeNode(peer.GetId());
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 0);
+}
+
 BOOST_AUTO_TEST_CASE(teardown_releases_all_accounting)
 {
     CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "B", true);

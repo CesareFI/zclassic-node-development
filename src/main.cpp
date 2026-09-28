@@ -515,6 +515,12 @@ void FinalizeNode(NodeId nodeid) {
 
     StopBlockDownload(*state);
     EraseOrphansFor(nodeid);
+    for (auto source = mapBlockSource.begin(); source != mapBlockSource.end();) {
+        if (source->second == nodeid)
+            source = mapBlockSource.erase(source);
+        else
+            ++source;
+    }
 
     mapNodeState.erase(nodeid);
 }
@@ -827,7 +833,8 @@ void ResetBlockDownloadForImport()
 CBlockDownloadStats GetBlockDownloadStats()
 {
     LOCK(cs_main);
-    return {mapBlocksInFlight.size(), nQueuedValidatedHeaders, nPreferredDownload, nSyncStarted};
+    return {mapBlocksInFlight.size(), nQueuedValidatedHeaders, nPreferredDownload,
+            nSyncStarted, mapBlockSource.size()};
 }
 
 bool GetNodeStateStats(NodeId nodeid, CNodeStateStats &stats) {
