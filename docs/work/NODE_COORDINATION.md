@@ -1454,3 +1454,24 @@ latest C23 `origin/main` remains `3a3caa86c0d9afec3a60954f12353c78c80750f6`,
 with no overlap. Remaining risk: malformed `pong` remains diagnostic-only by
 design; it cannot advance block ownership and should not be treated as an IBD
 source failure without evidence.
+
+## Trailing verack payloads release block ownership
+
+Baseline and root cause: `verack` is an empty handshake message, but the native
+handler accepted a trailing payload. A peer that already held block requests
+could therefore violate handshake framing without entering ordinary command
+failure teardown.
+
+Fix and regression proof: `verack` now requires payload exhaustion before it
+marks a peer connected. A fragmented one-byte `verack` frame from a 128-request
+source disconnects, clears all accounting, and lets a healthy peer take the
+window. The focused regression and complete `block_download_tests` group pass
+76/76 after incremental build; idle scheduling measured 0.0237 seconds for
+125 peers and 0.1616 seconds for 750 peers over the existing 1,000 rounds. No
+performance claim is made. `git diff --check` passes; ASan/UBSan is unrun to
+retain the 10 GB reserve (11 GB free).
+
+Consensus impact: NONE. This is P2P handshake framing only. Chain history,
+consensus serialization, PoW, monetary policy, upgrades, block/transaction
+validity, and cryptography are unchanged. Worldstream's latest C23
+`origin/main` is `8cdab5ac0f8fef43ca7538e13728980df35b0a78`, with no overlap.
