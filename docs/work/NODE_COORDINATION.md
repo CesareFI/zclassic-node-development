@@ -2154,3 +2154,19 @@ Consensus impact: NONE. Local P2P request-queue accounting only; validation,
 serialization, chain history, PoW, monetary policy, upgrades, and cryptography
 are unchanged. Worldstream C23 `origin/main` at `ac6881ff9` remains
 complementary.
+
+## Repeated relay does not duplicate expiration records
+
+Baseline and root cause: `mapRelay` keeps one entry per inventory item, but
+repeatedly relaying the same transaction appended another 15-minute expiration
+record even when insertion failed. A repeat-capable source could therefore grow
+the expiration deque independently of the relay cache.
+
+Fix and regression proof: an expiration record is now appended only when the
+cache insertion succeeds. The deterministic regression relays identical
+serialized transaction bytes twice and proves one cache and one expiry record.
+The focused test passed after an incremental native build.
+
+Consensus impact: NONE. Local relay-cache accounting only; transaction and
+block validation, serialization, chain history, PoW, monetary policy, upgrades,
+and cryptography are unchanged.

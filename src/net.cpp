@@ -1908,8 +1908,10 @@ void RelayTransaction(const CTransaction& tx, const CDataStream& ss)
         }
 
         // Save original serialized message so newer versions are preserved
-        mapRelay.insert(std::make_pair(inv, ss));
-        vRelayExpiration.push_back(std::make_pair(GetTime() + 15 * 60, inv));
+        const std::pair<map<CInv, CDataStream>::iterator, bool> inserted =
+            mapRelay.insert(std::make_pair(inv, ss));
+        if (inserted.second)
+            vRelayExpiration.push_back(std::make_pair(GetTime() + 15 * 60, inv));
     }
     LOCK(cs_vNodes);
     BOOST_FOREACH(CNode* pnode, vNodes)

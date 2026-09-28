@@ -2681,6 +2681,26 @@ BOOST_AUTO_TEST_CASE(askfor_dedup_set_does_not_exceed_declared_cap)
     BOOST_CHECK(peer.mapAskFor.empty());
 }
 
+BOOST_AUTO_TEST_CASE(repeated_relay_does_not_duplicate_expiration_records)
+{
+    CDataStream serialized(SER_NETWORK, PROTOCOL_VERSION);
+    serialized << blocks[0].vtx[0];
+    {
+        LOCK(cs_mapRelay);
+        mapRelay.clear();
+        vRelayExpiration.clear();
+    }
+    RelayTransaction(blocks[0].vtx[0], serialized);
+    RelayTransaction(blocks[0].vtx[0], serialized);
+    {
+        LOCK(cs_mapRelay);
+        BOOST_CHECK_EQUAL(mapRelay.size(), 1U);
+        BOOST_CHECK_EQUAL(vRelayExpiration.size(), 1U);
+        mapRelay.clear();
+        vRelayExpiration.clear();
+    }
+}
+
 BOOST_AUTO_TEST_CASE(address_trailing_bytes_do_not_mutate_peer_discovery)
 {
     CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
