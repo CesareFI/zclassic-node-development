@@ -1337,13 +1337,31 @@ BOOST_AUTO_TEST_CASE(headers_trailing_bytes_do_not_advance_peer_availability)
     BOOST_CHECK_EQUAL(after.nSyncHeight, before.nSyncHeight);
     BOOST_CHECK_EQUAL(after.nBlocksInFlight, before.nBlocksInFlight);
     BOOST_CHECK_GE(after.nMisbehavior - before.nMisbehavior, 20);
+    BOOST_CHECK(peer.fDisconnect);
+}
 
-    CDataStream valid(SER_NETWORK, PROTOCOL_VERSION);
-    WriteCompactSize(valid, 1);
-    valid << blocks[1].GetBlockHeader();
-    WriteCompactSize(valid, 0);
-    BOOST_REQUIRE(ProcessMessage(&peer, "headers", valid, GetTime()));
-    BOOST_CHECK_EQUAL(Stats(peer).nSyncHeight, 1);
+BOOST_AUTO_TEST_CASE(malformed_headers_release_requests_for_takeover)
+{
+    CNode malformed(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "malformed", true);
+    CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "healthy", true);
+    Headers(malformed);
+    BOOST_REQUIRE(SendMessages(&malformed, false));
+    BOOST_REQUIRE_EQUAL(Stats(malformed).nBlocksInFlight, 128);
+
+    CDataStream payload(SER_NETWORK, PROTOCOL_VERSION);
+    WriteCompactSize(payload, 1);
+    payload << blocks[1].GetBlockHeader();
+    WriteCompactSize(payload, 0);
+    payload << uint8_t{0};
+    BOOST_CHECK(!ProcessMessage(&malformed, "headers", payload, GetTime()));
+    BOOST_REQUIRE(malformed.fDisconnect);
+    BOOST_REQUIRE(SendMessages(&malformed, false));
+    BOOST_CHECK_EQUAL(Stats(malformed).nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nValidatedBlocksInFlight, 0);
+
+    Headers(healthy);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_CHECK_EQUAL(Stats(healthy).nBlocksInFlight, 128);
 }
 
 BOOST_AUTO_TEST_CASE(headers_nonzero_transaction_count_does_not_advance_peer_availability)

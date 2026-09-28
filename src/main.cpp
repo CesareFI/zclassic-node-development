@@ -7047,6 +7047,7 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
         unsigned int nCount = ReadCompactSize(vRecv);
         if (nCount > MAX_HEADERS_RESULTS) {
             Misbehaving(pfrom->GetId(), 20);
+            pfrom->fDisconnect = true;
             return error("headers message size = %u", nCount);
         }
         headers.resize(nCount);
@@ -7054,11 +7055,13 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
             vRecv >> headers[n];
             if (ReadCompactSize(vRecv) != 0) {
                 Misbehaving(pfrom->GetId(), 20);
+                pfrom->fDisconnect = true;
                 return error("headers message has nonzero transaction count");
             }
         }
         if (!vRecv.empty()) {
             Misbehaving(pfrom->GetId(), 20);
+            pfrom->fDisconnect = true;
             return error("headers message has trailing bytes");
         }
 

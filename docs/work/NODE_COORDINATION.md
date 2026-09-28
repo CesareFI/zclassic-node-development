@@ -978,3 +978,29 @@ latest C23 `origin/main` remains capability-inventory-only work at
 `58c38837a637979842dfe84fcfc86d33c6781d52`. Remaining risk: a peer with an
 active requested range can still legitimately provide maximum batches until
 the existing progress or deadline rules end that role.
+
+## Explicit malformed headers release block assignments
+
+Baseline and root cause: parse exceptions from a malformed `headers` reply
+already disconnected a peer, but explicit checks for an oversized count,
+nonzero legacy transaction count, or trailing bytes only added misbehavior.
+If such a peer already owned requested block bodies, its assignments remained
+unavailable until the ordinary timeout.
+
+Fix and after-result: all explicit malformed-header exits now mark the peer for
+disconnect, matching the exception path. Normal disconnect cleanup releases its
+header role and only its own in-flight blocks, allowing another source to take
+them immediately.
+
+Regression proof: a deterministic peer first owns a 128-block window, then
+sends a header payload with trailing data. The next scheduler visit clears all
+its accounting, and a healthy peer receives the full window. The new takeover
+case, existing trailing-header validation case, and truncated framed-header
+teardown case pass after an incremental `test_bitcoin` build. `git diff --check`
+passes. ASan/UBSan remains unrun due the 11 GB free / 10 GB reserve boundary.
+
+Consensus impact: NONE. This is malformed P2P response cleanup only; chain
+history, consensus serialization, PoW, monetary policy, upgrades,
+block/transaction validity, and cryptography are unchanged. Worldstream remains
+non-overlap C23 capability-inventory work. Remaining risk: valid but silent
+sources continue to use the existing bounded download timeout path.
