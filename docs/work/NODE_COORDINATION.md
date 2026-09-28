@@ -1498,6 +1498,25 @@ validity, and cryptography are unchanged. Worldstream's latest C23
 `origin/main` remains `8cdab5ac0f8fef43ca7538e13728980df35b0a78`, with no
 overlap.
 
+## Trailing filterclear payloads release block ownership
+
+Baseline and root cause: `filterclear` is an empty request that mutates the
+per-peer bloom/relay state, but accepted residual bytes. A malformed source
+could retain IBD requests after violating its fixed wire shape.
+
+Fix and regression proof: exact payload exhaustion now precedes filter state
+mutation. A fragmented one-byte request disconnects a source holding the
+normal block window and permits healthy-peer takeover. The focused case and
+complete `block_download_tests` group pass 80/80 after incremental build; idle
+scheduling measured 0.0237 seconds for 125 peers and 0.1540 seconds for 750
+peers over existing 1,000 rounds. No performance claim is made. `git diff
+--check` passes. ASan/UBSan remains unrun to preserve the 10 GB reserve (11 GB
+free).
+
+Consensus impact: NONE. This is P2P request framing only; chain history,
+consensus serialization, PoW, monetary policy, upgrades, block/transaction
+validity, and cryptography are unchanged.
+
 ## Trailing getaddr payloads release block ownership
 
 Baseline and root cause: inbound `getaddr` is a fixed-shape empty request, but
