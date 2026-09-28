@@ -1497,3 +1497,23 @@ consensus serialization, PoW, monetary policy, upgrades, block/transaction
 validity, and cryptography are unchanged. Worldstream's latest C23
 `origin/main` remains `8cdab5ac0f8fef43ca7538e13728980df35b0a78`, with no
 overlap.
+
+## Trailing getaddr payloads release block ownership
+
+Baseline and root cause: inbound `getaddr` is a fixed-shape empty request, but
+the handler accepted residual bytes before clearing and populating its address
+response queue. A malformed source holding block requests could remain alive
+until ordinary timeout.
+
+Fix and regression proof: the request now requires payload exhaustion. A
+fragmented one-byte `getaddr` from a 128-request source disconnects, clears
+global ownership, and lets a healthy peer take the window. The focused case
+and complete `block_download_tests` group pass 78/78 after incremental build;
+idle scheduling measured 0.0281 seconds for 125 peers and 0.1589 seconds for
+750 peers over existing 1,000 rounds. No performance claim is made.
+`git diff --check` passes. ASan/UBSan remains unrun to preserve the 10 GB
+reserve (11 GB free).
+
+Consensus impact: NONE. This is P2P request framing only; chain history,
+consensus serialization, PoW, monetary policy, upgrades, block/transaction
+validity, and cryptography are unchanged.
