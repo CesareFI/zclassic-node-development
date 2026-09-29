@@ -320,6 +320,9 @@ struct CNodeState {
     list<QueuedBlock> vBlocksInFlight;
     int nBlocksInFlight;
     int nBlocksInFlightValidHeaders;
+    uint64_t nBlocksReceived;
+    uint64_t nBlocksReceivedFromOtherPeer;
+    uint64_t nBlockDownloadTimeouts;
     //! Whether we consider this a preferred download peer.
     bool fPreferredDownload;
     //! Whether this is an inbound connection (we did not dial it). Used by the
@@ -341,6 +344,9 @@ struct CNodeState {
         nStallingSince = 0;
         nBlocksInFlight = 0;
         nBlocksInFlightValidHeaders = 0;
+        nBlocksReceived = 0;
+        nBlocksReceivedFromOtherPeer = 0;
+        nBlockDownloadTimeouts = 0;
         fPreferredDownload = false;
         fInbound = false;
     }
@@ -537,6 +543,29 @@ void FinalizeNode(NodeId nodeid) {
 }
 
 } // anon namespace
+
+// Per-peer outcomes are diagnostics only. Keep them fixed-size and saturating
+// so a hostile peer cannot wrap an operator-visible counter during a long run.
+static void RecordBlockDelivery(CNode* pfrom, const uint256& hash)
+{
+    AssertLockHeld(cs_main);
+    if (pfrom == NULL)
+        return;
+
+    CNodeState* state = State(pfrom->GetId());
+    if (state == NULL)
+        return;
+
+    const map<uint256, pair<NodeId, list<QueuedBlock>::iterator> >::const_iterator inFlight =
+        mapBlocksInFlight.find(hash);
+    if (inFlight == mapBlocksInFlight.end())
+        return;
+
+    uint64_t& outcome = inFlight->second.first == pfrom->GetId()
+        ? state->nBlocksReceived : state->nBlocksReceivedFromOtherPeer;
+    if (outcome != std::numeric_limits<uint64_t>::max())
+        ++outcome;
+}
 
 // Requires cs_main.
 // Returns whether a request was removed, optionally restricted to its owner.
@@ -904,6 +933,9 @@ bool GetNodeStateStats(NodeId nodeid, CNodeStateStats &stats) {
     stats.vHeightInFlight.clear();
     stats.nBlocksInFlight = state->nBlocksInFlight;
     stats.nValidatedBlocksInFlight = state->nBlocksInFlightValidHeaders;
+    stats.nBlocksReceived = state->nBlocksReceived;
+    stats.nBlocksReceivedFromOtherPeer = state->nBlocksReceivedFromOtherPeer;
+    stats.nBlockDownloadTimeouts = state->nBlockDownloadTimeouts;
     stats.nGlobalBlocksInFlight = mapBlocksInFlight.size();
     stats.nGlobalValidatedBlocksInFlight = nQueuedValidatedHeaders;
     stats.fPreferredDownload = state->fPreferredDownload;
@@ -4968,6 +5000,8 @@ bool ProcessNewBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, bool
         LOCK(cs_main);
         // An invalid body must not cancel another peer's request for this header.
         // Valid cross-peer delivery and local processing retain their semantics.
+        if (checked)
+            RecordBlockDelivery(pfrom, pblock->GetHash());
         bool fRequested = MarkBlockAsReceived(pblock->GetHash(),
             !checked && pfrom ? pfrom->GetId() : -1);
         fRequested |= fForceProcessing;
@@ -7972,6 +8006,8 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             }
             if (queuedBlock.nTimeDisconnect < nSteadyNow) {
                 LogPrintf("Timeout downloading block %s from peer=%d, disconnecting\n", queuedBlock.hash.ToString(), pto->id);
+                if (state.nBlockDownloadTimeouts != std::numeric_limits<uint64_t>::max())
+                    ++state.nBlockDownloadTimeouts;
                 pto->fDisconnect = true;
             }
         }

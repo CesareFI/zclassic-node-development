@@ -4210,3 +4210,49 @@ implementation was changed here.  Cold sanitizer and full-suite gates remain
 unrun because root free space is about 10.7 GiB and the required 10 GiB reserve
 precludes a cold build.  Next: investigate a distinct mixed-peer ordinary
 block-download recovery condition, not another bootstrap reset permutation.
+
+## Per-peer block-delivery outcome diagnostics
+
+Bottleneck/risk: the scheduler already maintained bounded in-flight ownership
+and timeout cleanup, but `getpeerinfo` exposed only the current queue.  Once a
+request was completed or a source was disconnected, an operator could not tell
+whether a peer delivered its assigned work, supplied a valid body owned by a
+different peer, or timed out.  That prevented evidence-based peer-diversity
+and fairness work without retaining unbounded request history.
+
+Baseline and root cause: the deterministic foreign-body fixture demonstrates
+that an invalid foreign body must preserve the owner's request while a valid
+foreign body legitimately completes it.  The state machine deliberately
+discarded that completed ownership entry, so no bounded per-peer outcome was
+available afterwards.  The timeout path similarly had no persistent
+per-connection event count.
+
+Fix and after-result: add three saturating `uint64_t` fields to the existing
+per-connection `CNodeState`, copy them into `CNodeStateStats`, and expose them
+as `blocks_received`, `blocks_received_from_other_peer`, and
+`block_download_timeouts` in `getpeerinfo`.  Only a body that passed the
+existing `CheckBlock` path is recorded.  It increments its sender's own
+delivery count only when that sender owned the outstanding request; otherwise
+it increments the cross-peer count.  Unrequested and invalid input remains
+unrecorded.  The pre-existing deadline branch increments once before its
+existing disconnect and cleanup.  The state is fixed-size, connection-scoped,
+and saturates rather than wrapping.
+
+Regression proof: the invalid-foreign/valid-cross-peer test proves zero
+outcomes after the rejected body and one cross-peer outcome after the valid
+body while the original owner's queue falls from 128 to 127.  The timeout
+fixture proves one useful owned delivery and exactly one timeout before the
+existing release/teardown assertions.  The RPC diagnostics fixture proves the
+new zero-valued fields are present.  Each focused registered case passed using
+the rebuilt native `test_bitcoin` binary; `git diff --check` passed.
+
+Consensus impact: NONE.  This changes only local diagnostic counters and RPC
+output.  No request selection, timeout, validation predicate, cryptography,
+wire processing, chain history, monetary policy, PoW, wallet, or production
+data changes.  Worldstream's refreshed accessible work is in the separate C23
+checkout, with no overlapping C++ networking implementation.  A cold
+ASan/UBSan rebuild remains unrun: free disk is about 10.35 GiB, leaving only
+about 0.35 GiB over the mandatory 10 GiB reserve.  Next: use these counters in
+a bounded mixed-peer fixture to measure whether healthy sources can retain a
+useful share after a timeout/reassignment, before considering any scheduler
+policy change.

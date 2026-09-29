@@ -182,6 +182,9 @@ UniValue getpeerinfo(const UniValue& params, bool fHelp)
             obj.push_back(Pair("block_download_stopped", statestats.fBlockDownloadStopped));
             obj.push_back(Pair("blocks_in_flight", statestats.nBlocksInFlight));
             obj.push_back(Pair("validated_blocks_in_flight", statestats.nValidatedBlocksInFlight));
+            obj.push_back(Pair("blocks_received", statestats.nBlocksReceived));
+            obj.push_back(Pair("blocks_received_from_other_peer", statestats.nBlocksReceivedFromOtherPeer));
+            obj.push_back(Pair("block_download_timeouts", statestats.nBlockDownloadTimeouts));
             obj.push_back(Pair("global_blocks_in_flight", statestats.nGlobalBlocksInFlight));
             obj.push_back(Pair("global_validated_blocks_in_flight", statestats.nGlobalValidatedBlocksInFlight));
             if (statestats.nOldestRequest) {

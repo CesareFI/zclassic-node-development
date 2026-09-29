@@ -1164,6 +1164,9 @@ BOOST_AUTO_TEST_CASE(download_role_rpc_diagnostics_track_reassignment)
     BOOST_CHECK(!find_value(initial, "header_sync_started").get_bool());
     BOOST_CHECK(find_value(initial, "header_sync_deadline").isNull());
     BOOST_CHECK(!find_value(initial, "block_download_stopped").get_bool());
+    BOOST_CHECK_EQUAL(find_value(initial, "blocks_received").get_int64(), 0);
+    BOOST_CHECK_EQUAL(find_value(initial, "blocks_received_from_other_peer").get_int64(), 0);
+    BOOST_CHECK_EQUAL(find_value(initial, "block_download_timeouts").get_int64(), 0);
     Handshake(inbound);
     Headers(inbound);
     BOOST_REQUIRE(SendMessages(&inbound, false));
@@ -1522,11 +1525,17 @@ BOOST_AUTO_TEST_CASE(invalid_foreign_block_preserves_request_ownership)
     BOOST_CHECK_EQUAL(after.nDownloadDeadline, before.nDownloadDeadline);
     BOOST_CHECK(after.hashOldestRequest == before.hashOldestRequest);
     BOOST_CHECK(after.vHeightInFlight == before.vHeightInFlight);
+    BOOST_CHECK_EQUAL(Stats(other).nBlocksReceived, 0);
+    BOOST_CHECK_EQUAL(Stats(other).nBlocksReceivedFromOtherPeer, 0);
     BOOST_CHECK_EQUAL(chainActive.Height(), 0);
 
-    // Valid cross-peer delivery still satisfies the original request.
+    // Valid cross-peer delivery still satisfies the original request, but is
+    // recorded separately from a body that fulfilled the sender's own work.
     Deliver(other, 1);
     BOOST_CHECK_EQUAL(Stats(owner).nBlocksInFlight, 127);
+    BOOST_CHECK_EQUAL(Stats(owner).nBlocksReceived, 0);
+    BOOST_CHECK_EQUAL(Stats(other).nBlocksReceived, 0);
+    BOOST_CHECK_EQUAL(Stats(other).nBlocksReceivedFromOtherPeer, 1);
     BOOST_CHECK_EQUAL(chainActive.Height(), 1);
 }
 
@@ -1611,6 +1620,8 @@ BOOST_AUTO_TEST_CASE(timeout_releases_unlinked_block_source_before_socket_cleanu
     // A valid child body is retained while its requested parent is absent, so
     // it has source attribution that a later timeout must retire immediately.
     Deliver(peer, 2);
+    BOOST_CHECK_EQUAL(Stats(peer).nBlocksReceived, 1);
+    BOOST_CHECK_EQUAL(Stats(peer).nBlocksReceivedFromOtherPeer, 0);
     BOOST_REQUIRE_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 1);
     const int64_t deadline = Stats(peer).nDownloadDeadline;
     BOOST_REQUIRE_GT(deadline, start);
@@ -1618,6 +1629,7 @@ BOOST_AUTO_TEST_CASE(timeout_releases_unlinked_block_source_before_socket_cleanu
     SetClocks(deadline + 1);
     BOOST_REQUIRE(SendMessages(&peer, false));
     BOOST_CHECK(peer.fDisconnect);
+    BOOST_CHECK_EQUAL(Stats(peer).nBlockDownloadTimeouts, 1);
     BOOST_CHECK_EQUAL(Stats(peer).nBlocksInFlight, 0);
     BOOST_CHECK_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 0);
 
