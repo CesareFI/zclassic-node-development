@@ -4001,3 +4001,58 @@ wallets, production state, and Worldstream-owned storage are unchanged.
 Remaining risk: two stack samples establish active work but not inclusive CPU
 percentages; a non-perturbative profiler or a larger isolated profiling lane
 is required before a cryptographic performance change can be justified.
+
+## Avoid a repeated disabled-proof stateless block check on the live receive path
+
+Bottleneck/risk: current-binary stack samples entered `CheckBlock` through
+`AcceptBlock` after `ProcessNewBlock` had already run the same stateless check
+on the same received body before taking `cs_main`.  The repeated pass included
+Equihash, Merkle, structural, and transaction checks (with its proof verifier
+disabled).  It added CPU and lock-held work without adding a distinct
+acceptance predicate; strict JoinSplit proof verification still occurs in
+`ConnectBlock`.
+
+Root cause: the public `AcceptBlock` API served both its direct-call safety
+contract and the just-prechecked `ProcessNewBlock` path with one implementation.
+The latter could not express that its immutable `CBlock` had immediately
+passed the exact disabled-proof `CheckBlock` predicate needed for safe request
+ownership accounting.
+
+Fix: move the implementation behind a file-local `AcceptBlockImpl` flag.
+Public `AcceptBlock` always calls it with `false`, retaining the existing
+stateless check for every current or future direct caller.  Only
+`ProcessNewBlock`, immediately after its successful pre-lock `CheckBlock`,
+uses `true`.  `AcceptBlockHeader`, all contextual checks, disk handling,
+request/source ownership, and `ConnectBlock`'s strict proof verification are
+unchanged.  The added regression passes a malformed genesis-body copy directly
+to public `AcceptBlock` and proves that it is still rejected by stateless
+validation.
+
+Before/after measurement: the matched 4,609-block, 10 MiB/s healthy-peer,
+100 ms stalled-A lane previously completed in 117.60 s (39.18 blocks/s),
+using 148.12 daemon CPU seconds and 97,628 KiB RSS.  Two fresh patched runs
+completed in 109.34 s and 108.19 s (42.14 and 42.59 blocks/s), with 138.70 and
+138.58 CPU seconds and 96,400 and 97,512 KiB RSS, respectively; neither
+swapped.  The mean wall time improved 7.5% and CPU time 6.4%.  Both runs kept
+the bounded 128-request stalled-source recovery, zero final in-flight/source
+counters, no RPC failures, normal validation to height 4,608, and graceful
+shutdown.
+
+Regression proof: incremental native `zclassicd` and `test_bitcoin` rebuild
+passed; focused `CheckBlock_tests` (including the new direct-call regression)
+and `miner_tests` passed.  The full 113-case `block_download_tests` group
+passed with recorded exit status 0, including teardown, reassignment, and
+source-accounting coverage.  `git diff --check` passed.  No repository
+cyclomatic-complexity target exists; the change adds one file-local boolean
+branch rather than a new public conditional path.  Cold sanitizer/full-suite
+gates remain unrun because root has 11 GiB free and the required reserve is
+10 GiB.
+
+Consensus impact: NONE.  The existing stateless predicate is executed once
+instead of twice only on an already-successful same-body receive path; every
+direct caller retains it, and contextual, PoW, transaction, and strict
+shielded-proof validation remain intact.  Chain history, monetary rules,
+wire compatibility, wallets, production data, and Worldstream-owned storage
+are unchanged.  Remaining risk: the performance fixture is controlled and
+short; a representative long historical mix remains needed before claiming a
+WAN-wide percentage.

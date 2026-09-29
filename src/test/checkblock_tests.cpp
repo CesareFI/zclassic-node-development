@@ -43,6 +43,25 @@ BOOST_AUTO_TEST_CASE(genesis_header_initializes_an_empty_index)
     BOOST_CHECK_EQUAL(mapBlockIndex.size(), 1);
 }
 
+BOOST_AUTO_TEST_CASE(direct_accept_block_keeps_stateless_checks)
+{
+    LOCK(cs_main);
+    BOOST_REQUIRE(mapBlockIndex.empty());
+    struct IndexCleanup {
+        ~IndexCleanup() { UnloadBlockIndex(); }
+    } cleanup;
+
+    // AcceptBlock remains safe for any direct caller: the public wrapper must
+    // retain its stateless CheckBlock call even though ProcessNewBlock can pass
+    // a just-checked body to the file-local fast path.
+    CBlock malformed = Params().GenesisBlock();
+    malformed.vtx.clear();
+    CValidationState state;
+    CBlockIndex* index = nullptr;
+    BOOST_CHECK(!AcceptBlock(malformed, state, &index, true, nullptr));
+    BOOST_CHECK(state.IsInvalid());
+}
+
 bool read_block(const std::string& filename, CBlock& block)
 {
     namespace fs = boost::filesystem;

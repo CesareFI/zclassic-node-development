@@ -4854,7 +4854,9 @@ bool AcceptBlockHeader(const CBlockHeader& block, CValidationState& state, CBloc
     return true;
 }
 
-bool AcceptBlock(CBlock& block, CValidationState& state, CBlockIndex** ppindex, bool fRequested, CDiskBlockPos* dbp)
+static bool AcceptBlockImpl(CBlock& block, CValidationState& state, CBlockIndex** ppindex,
+                            bool fRequested, CDiskBlockPos* dbp,
+                            bool fStatelessChecksAlreadyPassed)
 {
     const CChainParams& chainparams = Params();
     AssertLockHeld(cs_main);
@@ -4885,9 +4887,13 @@ bool AcceptBlock(CBlock& block, CValidationState& state, CBlockIndex** ppindex, 
         if (fTooFarAhead) return true;      // Block height is too high
     }
 
-    // See method docstring for why this is always disabled
-    auto verifier = libzcash::ProofVerifier::Disabled();
-    if ((!CheckBlock(block, state, verifier)) || !ContextualCheckBlock(block, state, pindex->pprev)) {
+    bool blockChecksPassed = fStatelessChecksAlreadyPassed;
+    if (!blockChecksPassed) {
+        // See AcceptBlock's method docstring for why this is always disabled.
+        auto verifier = libzcash::ProofVerifier::Disabled();
+        blockChecksPassed = CheckBlock(block, state, verifier);
+    }
+    if (!blockChecksPassed || !ContextualCheckBlock(block, state, pindex->pprev)) {
         if (state.IsInvalid() && !state.CorruptionPossible()) {
             pindex->nStatus |= BLOCK_FAILED_VALID;
             setDirtyBlockIndex.insert(pindex);
@@ -4934,6 +4940,11 @@ bool AcceptBlock(CBlock& block, CValidationState& state, CBlockIndex** ppindex, 
     return true;
 }
 
+bool AcceptBlock(CBlock& block, CValidationState& state, CBlockIndex** ppindex, bool fRequested, CDiskBlockPos* dbp)
+{
+    return AcceptBlockImpl(block, state, ppindex, fRequested, dbp, false);
+}
+
 static bool IsSuperMajority(int minVersion, const CBlockIndex* pstart, unsigned nRequired, const Consensus::Params& consensusParams)
 {
     unsigned int nFound = 0;
@@ -4969,7 +4980,10 @@ bool ProcessNewBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, bool
         const BlockMap::const_iterator existing = mapBlockIndex.find(pblock->GetHash());
         const bool hadBlockData = existing != mapBlockIndex.end() &&
             (existing->second->nStatus & BLOCK_HAVE_DATA);
-        bool ret = AcceptBlock(*pblock, state, &pindex, fRequested, dbp);
+        // This is the same immutable body that just passed CheckBlock above.
+        // Keep its pre-lock validation for safe request ownership accounting,
+        // but avoid repeating the same disabled-proof stateless checks here.
+        bool ret = AcceptBlockImpl(*pblock, state, &pindex, fRequested, dbp, true);
         // Retain provenance only for block data that this invocation actually
         // kept. AcceptBlock() also succeeds for duplicate bodies, which must
         // not replace the source of the already-stored data with a late peer.
