@@ -2043,6 +2043,40 @@ BOOST_AUTO_TEST_CASE(bootstrap_single_stream_reports_preverified_staging_progres
     boost::filesystem::remove_all(staging);
 }
 
+BOOST_AUTO_TEST_CASE(bootstrap_single_stream_replaces_corrupt_completed_staging_file)
+{
+    const std::string bytes = DeterministicBytes(257, 157);
+    CBootstrapSnapshotManifest manifest;
+    manifest.nSnapshotBytes = bytes.size();
+    manifest.nChunkSize = 128;
+    CBootstrapSnapshotFile file;
+    file.strPath = "blocks/blk00000.dat";
+    file.nSize = bytes.size();
+    file.hashSha256 = Sha256OfBytes(std::vector<unsigned char>(bytes.begin(), bytes.end()));
+    manifest.vFiles.push_back(file);
+
+    const boost::filesystem::path staging = boost::filesystem::current_path() /
+        boost::filesystem::unique_path("zclassic-bootstrap-single-corrupt-%%%%-%%%%-%%%%");
+    boost::filesystem::create_directories((staging / file.strPath).parent_path());
+    {
+        boost::filesystem::ofstream output(staging / file.strPath, std::ios::binary);
+        output << "corrupt completed staging data";
+    }
+
+    bool serverOk = false;
+    boost::thread server;
+    const CService peer = StartManifestLoopbackPeer(manifest, false, false, false, bytes, false,
+                                                     server, serverOk);
+    std::string error;
+    BOOST_CHECK_MESSAGE(BootstrapDownloadSnapshotSingleForTest(peer, manifest, staging, 1000, error), error);
+    server.join();
+    BOOST_CHECK(serverOk);
+    boost::filesystem::ifstream staged(staging / file.strPath, std::ios::binary);
+    const std::string got((std::istreambuf_iterator<char>(staged)), std::istreambuf_iterator<char>());
+    BOOST_CHECK_EQUAL(got, bytes);
+    boost::filesystem::remove_all(staging);
+}
+
 BOOST_AUTO_TEST_CASE(bootstrap_parallel_replaces_corrupt_completed_staging_file)
 {
     const std::string bytes = DeterministicBytes(257, 154);

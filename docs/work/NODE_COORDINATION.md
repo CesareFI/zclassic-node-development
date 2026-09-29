@@ -2909,3 +2909,28 @@ datadirs are unchanged. Worldstream remains complementary on startup/storage.
 ASan/UBSan remain unrun because the host has 11 GB free and the 10 GB reserve
 precludes a cold sanitizer build. Recommended next investigation: a safely
 manifest-bound outer restart lifecycle before claiming cross-process resume.
+
+## Legacy single-stream bootstrap reacquires corrupt completed files
+
+Coverage gap: the parallel stream had a corrupt-completed-file recovery test,
+but the legacy one-stream transfer only gained the same reuse gate in the
+single-stream progress correction. A future refactor could otherwise make
+`-bootstrapstreams=1` fail permanently before requesting a replacement.
+
+After-result: no further production change was needed. The direct localhost
+one-stream fixture leaves an invalid completed regular file in staging; the
+production downloader discards it, requests the declared chunks through the
+exact-manifest gate, and verifies the replacement hash before success.
+
+Regression proof: corrupt-file replacement passes in 0.06 s at 28,788 KB
+maximum RSS; the preverified-progress companion passes in 0.06 s at 28,972 KB.
+The complete 81-case bootstrap protocol group passes in 13.12 s at 170,864 KB
+maximum RSS; `git diff --check` passes.
+
+Consensus impact: NONE. This is deterministic bootstrap transfer coverage;
+manifest equality, hashes, payload validation, serialization, chain history,
+PoW, monetary policy, upgrades, cryptography, wallets, and production
+datadirs are unchanged. Worldstream remains complementary on startup/storage.
+ASan/UBSan remain unrun because the host has 11 GB free and the 10 GB reserve
+precludes a cold sanitizer build. Recommended next investigation: safely
+bounded outer-process staging resume.
