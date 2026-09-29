@@ -2703,3 +2703,38 @@ cryptography, wallets, and production datadirs are unchanged. Worldstream C23
 ASan/UBSan remain unrun because 11 GB free preserves the 10 GB reserve.
 Recommended next investigation: bounded header-role behavior after queued
 valid headers arrive from a disconnected source.
+
+## Corrupt completed bootstrap staging files retry safely
+
+Baseline and root cause: the parallel bootstrap downloader deliberately retains
+completed files across stream reconnects, but treated a stale completed file
+whose SHA-256 no longer matched the already-validated manifest as terminal.
+That made a transient local corruption permanently abort the current bounded
+download attempt before the peer could supply a replacement.
+
+Fix and after-result: reuse now accepts only an existing regular file whose
+SHA-256 matches the pinned manifest. A mismatching regular file is removed
+from the isolated staging directory and reacquired from offset zero through
+the existing exact-manifest, chunk-order, per-file-hash, and post-import
+verification paths. Directories and unexpected entry types still fail closed
+and are never removed.
+
+Regression proof: a localhost manifest/chunk peer receives a request after a
+deliberately corrupt completed staged file is found; the replacement exactly
+matches the declared bytes and hash. The old implementation deterministically
+failed at the pre-worker hash check. The focused regression passes in 0.26 s
+at 28,504 KB maximum RSS. Adjacent verified-file retention, preverified
+progress, chunk-reset retry, and divergent-manifest fail-closed cases pass;
+the complete 78-case `bootstrap_snapshot_protocol_tests` group passes in
+13.00 s at 170,532 KB maximum RSS. `git diff --check` passes.
+
+Consensus impact: NONE. This only changes disposal of an invalid temporary
+staging regular file before ordinary verified network reacquisition. Manifest
+equality, hashes, payload validation, serialization, chain history, PoW,
+monetary policy, upgrades, cryptography, wallets, and production datadirs are
+unchanged. Worldstream remains complementary on startup/storage. ASan/UBSan
+remain unrun because the host has 11 GB free and the 10 GB reserve precludes a
+cold sanitizer build. Cross-process staging persistence is not claimed: the
+outer bootstrap caller still makes a fresh timestamped staging directory.
+Recommended next investigation: bounded header-role behavior when a peer is
+marked for teardown while a valid headers frame is already being decoded.

@@ -1606,6 +1606,45 @@ static bool VerifyBootstrapDownloadedFile(const boost::filesystem::path& path, c
     return true;
 }
 
+// A completed staging path is reusable only after it matches the manifest's
+// pinned hash. A stale or interrupted prior attempt may leave an ordinary file
+// at the final pathname; keeping it would make every retry fail before a peer
+// can supply the verified replacement. Remove only that invalid regular file,
+// never a directory or other unexpected entry, and let the normal chunk path
+// recreate and verify it from offset zero.
+static bool ReuseOrDiscardBootstrapDownloadedFile(const boost::filesystem::path& path,
+                                                  const CBootstrapSnapshotFile& file,
+                                                  bool& reusable, std::string& error)
+{
+    reusable = false;
+    if (!boost::filesystem::exists(path)) {
+        return true;
+    }
+    if (!boost::filesystem::is_regular_file(path)) {
+        error = strprintf("bootstrap staging path is not a regular file: %s", path.string());
+        return false;
+    }
+
+    std::string verifyError;
+    if (VerifyBootstrapDownloadedFile(path, file, verifyError)) {
+        reusable = true;
+        return true;
+    }
+
+    try {
+        if (!boost::filesystem::remove(path)) {
+            error = strprintf("could not remove invalid bootstrap staging file: %s", path.string());
+            return false;
+        }
+    } catch (const boost::filesystem::filesystem_error& e) {
+        error = strprintf("could not remove invalid bootstrap staging file %s: %s", path.string(), e.what());
+        return false;
+    }
+    LogPrintf("Bootstrap: discarding invalid completed staging file %s: %s\n",
+              file.strPath, verifyError);
+    return true;
+}
+
 // Pipeline window: how many chunk requests the client keeps in flight at once.
 // This hides per-chunk round-trip latency, which otherwise caps throughput on
 // high-latency links. It must not exceed the server's per-peer queue limit
@@ -1732,12 +1771,12 @@ static bool DownloadBootstrapFileSubset(SOCKET socket, const CBootstrapSnapshotM
     for (size_t i = 0; i < order.size(); ++i) {
         const CBootstrapSnapshotFile& file = manifest.vFiles[order[i]];
         const boost::filesystem::path path = staging / boost::filesystem::path(file.strPath);
-        if (!boost::filesystem::exists(path)) {
-            remaining.push_back(order[i]);
-            continue;
-        }
-        if (!VerifyBootstrapDownloadedFile(path, file, error)) {
+        bool reusable = false;
+        if (!ReuseOrDiscardBootstrapDownloadedFile(path, file, reusable, error)) {
             return false;
+        }
+        if (!reusable) {
+            remaining.push_back(order[i]);
         }
     }
 
@@ -2141,13 +2180,13 @@ static bool DownloadBootstrapSnapshotParallel(const std::vector<CService>& peerA
     for (size_t i = 0; i < files.size(); ++i) {
         const CBootstrapSnapshotFile& file = manifest.vFiles[files[i]];
         const boost::filesystem::path path = staging / boost::filesystem::path(file.strPath);
-        if (!boost::filesystem::exists(path)) {
-            continue;
-        }
-        if (!VerifyBootstrapDownloadedFile(path, file, error)) {
+        bool reusable = false;
+        if (!ReuseOrDiscardBootstrapDownloadedFile(path, file, reusable, error)) {
             return false;
         }
-        preverifiedBytes += file.nSize;
+        if (reusable) {
+            preverifiedBytes += file.nSize;
+        }
     }
 
     std::atomic<uint64_t> progressBytes(preverifiedBytes);
