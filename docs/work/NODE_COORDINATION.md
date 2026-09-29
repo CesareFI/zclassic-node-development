@@ -2220,3 +2220,40 @@ wallet/storage/startup work. Sanitizers remain unrun: 11 GB free preserves the
 required 10 GB reserve. Recommended next investigation: examine a fresh,
 uncovered block-source ownership or scheduler invariant using the current
 binary, rather than retrying the obsolete test image.
+
+## Late duplicate block bodies preserve the accepted source
+
+Baseline and root cause: `AcceptBlock()` deliberately returns success for an
+already-stored duplicate body. `ProcessNewBlock()` treated that success as new
+data and replaced `mapBlockSource` with the late sender. After a timeout or
+disconnect reassigned a range, a stale peer could therefore overwrite the
+healthy peer's attribution; retiring that stale peer then erased the source
+record needed for delayed invalid-block reject and penalty handling.
+
+Fix: under `cs_main`, record whether the block index already had
+`BLOCK_HAVE_DATA` before `AcceptBlock()`. Only a successful invocation that
+did not already have data records its sender as the source. The wire format,
+request ownership, block validation, and duplicate-acceptance behavior are
+unchanged.
+
+Regression proof: `late_duplicate_does_not_replace_reassigned_block_source`
+has A own a range, retires A, lets B store an out-of-order body, then sends a
+late duplicate from A. Retiring A still leaves B's one tracked source; only
+retiring B removes it. The focused regression passed in 1.10 s at 153,960 KB
+maximum RSS. The existing 1,000-step repeated receipt/reassignment/cleanup
+stress regression passed in 1.90 s at 154,072 KB. The incremental native
+`test_bitcoin` target rebuilt successfully. A 104-case block-download group
+was started under its 110-second bound and completed its process, but its
+terminal exit line was not retained by the command wrapper; it is therefore
+not claimed as a passing gate. Its emitted scheduler observations were
+0.0237 s for 125 idle peers and 0.1528 s for 750 peers across 1,000 rounds.
+
+Consensus impact: NONE. This corrects local source attribution for already
+accepted data; it does not alter block acceptance, serialization, chain
+history, PoW, monetary policy, upgrades, cryptography, or wallet behavior.
+Worldstream remains complementary C23 storage/startup work. Sanitizers and a
+native cyclomatic-complexity gate remain unrun/unavailable: only 11 GB free
+remains above the required 10 GB reserve, and this legacy checkout exposes no
+such checked target. Recommended next investigation: use a controlled valid
+late-body case to inspect whether stale peer attribution can affect any other
+post-acceptance peer accounting.

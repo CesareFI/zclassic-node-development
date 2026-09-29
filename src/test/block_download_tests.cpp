@@ -1335,6 +1335,33 @@ BOOST_AUTO_TEST_CASE(disconnected_peer_releases_unlinked_block_source)
     BOOST_CHECK_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 0);
 }
 
+BOOST_AUTO_TEST_CASE(late_duplicate_does_not_replace_reassigned_block_source)
+{
+    CNode stale(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "stale", true);
+    CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "healthy", true);
+    Headers(stale);
+    BOOST_REQUIRE(SendMessages(&stale, false));
+    BOOST_REQUIRE_EQUAL(Stats(stale).nBlocksInFlight, 128);
+
+    // The stalled source is retired while its CNode remains alive, then B
+    // takes ownership of the same range. B's out-of-order block body is kept
+    // and attributed while its parent is still pending.
+    GetNodeSignals().DisconnectNode(stale.GetId());
+    Headers(healthy);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    Deliver(healthy, 2);
+    BOOST_REQUIRE_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 1);
+
+    // A late duplicate from the retired source is valid but did not supply
+    // data. It must not replace B's source attribution.
+    Deliver(stale, 2);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 1);
+    GetNodeSignals().DisconnectNode(stale.GetId());
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 1);
+    GetNodeSignals().DisconnectNode(healthy.GetId());
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 0);
+}
+
 BOOST_AUTO_TEST_CASE(timeout_releases_unlinked_block_source_before_socket_cleanup)
 {
     CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),

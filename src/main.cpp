@@ -4965,12 +4965,18 @@ bool ProcessNewBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, bool
 
         // Store to disk
         CBlockIndex *pindex = NULL;
+        const BlockMap::const_iterator existing = mapBlockIndex.find(pblock->GetHash());
+        const bool hadBlockData = existing != mapBlockIndex.end() &&
+            (existing->second->nStatus & BLOCK_HAVE_DATA);
         bool ret = AcceptBlock(*pblock, state, &pindex, fRequested, dbp);
-        // Retain provenance only for block data that AcceptBlock actually kept.
+        // Retain provenance only for block data that this invocation actually
+        // kept. AcceptBlock() also succeeds for duplicate bodies, which must
+        // not replace the source of the already-stored data with a late peer.
         // An unrequested far-ahead body is deliberately ignored to protect disk
         // and prune behavior; attributing that ignored body would let a peer
         // grow mapBlockSource without any later validation work to perform.
-        if (ret && pindex && pfrom && (pindex->nStatus & BLOCK_HAVE_DATA)) {
+        if (ret && !hadBlockData && pindex && pfrom &&
+            (pindex->nStatus & BLOCK_HAVE_DATA)) {
             mapBlockSource[pindex->GetBlockHash()] = pfrom->GetId();
         }
         CheckBlockIndex();
