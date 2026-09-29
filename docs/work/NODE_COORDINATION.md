@@ -3243,3 +3243,41 @@ datadirs are unchanged. Worldstream remains complementary on startup/storage.
 ASan/UBSan remain unrun because the host has 11 GB free and the 10 GB reserve
 precludes a cold sanitizer build. Recommended next investigation: safely
 bounded outer-process staging resume.
+
+## Controlled healthy IBD is validation/activation-bound, not window- or disk-bound
+
+Baseline and measurement: the reusable 4,096-block localhost fixture is a
+bounded synthetic workload, not a public-chain or WAN result. It uses two
+localhost peers, normal block validation, a verified 16 MiB block fixture,
+wallet/mining/bootstrap/DNS disabled, and an isolated temporary datadir. On
+the current binary with a 128-block request window, pipelined zero added
+latency, 1 MiB/s payload pacing per peer, and TCP_NODELAY, it reached height
+4,095 in 98.52 s (41.56 blocks/s). The daemon consumed 130.33 CPU seconds,
+reached 97 MiB RSS, used no swap, made no duplicate or abandoned requests,
+and never went more than 1.42 s without validated-height progress.
+
+Attribution and after-result: a second, intentionally non-comparable
+`strace -f -c` run completed all 4,095 validated blocks in 107.66 s. It is
+used for syscall attribution only: 18 `fdatasync` calls took 47 microseconds,
+2 `fsync` calls took 8 microseconds, and all `write` calls took 48 ms. Its
+trace-observed wait calls cannot be compared with uninstrumented throughput,
+but the negligible durable-write time together with 130 daemon CPU seconds in
+the uninstrumented run rules out request-window starvation and synchronous
+disk writes as the next safe optimization target in this fixture. No source
+change is justified by this result.
+
+Regression proof: both isolated runs verified the final best-block hash,
+asserted zero final in-flight and validated-in-flight counters, observed no
+peer errors or disconnect events, and exited via a successful graceful RPC
+stop. The profiler run's lower 38.04 blocks/s is tracing overhead, not a
+before/after claim. `perf` is not installed, so function-level user-space
+sampling remains unrun rather than inferred.
+
+Consensus impact: NONE. This is measurement/documentation only; validation,
+serialization, chain history, PoW, monetary policy, upgrades, cryptography,
+wallets, production datadirs, and peer policy are unchanged. Worldstream
+remains complementary on startup/storage. Remaining risk: this fixture does
+not model WAN loss, real historical block mix, or public peer diversity.
+Recommended next investigation: obtain a bounded, independently verified
+historical fixture with symbols/profiling support, then attribute user-space
+block validation and chain activation before changing their code.
