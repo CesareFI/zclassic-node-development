@@ -3119,6 +3119,38 @@ the 10 GB reserve precludes a cold sanitizer build. Recommended next
 investigation: a forced worker reset across an outer parallel invocation, only
 if it demonstrates a gap beyond the existing worker retry coverage.
 
+## Fully resumed parallel bootstrap does not require a peer
+
+Baseline and root cause: parallel scheduling formed worker groups from every
+nonempty manifest file before it re-hashed retained staging files. When all
+files were already verified, it still opened a stream; an unreachable peer
+therefore turned a complete, safe resume into `bootstrap stream connection
+failed`. The same unnecessary worker could also make a mixed resume fail when
+its assigned group contained only completed files.
+
+Fix and after-result: the downloader now verifies retained files first, counts
+their bytes for progress, and forms worker groups only from missing files. If
+none are missing it reports 100% with zero active streams and succeeds without
+any socket operation. Missing files retain the existing greedy byte-balanced
+assignment, manifest revalidation, retry, and hash verification behavior.
+
+Regression proof: before the fix, a fully SHA-256-verified staging fixture
+against `127.0.0.1:1` failed with `bootstrap stream connection failed` in
+0.26 s. The existing progress regression now uses that unreachable peer and
+passes in 0.06 s at 28,400 KB RSS. Fresh two-stream assignment and one-worker
+reconnect regressions also pass in 0.26 s and 0.27 s. The complete 89-case
+bootstrap protocol group passes in 13.08 s at 169,576 KB maximum RSS; `git
+diff --check` passes.
+
+Consensus impact: NONE. This changes only scheduling of already
+hash-verified temporary files; manifest validation, payload hashes,
+post-import verification, serialization, chain history, PoW, monetary policy,
+upgrades, cryptography, wallets, and production datadirs are unchanged.
+Worldstream remains complementary on startup/storage. ASan/UBSan remain unrun
+because the host has 11 GB free and the 10 GB reserve precludes a cold
+sanitizer build. Recommended next investigation: mixed resumed groups across
+multiple peer candidates, if distinct from the current worker retry coverage.
+
 ## Legacy single-stream bootstrap rejects symlinked staging files
 
 Coverage gap: parallel staging reuse directly proved symlink refusal, while

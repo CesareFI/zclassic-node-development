@@ -2323,32 +2323,12 @@ static bool DownloadBootstrapSnapshotParallel(const std::vector<CService>& peerA
         return true; // nothing to fetch over the wire
     }
 
-    // Balance files across streams by total bytes (greedy: assign the largest
-    // remaining file to the currently-smallest bin). Keeps stream finish times
-    // close even when file sizes vary widely.
-    std::sort(files.begin(), files.end(), [&](uint32_t a, uint32_t b) {
-        return manifest.vFiles[a].nSize > manifest.vFiles[b].nSize;
-    });
-    if (nStreams > (int)files.size()) {
-        nStreams = (int)files.size();
-    }
-    std::vector<std::vector<uint32_t> > groups(nStreams);
-    std::vector<uint64_t> binBytes(nStreams, 0);
-    for (size_t i = 0; i < files.size(); ++i) {
-        int best = 0;
-        for (int b = 1; b < nStreams; ++b) {
-            if (binBytes[b] < binBytes[best]) {
-                best = b;
-            }
-        }
-        groups[best].push_back(files[i]);
-        binBytes[best] += manifest.vFiles[files[i]].nSize;
-    }
-
     // A retry or restart may retain files that were already hash-verified.
     // Count them before workers begin so progress stays truthful even when no
-    // new chunk is needed. Re-verify instead of trusting an extant pathname.
+    // new chunk is needed. Re-verify instead of trusting an extant pathname,
+    // and do not schedule a socket worker for a completed file.
     uint64_t preverifiedBytes = 0;
+    std::vector<uint32_t> pendingFiles;
     for (size_t i = 0; i < files.size(); ++i) {
         const CBootstrapSnapshotFile& file = manifest.vFiles[files[i]];
         const boost::filesystem::path path = staging / boost::filesystem::path(file.strPath);
@@ -2358,7 +2338,37 @@ static bool DownloadBootstrapSnapshotParallel(const std::vector<CService>& peerA
         }
         if (reusable) {
             preverifiedBytes += file.nSize;
+        } else {
+            pendingFiles.push_back(files[i]);
         }
+    }
+
+    if (pendingFiles.empty()) {
+        SetBootstrapInfoProgress(100, preverifiedBytes, manifest.nSnapshotBytes,
+                                 0.0, 0, peer, 0, 0, 0, 0, "", manifest.nVersion);
+        return true;
+    }
+
+    // Balance only missing files across streams by total bytes (greedy: assign
+    // the largest remaining file to the currently-smallest bin). This avoids a
+    // needless connection failure for a worker whose group was fully resumed.
+    std::sort(pendingFiles.begin(), pendingFiles.end(), [&](uint32_t a, uint32_t b) {
+        return manifest.vFiles[a].nSize > manifest.vFiles[b].nSize;
+    });
+    if (nStreams > (int)pendingFiles.size()) {
+        nStreams = (int)pendingFiles.size();
+    }
+    std::vector<std::vector<uint32_t> > groups(nStreams);
+    std::vector<uint64_t> binBytes(nStreams, 0);
+    for (size_t i = 0; i < pendingFiles.size(); ++i) {
+        int best = 0;
+        for (int b = 1; b < nStreams; ++b) {
+            if (binBytes[b] < binBytes[best]) {
+                best = b;
+            }
+        }
+        groups[best].push_back(pendingFiles[i]);
+        binBytes[best] += manifest.vFiles[pendingFiles[i]].nSize;
     }
 
     std::atomic<uint64_t> progressBytes(preverifiedBytes);

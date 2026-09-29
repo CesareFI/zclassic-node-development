@@ -2212,15 +2212,12 @@ BOOST_AUTO_TEST_CASE(bootstrap_parallel_reports_preverified_staging_progress)
         output.write(bytes.data(), bytes.size());
     }
 
-    bool serverOk = false;
-    boost::thread server;
-    const CService peer = StartManifestLoopbackPeer(manifest, false, false, false, "", false,
-                                                     server, serverOk);
     SetBootstrapInfoProgress(0, 0, manifest.nSnapshotBytes, 0.0, 1, "", 0, 0, 0, 0, "", 0);
     std::string error;
-    BOOST_CHECK_MESSAGE(BootstrapDownloadSnapshotParallelForTest(peer, manifest, staging, 1000, 1, error), error);
-    server.join();
-    BOOST_CHECK(serverOk);
+    // A verified restart must not require a fresh network connection merely to
+    // discover that there are no chunks left to download.
+    const CService unreachable("127.0.0.1", 1);
+    BOOST_CHECK_MESSAGE(BootstrapDownloadSnapshotParallelForTest(unreachable, manifest, staging, 1000, 1, error), error);
     const BootstrapInfo info = GetBootstrapInfo();
     BOOST_CHECK_EQUAL(info.bytesReceived, manifest.nSnapshotBytes);
     BOOST_CHECK_EQUAL(info.percent, 100);
