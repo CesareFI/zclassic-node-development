@@ -918,6 +918,39 @@ BOOST_AUTO_TEST_CASE(alternate_outbound_headers_fill_the_next_block_window)
     BOOST_CHECK_EQUAL(Stats(alternate).vHeightInFlight.back(), 256);
 }
 
+BOOST_AUTO_TEST_CASE(disconnected_alternate_outbound_releases_next_window)
+{
+    const auto headers = ExtendedHeaders();
+    CNode first(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "A", false);
+    CNode alternate(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "B", false);
+    Handshake(first);
+    Handshake(alternate);
+    BOOST_REQUIRE(SendMessages(&first, false));
+    HeaderBatch(first, headers, 1, MAX_HEADERS_RESULTS);
+    BOOST_REQUIRE(SendMessages(&first, false));
+    BOOST_REQUIRE_EQUAL(Stats(first).nBlocksInFlight, 128);
+
+    BOOST_REQUIRE(SendMessages(&alternate, false));
+    HeaderBatch(alternate, headers, 1, MAX_HEADERS_RESULTS);
+    HeaderBatch(alternate, headers, 161, MAX_HEADERS_RESULTS);
+    BOOST_REQUIRE(SendMessages(&alternate, false));
+    BOOST_REQUIRE_EQUAL(Stats(alternate).nBlocksInFlight, 128);
+    BOOST_REQUIRE_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 256);
+
+    // Socket teardown must release B's advertised next window before its
+    // object is finalized. Once A makes one useful body advance, that freed
+    // work is immediately eligible for A instead of remaining stale globally.
+    GetNodeSignals().DisconnectNode(alternate.GetId());
+    BOOST_CHECK_EQUAL(Stats(alternate).nBlocksInFlight, 0);
+    BOOST_CHECK(Stats(alternate).fBlockDownloadStopped);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 128);
+    Deliver(first, 1);
+    BOOST_REQUIRE(SendMessages(&first, false));
+    BOOST_CHECK_EQUAL(Stats(first).nBlocksInFlight, 128);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 128);
+    BOOST_CHECK_EQUAL(Stats(first).vHeightInFlight.back(), 129);
+}
+
 BOOST_AUTO_TEST_CASE(empty_header_response_releases_inbound_fallback_role)
 {
     CNode first(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "A", true);

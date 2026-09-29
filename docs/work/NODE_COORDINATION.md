@@ -2588,3 +2588,28 @@ ASan/UBSan remain unrun because 11 GB free preserves the 10 GB reserve.
 Recommended next investigation: measure recovery when the alternate source
 disconnects after advertising the next window but before delivering its first
 body.
+
+## Alternate outbound disconnect releases its advertised window
+
+Coverage gap: the two-source utilization proof showed B can own the next 128
+historical bodies, but did not directly prove that a socket teardown clears
+that ownership before B's `CNode` object is finalized and lets A reclaim the
+first released height during ordinary progress.
+
+Regression proof: after A owns heights 1--128 and B owns 129--256 from valid
+outbound header batches, the disconnect signal releases B's entire request
+window. A then validates height 1 and its next scheduler visit requests height
+129, with 128 total requests retained and no stale global ownership. The new
+case passed in 1.12 s at 154,644 KB maximum RSS; it reran in 1.12 s at 155,180
+KB alongside socket-disconnect cleanup (1.01 s), repeated teardown accounting
+(1.01 s), and alternate-window utilization (1.11 s). `git diff --check`
+passes after the incremental native rebuild.
+
+Consensus impact: NONE. The change adds deterministic local regression
+coverage only; request teardown, header acceptance, serialization, validation,
+chain history, PoW, monetary policy, upgrades, cryptography, wallets, and
+production datadirs are unchanged. Worldstream C23 `origin/main` at
+`c9b7f20bb` remains complementary storage/startup work. ASan/UBSan remain
+unrun because 11 GB free preserves the 10 GB reserve. Recommended next
+investigation: validate the same bounded recovery when B reports `notfound`
+rather than disconnecting.
