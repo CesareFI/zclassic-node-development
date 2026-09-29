@@ -3532,3 +3532,36 @@ control; no node, consensus, validation, wire, wallet, production, or
 Worldstream-owned storage behavior changed.  Remaining risk: a representative
 loss/reconnect and heterogeneous-WAN fixture is still needed before evaluating
 latency-aware scheduling.
+
+## End-to-end healthy-source disconnect releases work to the remaining source
+
+Measurement support: the isolated OG benchmark can now close its first
+synthetic peer after a bounded number of successfully framed block responses.
+The requested threshold must be positive and leave work for the second peer;
+the manifest records it.  Completion requires the configured drop, every
+fixture height, at least one reassignment beyond any stalled-peer expectation,
+and zero final in-flight counters.
+
+Result: in the checked 4,609-block fixture with two 1 MiB/s healthy peers,
+100 ms pipelined latency, TCP_NODELAY, and one status sample per second, A
+closed after 256 block responses.  B completed height 4,608 in 112.06 s
+(41.12 blocks/s) after receiving 4,458 requests.  A had received 276 requests
+and sent 256 responses; the node reissued 126 requests, reached the same
+checked tip, ended with zero block and validated-block reservations, recorded
+no peer errors or status-RPC failures, used 145.55 daemon CPU seconds and
+97,812 KiB peak RSS with no swap, and shut down gracefully.  Its 1.12 s
+longest observed progress gap is below the healthy two-peer lane's 2.83 s
+single-run observation.
+
+Decision: ordinary disconnect cleanup and reassignment are correct in this
+bounded full-node path.  The reissued requests are expected after an abrupt
+socket close; the fixture cannot establish whether all framed bytes reached
+the node, so it does not claim duplicate validation.  No C++ ownership change
+is justified without evidence of a stale reservation, missing height, or
+time-to-tip regression.
+
+Consensus impact: NONE.  This is an isolated fixture and documentation
+change; consensus, validation, cryptography, P2P compatibility, wallets,
+production state, and Worldstream-owned storage are unchanged.  Remaining
+risk: reconnect after a source loss and multiple independently diverse
+replacement sources still need representative WAN/loss evidence.

@@ -28,7 +28,8 @@ class RPCUnavailable(RuntimeError):
 
 
 class BenchPeer(WIRE.Peer):
-    def __init__(self, *args, latency, bandwidth, delay_mode, tcp_nodelay, **kwargs):
+    def __init__(self, *args, latency, bandwidth, delay_mode, tcp_nodelay,
+                 drop_after_blocks=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.initial_tcp_nodelay = self.sock.getsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY)
         if tcp_nodelay:
@@ -41,6 +42,9 @@ class BenchPeer(WIRE.Peer):
         self.first_request = None
         self.first_block = None
         self.bytes_sent = 0
+        self.drop_after_blocks = drop_after_blocks
+        self.blocks_sent = 0
+        self.dropped = threading.Event()
         self.wire_requests = []
 
     def send(self, command, payload=b""):
@@ -52,6 +56,11 @@ class BenchPeer(WIRE.Peer):
         with self.send_lock:
             super().send(command, payload)
             self.bytes_sent += len(payload) + 24
+            if command == "block":
+                self.blocks_sent += 1
+                if self.drop_after_blocks is not None and self.blocks_sent == self.drop_after_blocks:
+                    self.dropped.set()
+                    self.stop_event.set()
 
     def process(self, command, payload):
         if command == b"getdata":
@@ -116,7 +125,7 @@ def host_cpu():
     return {"total": total, "busy": total - values[3] - values[4] - values[7], "steal": values[7]}
 
 
-def check_complete(chain, peers, headers, stall, limit):
+def check_complete(chain, peers, headers, stall, limit, first_peer_drops):
     assert chain["bestblockhash"] == WIRE.hash256(headers[-1])[::-1].hex()
     counters = chain["blockdownload"]
     assert counters["blocks_in_flight"] == 0, counters
@@ -124,7 +133,12 @@ def check_complete(chain, peers, headers, stall, limit):
     requests = [height for peer in peers for height in peer.wire_requests]
     assert set(requests) == set(range(1, len(headers)))
     duplicates = len(requests) - len(set(requests))
-    assert duplicates == (limit if stall else 0), duplicates
+    expected_duplicates = limit if stall else 0
+    if first_peer_drops:
+        assert peers[0].dropped.wait(5), "first peer did not make its configured drop"
+        assert duplicates > expected_duplicates, duplicates
+    else:
+        assert duplicates == expected_duplicates, duplicates
     if stall:
         assert peers[0].disconnected.wait(5), "stalled peer remained connected"
         assert peers[0].wire_requests == list(range(1, limit + 1))
@@ -193,7 +207,9 @@ def run(args, blocks, headers, limit, repeat):
                 peer = BenchPeer(args.port, name, blocks, headers,
                                  not (args.stall and name == "A"),
                                  latency=args.latency_ms / 1000, bandwidth=bandwidth * 1024,
-                                 delay_mode=args.delay_mode, tcp_nodelay=args.tcp_nodelay)
+                                 delay_mode=args.delay_mode, tcp_nodelay=args.tcp_nodelay,
+                                 drop_after_blocks=(args.first_peer_drop_after_blocks
+                                                    if name == "A" else None))
                 peers.append(peer)
                 peer.start()
                 if args.stall and name == "A":
@@ -223,7 +239,8 @@ def run(args, blocks, headers, limit, repeat):
                 if any(peer.errors for peer in peers):
                     raise RuntimeError([peer.errors for peer in peers])
                 if chain["blocks"] == len(headers) - 1:
-                    duplicates = check_complete(chain, peers, headers, args.stall, limit)
+                    duplicates = check_complete(chain, peers, headers, args.stall, limit,
+                                                args.first_peer_drop_after_blocks is not None)
                     assert daemon.poll() is None
                     elapsed = now - started
                     cpu = usage["cpu_seconds"] - before["cpu_seconds"]
@@ -274,6 +291,8 @@ def run(args, blocks, headers, limit, repeat):
                                 "initial_tcp_nodelay": peer.initial_tcp_nodelay,
                                 "tcp_nodelay": peer.tcp_nodelay,
                                 "header_messages": peer.header_messages,
+                                "blocks_sent": peer.blocks_sent,
+                                "intentional_drop": peer.dropped.is_set(),
                                 "first_response_seconds": (peer.first_block - peer.first_request
                                     if peer.first_block is not None and peer.first_request is not None else None)}
                                for peer in peers]
@@ -315,6 +334,8 @@ def main():
                         help="Override A's payload bandwidth for a diverse-speed fixture")
     parser.add_argument("--second-peer-bandwidth-kib", type=float,
                         help="Override B's payload bandwidth for a diverse-speed fixture")
+    parser.add_argument("--first-peer-drop-after-blocks", type=int,
+                        help="Have A close after this many delivered blocks")
     parser.add_argument("--sample-ms", type=float, default=100)
     parser.add_argument("--timeout", type=float, default=600)
     parser.add_argument("--port", type=int, default=18643)
@@ -328,6 +349,7 @@ def main():
             args.sample_ms < 20 or args.timeout <= 0 or
             (args.first_peer_bandwidth_kib is not None and args.first_peer_bandwidth_kib <= 0) or
             (args.second_peer_bandwidth_kib is not None and args.second_peer_bandwidth_kib <= 0) or
+            (args.first_peer_drop_after_blocks is not None and args.first_peer_drop_after_blocks < 1) or
             (args.block_download_window is not None and
              not 1 <= args.block_download_window <= 4096)):
         parser.error("invalid repeat, bandwidth, latency, sample interval or timeout")
@@ -336,6 +358,9 @@ def main():
     blocks, headers = WIRE.fixture(args.fixture, args.sha256)
     if args.require_window_stall and (not args.stall or len(headers) <= 4097):
         parser.error("--require-window-stall needs --stall and blocks through at least height 4097")
+    if (args.first_peer_drop_after_blocks is not None and
+            args.first_peer_drop_after_blocks >= len(headers)):
+        parser.error("--first-peer-drop-after-blocks must leave blocks for recovery")
     manifest = {"fixture_sha256": args.sha256, "blocks": len(headers),
                 "daemon_sha256": hashlib.sha256(args.daemon.read_bytes()).hexdigest(),
                 "delay_mode": args.delay_mode, "delay_ms_per_getdata": args.latency_ms,
@@ -348,6 +373,7 @@ def main():
     manifest.update({"limits": args.limits, "repeat": args.repeat, "stall": args.stall,
                      "require_window_stall": args.require_window_stall,
                      "block_download_window": args.block_download_window,
+                     "first_peer_drop_after_blocks": args.first_peer_drop_after_blocks,
                      "fixture_peer_tcp_nodelay_requested": args.tcp_nodelay,
                      "timeout_seconds": args.timeout, "request_counting": "on getdata receipt"})
     (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
