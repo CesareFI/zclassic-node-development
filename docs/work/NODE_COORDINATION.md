@@ -3935,3 +3935,28 @@ production data, and Worldstream-owned storage are unchanged.  Remaining
 risk: this does not profile individual consensus validation operations; a
 representative safe profiling environment is still needed before considering
 their performance.
+
+## Cadence interpretation correction: bounded-window replenishment is healthy
+
+Follow-up source evidence: the small `getdata` batches above must not be read
+as a validated-chain scheduler defect.  `ProcessNewBlock` removes a matching
+in-flight request before `CheckBlock` and chain activation; the normal send
+loop then refills only the released portion of that peer's bounded window.
+This preserves a fixed maximum while data arrives and prevents an unbounded
+body queue.
+
+After measurement: offline analysis of the exact passing cadence run's
+one-second samples found global validated in-flight work at or above 120 in
+108 of 112 samples (96.4%), with a 125.79-block average and 255 maximum during
+the two-peer handoff.  The final four samples drain normally toward tip.  Thus
+the observed 1.08 blocks per `getdata` is slot replenishment while the window
+remains full, not evidence that B was starved or that request coalescing would
+improve IBD.  The earlier phrase "alongside normal validated-chain advancement"
+is narrowed accordingly: release occurs upon received-body accounting before
+full validation, while the consistently occupied bounded window is the actual
+evidence against a scheduling gap.
+
+Consensus impact: NONE.  This corrects the measurement interpretation only;
+there is no source behavior change.  The next valid optimization target needs
+a representative operation-level profile of normal validation, not a wider
+request window, altered ordering, or reduced validation.
