@@ -3823,3 +3823,40 @@ wire behavior, wallets, production data, and Worldstream-owned storage remain
 unchanged.  Remaining risk: this short checked fixture is not a representative
 WAN or long-chain transaction mix; retain the automatic default unless a
 repeatable representative profile demonstrates a benefit.
+
+## Separate healthy-peer delivery from final validation catch-up
+
+Bottleneck/risk: elapsed time alone cannot distinguish a block-swarm/request
+pacing limit from work left after the fixture peer has supplied the final
+block.  Without that boundary, changing scheduler or validation code would be
+speculative.
+
+Measurement support: the existing isolated peer now records the monotonic
+time at which each successful `block` send completes.  The benchmark reports
+the final healthy-block send and `post_delivery_validation_seconds`, and
+asserts that a finished fresh-node run has such a delivery boundary.  This is
+local fixture instrumentation only; it does not alter peer wire data or daemon
+behavior.
+
+Result: the fresh default-thread, 512-height-look-ahead, 100 ms, 1 MiB/s
+stalled-A run reached height 4,608 in 119.19 s (38.66 blocks/s), consuming
+148.80 daemon CPU seconds and 97,540 KiB RSS with no swap.  B completed its
+last send at 115.82 s; the node then reached tip 3.37 s later.  A disconnected
+at 8.89 s, all 128 requests were reassigned, all final accounting/source
+counters were zero, no RPC sample failed, and shutdown was graceful.  Thus
+only about 2.8% of this run was post-delivery validation drain; the next
+controlled investigation should vary healthy-peer transport/request pacing,
+not rewrite validation or relax any check.
+
+Regression proof: the complete normal-validation localhost run passed using
+the checked 4,609-block fixture, isolated disposable datadir, disabled wallet
+and bootstrap, loopback-only peers, and an explicit 180-second bound.  Cold
+sanitizer and full-suite gates remain unrun to preserve the 10 GiB disk
+reserve.
+
+Consensus impact: NONE.  The change measures fixture timing only; consensus,
+block and transaction validation, cryptography, wire compatibility, wallets,
+production data, and Worldstream-owned storage remain unchanged.  Remaining
+risk: send completion is a local socket-queue boundary, not an Internet
+receive timestamp, so WAN conclusions still require a controlled remote-peer
+experiment.

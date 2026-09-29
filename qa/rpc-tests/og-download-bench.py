@@ -41,6 +41,7 @@ class BenchPeer(WIRE.Peer):
         self.pending = queue.Queue(maxsize=256)
         self.first_request = None
         self.first_block = None
+        self.last_block = None
         self.bytes_sent = 0
         self.drop_after_blocks = drop_after_blocks
         self.blocks_sent = 0
@@ -58,6 +59,7 @@ class BenchPeer(WIRE.Peer):
             self.bytes_sent += len(payload) + 24
             if command == "block":
                 self.blocks_sent += 1
+                self.last_block = time.monotonic()
                 if self.drop_after_blocks is not None and self.blocks_sent == self.drop_after_blocks:
                     self.dropped.set()
                     self.stop_event.set()
@@ -281,6 +283,11 @@ def run(args, blocks, headers, limit, repeat):
                                    "longest_observed_no_progress_seconds": longest_no_progress,
                                    "a_disconnect_seconds": peers[0].disconnect_age,
                                    "no_restart": True})
+                    last_delivery = max((peer.last_block for peer in peers if peer.last_block is not None),
+                                        default=None)
+                    assert last_delivery is not None
+                    report["last_block_sent_seconds"] = last_delivery - started
+                    report["post_delivery_validation_seconds"] = elapsed - report["last_block_sent_seconds"]
                     break
                 time.sleep(args.sample_ms / 1000)
             else:
@@ -312,7 +319,9 @@ def run(args, blocks, headers, limit, repeat):
                                 "blocks_sent": peer.blocks_sent,
                                 "intentional_drop": peer.dropped.is_set(),
                                 "first_response_seconds": (peer.first_block - peer.first_request
-                                    if peer.first_block is not None and peer.first_request is not None else None)}
+                                    if peer.first_block is not None and peer.first_request is not None else None),
+                                "last_block_sent_seconds": (peer.last_block - started
+                                    if peer.last_block is not None else None)}
                                for peer in peers]
     report["disconnect_events"] = [line for line in (output / "daemon.log").read_text().splitlines()
                                    if "is stalling block download, disconnecting" in line
