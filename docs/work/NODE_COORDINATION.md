@@ -3314,3 +3314,49 @@ wallets, production datadirs, and peer policy are unchanged. Worldstream
 remains complementary on startup/storage. Recommended next investigation:
 add no more scheduler permutations; provision bounded sampling support and a
 verified historical fixture before considering a cryptographic hot-path change.
+
+## Real stalled-peer IBD exposes an intentional 4,096-block recovery buffer
+
+Baseline and measurement: a fresh current-binary localhost run used the
+independently checksummed 4,609-block fixture, two peers, the default
+128-block per-peer window, pipelined zero added latency, 1 MiB/s payload
+pacing, TCP_NODELAY, normal validation, and an isolated temporary datadir.
+Peer A accepted its first 128 requests and supplied no bodies; B supplied all
+valid bodies. The run passed its recovery assertion and reached height 4,608
+in 117.54 s (39.20 blocks/s), using 150.27 daemon CPU seconds, 96 MiB RSS, and
+no swap. A was disconnected at 21.15 s, before its 300-second ordinary block
+deadline; all 128 requests were reassigned exactly once, final in-flight
+counters were zero, and the daemon completed a graceful RPC stop.
+
+Root cause: this is not a lost ownership or deadline bug.
+`FindNextBlocksToDownload` marks a staller only when a peer cannot fill any
+more of the `BLOCK_DOWNLOAD_WINDOW` (4,096 blocks) because the earliest needed
+body is owned elsewhere. B can safely buffer bodies beyond A's missing first
+window, so the staller timer begins after that buffer is exhausted, then
+applies the existing two-second `BLOCK_STALLING_TIMEOUT`. The observed
+23.12-second maximum validated-height pause includes that intentional
+buffer-fill period. Starting the two-second timer when any alternate first
+observes an in-flight ancestor would disconnect ordinary slower peers without
+a representative WAN latency/loss distribution, so no scheduler policy change
+is justified by this single laboratory workload.
+
+Operator-observability finding: the full passing run recorded ten bounded
+`getblockchaininfo` client timeouts from 33.53 through 100.52 seconds. A
+separate diagnostic run was deliberately capped at 50 seconds and therefore
+failed only its completion deadline, then shut down gracefully; it reproduced
+five timeouts from 26.87 through 53.22 seconds. A debug-symbol snapshot caught
+one `zcl-httpworker` waiting for `cs_main` while `zcl-msghand` executed
+libsnark pairing arithmetic; the HTTP event loop and three other HTTP workers
+were idle. This attributes the observation to consensus-validation lock
+contention, not queue-depth exhaustion or a network listener failure.
+
+Consensus impact: NONE. This is measurement/documentation only; validation,
+serialization, chain history, PoW, monetary policy, upgrades, cryptography,
+wallets, production datadirs, and peer policy are unchanged. Worldstream
+remains complementary on startup/storage. Remaining risk: a slow first source
+can visibly delay validated-height progress while healthy peers fill the
+intentional look-ahead buffer, and status RPC can wait behind proof validation.
+Recommended next investigation: use a representative verified historical mix
+and statistical profiler before evaluating either a lock-free immutable IBD
+status snapshot or pre-lock proof verification; both require explicit
+consensus-parity acceptance, not a timeout workaround.
