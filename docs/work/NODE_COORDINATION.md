@@ -2967,6 +2967,34 @@ the 10 GB reserve precludes a cold sanitizer build. Recommended next
 investigation: add a small outer loopback transfer/restart proof when a
 manifest matching a compiled anchor can be constructed without a chain copy.
 
+## Resumed bootstrap reserves only missing staging bytes
+
+Baseline and root cause: even after manifest-bound staging reuse was enabled,
+the staging preflight required `manifest.nSnapshotBytes + 1 GiB` free. The
+already-staged completed files were counted both as consumed disk space and as
+new required space, so a nearly-full node could reject a safe resume despite
+needing only a few missing chunks.
+
+Fix and after-result: the preflight now sums only each manifest file's missing
+allocation (`max(declared size - existing regular-file size, 0)`) and retains
+the existing 1 GiB safety margin. Symlinks, directories, and unexpected file
+types receive no credit and still fail the later reuse gate. Overflow and
+unsafe manifest paths fail closed.
+
+Regression proof: a 150-byte two-file fixture with one complete 100-byte file
+requires 50 bytes; after a 20-byte partial second file it requires 30 bytes.
+The focused test passes in 0.06 s at 28,924 KB maximum RSS. The complete
+84-case bootstrap protocol group passes in 13.12 s at 170,308 KB maximum RSS;
+`git diff --check` passes.
+
+Consensus impact: NONE. This changes only temporary disk-reservation math;
+manifest validation, hashes, payload validation, serialization, chain history,
+PoW, monetary policy, upgrades, cryptography, wallets, and production
+datadirs are unchanged. Worldstream remains complementary on startup/storage.
+ASan/UBSan remain unrun because the host has 11 GB free and the 10 GB reserve
+precludes a cold sanitizer build. Recommended next investigation: bounded
+outer loopback resume/install coverage.
+
 ## Legacy single-stream bootstrap rejects symlinked staging files
 
 Coverage gap: parallel staging reuse directly proved symlink refusal, while

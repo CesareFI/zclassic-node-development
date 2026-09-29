@@ -1704,20 +1704,77 @@ static bool CreateEmptyBootstrapFiles(const CBootstrapSnapshotManifest& manifest
 // Prepare the staging directory for a snapshot download: ensure free space,
 // materialize zero-length files, and pre-create every parent directory so
 // concurrent download streams never race on directory creation.
+static bool BootstrapRemainingStagingBytes(const CBootstrapSnapshotManifest& manifest,
+                                           const boost::filesystem::path& staging,
+                                           uint64_t& remaining, std::string& error)
+{
+    remaining = 0;
+    try {
+        for (size_t i = 0; i < manifest.vFiles.size(); ++i) {
+            const CBootstrapSnapshotFile& file = manifest.vFiles[i];
+            if (file.nSize == 0) {
+                continue;
+            }
+            const boost::filesystem::path relative(file.strPath);
+            if (!IsBootstrapSnapshotDataPath(relative)) {
+                error = strprintf("bootstrap manifest has unsafe file path: %s", file.strPath);
+                return false;
+            }
+            const boost::filesystem::path path = staging / relative;
+            uint64_t present = 0;
+            // Credit only an ordinary existing file. A symlink, directory, or
+            // other unexpected entry will fail the later reuse gate and must
+            // not reduce the free-space reservation.
+            if (boost::filesystem::exists(path) &&
+                boost::filesystem::is_regular_file(boost::filesystem::symlink_status(path))) {
+                present = (uint64_t)boost::filesystem::file_size(path);
+            }
+            const uint64_t additional = file.nSize > present ? file.nSize - present : 0;
+            if (remaining > std::numeric_limits<uint64_t>::max() - additional) {
+                error = "bootstrap remaining staging bytes overflow";
+                return false;
+            }
+            remaining += additional;
+        }
+    } catch (const boost::filesystem::filesystem_error& e) {
+        error = strprintf("could not inspect bootstrap staging files: %s", e.what());
+        return false;
+    }
+    return true;
+}
+
+bool BootstrapRemainingStagingBytesForTest(const CBootstrapSnapshotManifest& manifest,
+                                           const boost::filesystem::path& staging,
+                                           uint64_t& remaining, std::string& error)
+{
+    return BootstrapRemainingStagingBytes(manifest, staging, remaining, error);
+}
+
 static bool DownloadBootstrapPrepareStaging(const CBootstrapSnapshotManifest& manifest, const boost::filesystem::path& staging, std::string& error)
 {
-    // Refuse to start if the staging filesystem cannot fit the manifest plus
-    // a safety margin. Cheaper to fail fast than to fill the disk and then
-    // discover the last chunk's hash is wrong.
+    // Refuse to start if the filesystem cannot fit the still-missing bytes
+    // plus a safety margin. A resumed tree's ordinary completed files already
+    // occupy disk space, so requiring a second full snapshot would reject a
+    // safe retry on a nearly-full volume.
     try {
         boost::filesystem::create_directories(staging);
         boost::filesystem::space_info si = boost::filesystem::space(staging);
-        const uint64_t need = manifest.nSnapshotBytes + (uint64_t)BOOTSTRAP_SNAPSHOT_DISK_SAFETY_MARGIN_BYTES;
+        uint64_t remaining = 0;
+        if (!BootstrapRemainingStagingBytes(manifest, staging, remaining, error)) {
+            return false;
+        }
+        const uint64_t margin = (uint64_t)BOOTSTRAP_SNAPSHOT_DISK_SAFETY_MARGIN_BYTES;
+        if (remaining > std::numeric_limits<uint64_t>::max() - margin) {
+            error = "bootstrap staging space requirement overflow";
+            return false;
+        }
+        const uint64_t need = remaining + margin;
         if (si.available < need) {
             error = strprintf(
-                "insufficient free space in %s for bootstrap snapshot: need %llu bytes (including %lld safety margin), have %llu",
+                "insufficient free space in %s for bootstrap snapshot resume: need %llu bytes (%llu remaining plus %lld safety margin), have %llu",
                 staging.string(),
                 (unsigned long long)need,
+                (unsigned long long)remaining,
                 (long long)BOOTSTRAP_SNAPSHOT_DISK_SAFETY_MARGIN_BYTES,
                 (unsigned long long)si.available);
             return false;

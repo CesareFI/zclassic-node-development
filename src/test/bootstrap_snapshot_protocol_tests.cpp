@@ -81,6 +81,9 @@ extern bool BootstrapPrepareResumeStagingForTest(const boost::filesystem::path&,
                                                  const CBootstrapSnapshotManifest&,
                                                  boost::filesystem::path&,
                                                  std::string&);
+extern bool BootstrapRemainingStagingBytesForTest(const CBootstrapSnapshotManifest&,
+                                                  const boost::filesystem::path&,
+                                                  uint64_t&, std::string&);
 extern bool BootstrapDownloadSnapshotParallelFromPeersForTest(
     const std::vector<CService>&, const CBootstrapSnapshotManifest&,
     const boost::filesystem::path&, int, int, std::string&);
@@ -2164,6 +2167,41 @@ BOOST_AUTO_TEST_CASE(bootstrap_resume_staging_is_manifest_bound_and_fail_closed)
     BOOST_CHECK(error.find("unrecognized") != std::string::npos);
     BOOST_CHECK(fs::exists(unknown / "bootstrap-peer-staging" / "unknown"));
     fs::remove_all(unknown);
+}
+
+BOOST_AUTO_TEST_CASE(bootstrap_resume_space_counts_only_missing_file_bytes)
+{
+    namespace fs = boost::filesystem;
+    const fs::path staging = fs::temp_directory_path() /
+        fs::unique_path("zclassic-bootstrap-space-%%%%-%%%%-%%%%");
+    CBootstrapSnapshotManifest manifest;
+    manifest.nSnapshotBytes = 150;
+    manifest.nChunkSize = 128;
+    for (const auto& entry : std::vector<std::pair<std::string, uint64_t> >{
+             {"blocks/blk00000.dat", 100}, {"chainstate/000001.ldb", 50}}) {
+        CBootstrapSnapshotFile file;
+        file.strPath = entry.first;
+        file.nSize = entry.second;
+        manifest.vFiles.push_back(file);
+    }
+    fs::create_directories(staging / "blocks");
+    {
+        fs::ofstream file(staging / "blocks" / "blk00000.dat", std::ios::binary);
+        file << std::string(100, 'a');
+    }
+    uint64_t remaining = 0;
+    std::string error;
+    BOOST_REQUIRE(BootstrapRemainingStagingBytesForTest(manifest, staging, remaining, error));
+    BOOST_CHECK_EQUAL(remaining, 50U);
+
+    fs::create_directories(staging / "chainstate");
+    {
+        fs::ofstream file(staging / "chainstate" / "000001.ldb", std::ios::binary);
+        file << std::string(20, 'b');
+    }
+    BOOST_REQUIRE(BootstrapRemainingStagingBytesForTest(manifest, staging, remaining, error));
+    BOOST_CHECK_EQUAL(remaining, 30U);
+    fs::remove_all(staging);
 }
 
 BOOST_AUTO_TEST_CASE(bootstrap_parallel_replaces_corrupt_completed_staging_file)
