@@ -1969,6 +1969,41 @@ BOOST_AUTO_TEST_CASE(bootstrap_loopback_retry_retains_verified_prior_file)
     boost::filesystem::remove_all(staging);
 }
 
+BOOST_AUTO_TEST_CASE(bootstrap_parallel_reports_preverified_staging_progress)
+{
+    const std::string bytes = DeterministicBytes(257, 153);
+    CBootstrapSnapshotManifest manifest;
+    manifest.nSnapshotBytes = bytes.size();
+    manifest.nChunkSize = 128;
+    CBootstrapSnapshotFile file;
+    file.strPath = "blocks/blk00000.dat";
+    file.nSize = bytes.size();
+    file.hashSha256 = Sha256OfBytes(std::vector<unsigned char>(bytes.begin(), bytes.end()));
+    manifest.vFiles.push_back(file);
+
+    const boost::filesystem::path staging = boost::filesystem::current_path() /
+        boost::filesystem::unique_path("zclassic-bootstrap-progress-%%%%-%%%%-%%%%");
+    boost::filesystem::create_directories((staging / file.strPath).parent_path());
+    {
+        boost::filesystem::ofstream output(staging / file.strPath, std::ios::binary);
+        output.write(bytes.data(), bytes.size());
+    }
+
+    bool serverOk = false;
+    boost::thread server;
+    const CService peer = StartManifestLoopbackPeer(manifest, false, false, false, "", false,
+                                                     server, serverOk);
+    SetBootstrapInfoProgress(0, 0, manifest.nSnapshotBytes, 0.0, 1, "", 0, 0, 0, 0, "", 0);
+    std::string error;
+    BOOST_CHECK_MESSAGE(BootstrapDownloadSnapshotParallelForTest(peer, manifest, staging, 1000, 1, error), error);
+    server.join();
+    BOOST_CHECK(serverOk);
+    const BootstrapInfo info = GetBootstrapInfo();
+    BOOST_CHECK_EQUAL(info.bytesReceived, manifest.nSnapshotBytes);
+    BOOST_CHECK_EQUAL(info.percent, 100);
+    boost::filesystem::remove_all(staging);
+}
+
 BOOST_AUTO_TEST_CASE(bootstrap_loopback_parallel_streams_assign_disjoint_files)
 {
     const std::vector<std::string> files = {DeterministicBytes(127, 161), DeterministicBytes(113, 162)};

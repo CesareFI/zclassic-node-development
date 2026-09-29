@@ -2134,11 +2134,32 @@ static bool DownloadBootstrapSnapshotParallel(const std::vector<CService>& peerA
         binBytes[best] += manifest.vFiles[files[i]].nSize;
     }
 
-    std::atomic<uint64_t> progressBytes(0);
+    // A retry or restart may retain files that were already hash-verified.
+    // Count them before workers begin so progress stays truthful even when no
+    // new chunk is needed. Re-verify instead of trusting an extant pathname.
+    uint64_t preverifiedBytes = 0;
+    for (size_t i = 0; i < files.size(); ++i) {
+        const CBootstrapSnapshotFile& file = manifest.vFiles[files[i]];
+        const boost::filesystem::path path = staging / boost::filesystem::path(file.strPath);
+        if (!boost::filesystem::exists(path)) {
+            continue;
+        }
+        if (!VerifyBootstrapDownloadedFile(path, file, error)) {
+            return false;
+        }
+        preverifiedBytes += file.nSize;
+    }
+
+    std::atomic<uint64_t> progressBytes(preverifiedBytes);
     std::atomic<bool> abortFlag(false);
     std::atomic<int> doneCount(0);
     CCriticalSection csErr;
     std::string firstError;
+
+    const int initialPercent = manifest.nSnapshotBytes > 0
+        ? (int)((preverifiedBytes * 100) / manifest.nSnapshotBytes) : 100;
+    SetBootstrapInfoProgress(initialPercent, preverifiedBytes, manifest.nSnapshotBytes,
+                             0.0, nStreams, peer, 0, 0, 0, 0, "", manifest.nVersion);
 
     auto recordError = [&](const std::string& e) {
         {

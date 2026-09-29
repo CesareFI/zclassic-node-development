@@ -2673,3 +2673,33 @@ C23 `origin/main` at `c9b7f20bb` remains complementary storage/startup work.
 ASan/UBSan remain unrun because 11 GB free preserves the 10 GB reserve.
 Recommended next investigation: inspect header-role teardown for the analogous
 late queued valid-header behavior after a source is marked disconnected.
+
+## Parallel bootstrap reports verified staging progress accurately
+
+Baseline and root cause: a restarted parallel bootstrap download re-verified
+an already complete staged file but initialized aggregate progress to zero. A
+successful localhost reuse of a 257-byte SHA-256-verified file therefore left
+the read-only bootstrap status at 0 bytes and 0%, misleading operators during
+resume/restart even though no unsafe data was accepted.
+
+Fix: before worker threads start, the parallel downloader re-verifies every
+existing final staged file and seeds aggregate progress with their declared
+sizes. It publishes that initial value immediately; workers retain the
+existing per-file verification and retry behavior. Corrupt existing files now
+fail before a worker starts, rather than being trusted by pathname.
+
+After-result and regression proof: the new localhost case reports 257/257
+bytes and 100% after a successful reuse (0.26 s, 28,976 KB maximum RSS). Retry
+retention, chunk-reset retry, and open-reset source rotation cases each pass in
+0.26--0.27 s. The full 77-case bootstrap protocol group passes in 12.81 s at
+169,332 KB maximum RSS; `git diff --check` passes after the incremental native
+build.
+
+Consensus impact: NONE. This changes only read-only bootstrap progress and
+re-verifies already-staged snapshot files; manifest equality, file hashes,
+validation, serialization, chain history, PoW, monetary policy, upgrades,
+cryptography, wallets, and production datadirs are unchanged. Worldstream C23
+`origin/main` at `7554acde8` remains complementary storage/startup work.
+ASan/UBSan remain unrun because 11 GB free preserves the 10 GB reserve.
+Recommended next investigation: bounded header-role behavior after queued
+valid headers arrive from a disconnected source.
