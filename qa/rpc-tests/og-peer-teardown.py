@@ -95,7 +95,7 @@ def check_empty(rpc):
         return False
     state = rpc("getblockchaininfo")["blockdownload"]
     keys = ("blocks_in_flight", "validated_blocks_in_flight",
-            "preferred_peers", "header_sync_peers")
+            "preferred_peers", "header_sync_peers", "tracked_block_sources")
     return state if all(state[key] == 0 for key in keys) else False
 
 

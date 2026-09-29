@@ -3694,3 +3694,24 @@ cryptography, wire compatibility, wallets, production data, and
 Worldstream-owned storage remain unchanged.  Remaining risk: a representative
 profile is still required before any lock-free status snapshot could be safely
 evaluated.
+
+## Peer-teardown integration asserts cleared source provenance
+
+Regression extension: the existing real peer-teardown fixture now treats
+`tracked_block_sources` as part of its empty scheduler state.  This connects
+the new native RPC diagnostic to normal FIN, reset, RPC-disconnect, and final
+recovery paths rather than testing only a fresh empty node.
+
+Proof: a bounded six-round localhost run passed.  Each peer held 128 pending
+requests, then the alternating FIN/reset/RPC teardown released all request,
+validated-request, preferred-peer, header-sync-peer, and tracked-source
+counts to zero.  Release observations were 0.50, 0.50, and 0.05 seconds for
+the three modes (repeated twice).  The final peer normally validated through
+height 129, final accounting stayed zero, 336 concurrent observer RPC samples
+had no errors, and graceful shutdown completed in 0.87 s.
+
+Consensus impact: NONE.  This is an isolated regression assertion over
+existing scheduler diagnostics; consensus, validation, cryptography, wire
+compatibility, wallets, production state, and Worldstream-owned storage remain
+unchanged.  Remaining risk: this small fixture cannot replace public-WAN or
+long-chain attribution measurements.
