@@ -198,11 +198,16 @@ def run(args, blocks, headers, limit, repeat):
         command.append(f"-par={args.script_threads}")
     if args.debug_bench:
         command.append("-debug=bench")
+    environment = None
+    if args.omp_threads is not None:
+        environment = os.environ.copy()
+        environment["OMP_NUM_THREADS"] = str(args.omp_threads)
     report = {"limit": limit, "repeat": repeat, "stall": args.stall, "pass": False,
-              "command": command, "rpc_unavailable_samples": []}
+              "command": command, "omp_threads": args.omp_threads,
+              "rpc_unavailable_samples": []}
     peers, samples = [], []
     with (output / "daemon.log").open("w") as log:
-        daemon = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
+        daemon = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, env=environment)
         report["pid"] = daemon.pid
         try:
             deadline = time.monotonic() + 90
@@ -372,6 +377,8 @@ def main():
                         help="Pass an explicit supported -par setting to the daemon")
     parser.add_argument("--debug-bench", action="store_true",
                         help="Enable the daemon's existing per-stage bench log in this isolated run")
+    parser.add_argument("--omp-threads", type=int, choices=range(1, 65),
+                        help="Set OMP_NUM_THREADS for only the isolated daemon process and record it")
     parser.add_argument("--repeat", type=int, default=1)
     parser.add_argument("--stall", action="store_true")
     parser.add_argument("--require-window-stall", action="store_true",

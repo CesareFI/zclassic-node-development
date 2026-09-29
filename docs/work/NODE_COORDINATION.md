@@ -4126,3 +4126,38 @@ validation, cryptography, peer behavior, wallets, production data, and
 Worldstream-owned storage are unchanged.  Remaining risk: verbose bench logs
 are intentionally opt-in and perturb wall time; use them for stage attribution,
 not throughput claims.
+
+## Record bounded OpenMP worker experiments without changing node policy
+
+Bottleneck/risk: the native stage profile and live stacks showed expensive
+strict PoW and shielded-proof work, but the earlier laboratory results set
+`OMP_NUM_THREADS=1` only in the invoking shell.  That made the useful CPU
+observation hard to reproduce from the benchmark receipt and is not grounds
+to change a public-node default.
+
+Fix: add optional `--omp-threads N` to the existing isolated download harness.
+It passes `OMP_NUM_THREADS=N` only to its disposable daemon process and
+records `omp_threads` in that run's result.  Omitting the option preserves the
+parent environment and every ordinary daemon launch exactly as before.
+
+Before/after measurement: on the same 4,609-block, 10 MiB/s healthy-peer,
+100 ms stalled-A lane, two prior shell-scoped one-worker runs completed in
+108.24 s / 103.37 CPU s and 109.27 s / 103.45 CPU s.  The recorded-option run
+completed in 108.06 s (42.64 blocks/s), using 102.62 daemon CPU seconds and
+97,868 KiB RSS with no swap.  The comparable default-worker pair averaged
+108.76 s and 138.64 CPU seconds.  This controlled fixture therefore supports
+lower CPU use with indistinguishable wall time; it is not an Internet-IBD
+throughput claim and does not justify a runtime default change.
+
+Regression proof: the recorded run retained the full 128-request stalled
+source, disconnected it at 7.71 s, reassigned all 128 requests, reached
+height 4,608 under normal validation, had zero final in-flight/source
+counters and no RPC outage, and shut down cleanly.  The harness option itself
+was exercised by that run and its receipt contains `omp_threads: 1`.
+
+Consensus impact: NONE.  This is test-harness process environment plumbing;
+strict validation, cryptography, scheduler behavior, consensus, wallets,
+production data, and Worldstream-owned storage are unchanged.  Remaining
+risk: worker count depends on host and proof mix.  A representative historical
+fixture and host-level CPU isolation are required before selecting any user
+guidance, and a source-level OpenMP policy change is explicitly out of scope.
