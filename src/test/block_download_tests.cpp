@@ -951,6 +951,39 @@ BOOST_AUTO_TEST_CASE(disconnected_alternate_outbound_releases_next_window)
     BOOST_CHECK_EQUAL(Stats(first).vHeightInFlight.back(), 129);
 }
 
+BOOST_AUTO_TEST_CASE(unavailable_alternate_outbound_releases_next_window)
+{
+    const auto headers = ExtendedHeaders();
+    CNode first(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "A", false);
+    CNode alternate(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "B", false);
+    Handshake(first);
+    Handshake(alternate);
+    BOOST_REQUIRE(SendMessages(&first, false));
+    HeaderBatch(first, headers, 1, MAX_HEADERS_RESULTS);
+    BOOST_REQUIRE(SendMessages(&first, false));
+    BOOST_REQUIRE_EQUAL(Stats(first).nBlocksInFlight, 128);
+
+    BOOST_REQUIRE(SendMessages(&alternate, false));
+    HeaderBatch(alternate, headers, 1, MAX_HEADERS_RESULTS);
+    HeaderBatch(alternate, headers, 161, MAX_HEADERS_RESULTS);
+    BOOST_REQUIRE(SendMessages(&alternate, false));
+    BOOST_REQUIRE_EQUAL(Stats(alternate).nBlocksInFlight, 128);
+
+    // A negative reply for B's owned first block is an explicit source
+    // failure. It must release B's complete window immediately, rather than
+    // retaining the other 127 hashes until a later socket-finalization pass.
+    CDataStream notFound(SER_NETWORK, PROTOCOL_VERSION);
+    notFound << std::vector<CInv>{CInv(MSG_BLOCK, blocks[129].GetHash())};
+    BOOST_REQUIRE(ProcessMessage(&alternate, "notfound", notFound, GetTime()));
+    BOOST_CHECK(alternate.fDisconnect);
+    BOOST_CHECK_EQUAL(Stats(alternate).nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 128);
+    Deliver(first, 1);
+    BOOST_REQUIRE(SendMessages(&first, false));
+    BOOST_CHECK_EQUAL(Stats(first).nBlocksInFlight, 128);
+    BOOST_CHECK_EQUAL(Stats(first).vHeightInFlight.back(), 129);
+}
+
 BOOST_AUTO_TEST_CASE(empty_header_response_releases_inbound_fallback_role)
 {
     CNode first(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "A", true);

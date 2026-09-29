@@ -2613,3 +2613,30 @@ production datadirs are unchanged. Worldstream C23 `origin/main` at
 unrun because 11 GB free preserves the 10 GB reserve. Recommended next
 investigation: validate the same bounded recovery when B reports `notfound`
 rather than disconnecting.
+
+## Alternate outbound `notfound` releases its advertised window
+
+Coverage gap: an explicit `notfound` follows a different request-ownership
+path from socket teardown. The previous two-outbound case did not prove that a
+negative reply for B's first next-window block clears its remaining 127 owned
+requests without waiting for final socket cleanup.
+
+Regression proof: after A owns heights 1--128 and B owns 129--256, B returns a
+well-formed `notfound` for its owned height 129. B is disconnected as an
+availability failure, all of B's requests are released immediately, and A
+requests height 129 after validating height 1. The new case passed in 1.16 s at
+155,224 KB maximum RSS and reran in 1.15 s at 155,404 KB. Existing valid
+unavailable takeover (1.45 s), bounded malformed-inventory handling (1.05 s),
+cross-peer ownership protection (1.02 s), and alternate disconnect recovery
+(1.16 s) also passed. One stale filter name exited 200 before executing a test;
+it was corrected and is not counted as a test result. `git diff --check`
+passes after the incremental native rebuild.
+
+Consensus impact: NONE. The change adds deterministic local regression
+coverage only; wire decoding, header acceptance, validation, serialization,
+chain history, PoW, monetary policy, upgrades, cryptography, wallets, and
+production datadirs are unchanged. Worldstream C23 `origin/main` at
+`c9b7f20bb` remains complementary storage/startup work. ASan/UBSan remain
+unrun because 11 GB free preserves the 10 GB reserve. Recommended next
+investigation: measure whether a healthy alternate that receives a late
+duplicate block after its window is released can perturb surviving ownership.
