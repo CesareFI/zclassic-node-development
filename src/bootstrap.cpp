@@ -269,7 +269,11 @@ int BootstrapSocketRemainingTimeoutMillisForTest(int64_t deadline_us)
 // decentralized discovery below; their definitions appear later in this file.
 static bool BootstrapHandshake(SOCKET socket, const CService& peer_address, int timeout_ms, std::string& error);
 static bool SendBootstrapMessage(SOCKET socket, const char* command, const CDataStream& payload, int timeout_ms, std::string& error);
-static bool ReceiveExpectedBootstrapMessage(SOCKET socket, const char* expected_command, CDataStream& payload, int timeout_ms, std::string& error, bool* transportFailure = NULL);
+static bool ReceiveExpectedBootstrapMessage(SOCKET socket, const char* expected_command,
+                                            CDataStream& payload, int timeout_ms,
+                                            std::string& error,
+                                            bool* transportFailure = NULL,
+                                            const std::atomic<bool>* abortFlag = NULL);
 
 // --- Decentralized bootstrap-peer discovery ------------------------------
 //
@@ -599,8 +603,12 @@ static bool IsRetryableSocketError(int err)
     return err == WSAEWOULDBLOCK || err == WSAEINPROGRESS || err == WSAEINTR;
 }
 
-static bool WaitBootstrapSocket(SOCKET socket, bool write, int timeout_ms, std::string& error)
+static bool WaitBootstrapSocket(SOCKET socket, bool write, int timeout_ms,
+                                std::string& error, bool* timedOut = NULL)
 {
+    if (timedOut) {
+        *timedOut = false;
+    }
     if (!IsSelectableSocket(socket)) {
         error = "bootstrap socket is not selectable";
         return false;
@@ -616,6 +624,9 @@ static bool WaitBootstrapSocket(SOCKET socket, bool write, int timeout_ms, std::
         return true;
     }
     if (ret == 0) {
+        if (timedOut) {
+            *timedOut = true;
+        }
         error = write ? "bootstrap socket write timeout" : "bootstrap socket read timeout";
         return false;
     }
@@ -656,11 +667,18 @@ static bool SendBootstrapBytes(SOCKET socket, const char* data, size_t size, int
     return true;
 }
 
+static const int BOOTSTRAP_ABORT_POLL_MS = 100;
+
 static bool RecvBootstrapBytesUntil(SOCKET socket, char* data, size_t size,
-                                    int64_t deadline_us, std::string& error)
+                                    int64_t deadline_us, std::string& error,
+                                    const std::atomic<bool>* abortFlag = NULL)
 {
     size_t received = 0;
     while (received < size) {
+        if (abortFlag && abortFlag->load(std::memory_order_relaxed)) {
+            error = "bootstrap snapshot download canceled (another stream failed)";
+            return false;
+        }
         const ssize_t ret = recv(socket, data + received, size - received, 0);
         if (ret > 0) {
             received += ret;
@@ -681,7 +699,16 @@ static bool RecvBootstrapBytesUntil(SOCKET socket, char* data, size_t size,
             error = "bootstrap socket read timeout";
             return false;
         }
-        if (!WaitBootstrapSocket(socket, false, remaining_ms, error)) {
+        const int wait_ms = abortFlag ? std::min(remaining_ms, BOOTSTRAP_ABORT_POLL_MS) : remaining_ms;
+        bool timedOut = false;
+        if (!WaitBootstrapSocket(socket, false, wait_ms, error, &timedOut)) {
+            // The full deadline still controls ordinary transfer timeouts. An
+            // abort-aware parallel worker merely wakes at a small bounded
+            // interval to observe a sibling's semantic failure.
+            if (timedOut && abortFlag &&
+                BootstrapSocketRemainingTimeoutMillis(deadline_us) > 0) {
+                continue;
+            }
             return false;
         }
     }
@@ -735,14 +762,14 @@ static bool SendBootstrapMessage(SOCKET socket, const char* command, const CData
     return SendBootstrapBytes(socket, &message[0], message.size(), timeout_ms, error);
 }
 
-static bool ReceiveBootstrapMessage(SOCKET socket, std::string& command, CDataStream& payload, int timeout_ms, std::string& error, bool* transportFailure = NULL)
+static bool ReceiveBootstrapMessage(SOCKET socket, std::string& command, CDataStream& payload, int timeout_ms, std::string& error, bool* transportFailure = NULL, const std::atomic<bool>* abortFlag = NULL)
 {
     if (transportFailure) {
         *transportFailure = false;
     }
     const int64_t deadline_us = BootstrapSocketDeadlineMicros(timeout_ms);
     CSerializeData headerBytes(CMessageHeader::HEADER_SIZE);
-    if (!RecvBootstrapBytesUntil(socket, &headerBytes[0], headerBytes.size(), deadline_us, error)) {
+    if (!RecvBootstrapBytesUntil(socket, &headerBytes[0], headerBytes.size(), deadline_us, error, abortFlag)) {
         if (transportFailure) {
             *transportFailure = true;
         }
@@ -771,7 +798,7 @@ static bool ReceiveBootstrapMessage(SOCKET socket, std::string& command, CDataSt
     if (header.nMessageSize > 0) {
         const size_t offset = message.size();
         message.resize(offset + header.nMessageSize);
-        if (!RecvBootstrapBytesUntil(socket, &message[offset], header.nMessageSize, deadline_us, error)) {
+        if (!RecvBootstrapBytesUntil(socket, &message[offset], header.nMessageSize, deadline_us, error, abortFlag)) {
             if (transportFailure) {
                 *transportFailure = true;
             }
@@ -782,7 +809,7 @@ static bool ReceiveBootstrapMessage(SOCKET socket, std::string& command, CDataSt
     return DecodeBootstrapNetworkMessage(message, command, payload, error);
 }
 
-static bool ReceiveExpectedBootstrapMessage(SOCKET socket, const char* expected_command, CDataStream& payload, int timeout_ms, std::string& error, bool* transportFailure)
+static bool ReceiveExpectedBootstrapMessage(SOCKET socket, const char* expected_command, CDataStream& payload, int timeout_ms, std::string& error, bool* transportFailure, const std::atomic<bool>* abortFlag)
 {
     if (transportFailure) {
         *transportFailure = false;
@@ -802,7 +829,8 @@ static bool ReceiveExpectedBootstrapMessage(SOCKET socket, const char* expected_
 
         std::string command;
         bool receiveTransportFailure = false;
-        if (!ReceiveBootstrapMessage(socket, command, payload, remaining_ms, error, &receiveTransportFailure)) {
+        if (!ReceiveBootstrapMessage(socket, command, payload, remaining_ms, error,
+                                     &receiveTransportFailure, abortFlag)) {
             if (transportFailure) {
                 *transportFailure = receiveTransportFailure;
             }
@@ -869,6 +897,18 @@ static bool ReceiveExpectedBootstrapMessage(SOCKET socket, const char* expected_
         }
         LogPrint("net", "ignoring bootstrap peer message %s while waiting for %s\n", command, expected_command);
     }
+}
+
+// Narrow test seam for the parallel worker cancellation path. The production
+// caller supplies its shared abort flag only while downloading disjoint files;
+// ordinary handshake and discovery receives retain their full timeout behavior.
+bool BootstrapAbortableReceiveForTest(SOCKET socket, int timeout_ms,
+                                      std::atomic<bool>& abortFlag,
+                                      std::string& error)
+{
+    CDataStream payload(SER_NETWORK, PROTOCOL_VERSION);
+    return ReceiveExpectedBootstrapMessage(socket, NetMsgType::BSCHK, payload,
+                                           timeout_ms, error, NULL, &abortFlag);
 }
 
 bool DecodeBootstrapSnapshotManifestPayload(CDataStream& payload,
@@ -1761,7 +1801,8 @@ static bool DownloadBootstrapFileSubset(SOCKET socket, const CBootstrapSnapshotM
         }
         CDataStream chunkPayload(SER_NETWORK, PROTOCOL_VERSION);
         bool receiveTransportFailure = false;
-        if (!ReceiveExpectedBootstrapMessage(socket, NetMsgType::BSCHK, chunkPayload, timeout_ms, error, &receiveTransportFailure)) {
+        if (!ReceiveExpectedBootstrapMessage(socket, NetMsgType::BSCHK, chunkPayload, timeout_ms,
+                                             error, &receiveTransportFailure, &abortFlag)) {
             retryable = receiveTransportFailure;
             ok = false;
             break;

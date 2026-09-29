@@ -2393,3 +2393,37 @@ storage/startup work. Remaining risk: a high unique-transaction relay rate can
 make the fixed retention cache materially large; this does not justify a
 speculative policy change. Recommended next investigation: bounded bootstrap
 manifest/reconnect behavior or block-download scheduling evidence.
+
+## Parallel bootstrap abort releases blocked workers promptly
+
+Baseline and root cause: parallel snapshot workers share an abort flag, but a
+worker waiting in one full `ReceiveExpectedBootstrapMessage` socket timeout
+(normally 60 seconds) only checked that flag after the receive returned. A
+malformed or divergent response on one stream could therefore keep the whole
+parallel attempt waiting on a stalled sibling before the normal outer-peer
+retry could begin.
+
+Fix: only the parallel file-download receive path now polls its existing shared
+abort flag at a bounded 100 ms socket-wait interval. The original monotonic
+deadline still governs every ordinary timeout, and handshake, discovery,
+manifest, and single-stream receives retain their prior behavior. No peer data
+is accepted differently; this solely shortens cancellation after another
+worker has already failed.
+
+After-result and regression proof: a localhost-only silent peer with a
+one-second receive deadline is canceled in 0.16 s after the sibling flag is
+set, and the fixture proves the client closed its isolated socket. Existing
+parallel disjoint-file, reconnect-preserves-other-worker, and chunk-reset
+regressions still pass in 0.26 s each (28,192--28,400 KB maximum RSS). The
+incremental native test binary rebuilt successfully and `git diff --check`
+passes. The native checkout has no cyclomatic-complexity target; ASan/UBSan
+remain unrun because a cold build would violate the 10 GB disk reserve.
+
+Consensus impact: NONE. Socket wait cancellation only; validation, manifest
+equality, per-file hashing, serialization, chain history, PoW, monetary policy,
+upgrades, cryptography, wallets, and production datadirs are unchanged.
+Worldstream `origin/main` at `580eba3ce` remains complementary C23
+storage/startup work. Remaining risk: a failed stream still relies on the
+existing bounded outer peer schedule for alternate-source recovery. Recommended
+next investigation: measure configured-peer manifest-source diversity under
+reconnect churn without weakening exact manifest verification.

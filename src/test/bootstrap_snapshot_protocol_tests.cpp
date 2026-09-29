@@ -18,6 +18,7 @@
 #include "utilstrencodings.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstring>
 #include <iterator>
 #include <map>
@@ -71,6 +72,8 @@ extern bool BootstrapDownloadSnapshotParallelForTest(const CService&,
                                                      const boost::filesystem::path&, int,
                                                      int,
                                                      std::string&);
+extern bool BootstrapAbortableReceiveForTest(SOCKET, int, std::atomic<bool>&,
+                                             std::string&);
 
 // Test-only seam (defined in bootstrapvalidation.cpp, not the public header) to
 // drive a terminal latch so we can verify the finalization-hold flag releases on
@@ -273,6 +276,44 @@ static bool SendTestBootstrapMessage(SOCKET socket, const char* command, const C
     std::string error;
     return BuildBootstrapNetworkMessage(command, payload, message, error) &&
            SendAllTestBytes(socket, &message[0], message.size());
+}
+
+// Accept one raw loopback connection but send no frame. This isolates the
+// receive wait from consensus data and lets the cancellation regression prove
+// that a parallel worker does not retain the full socket timeout after a
+// sibling has already failed.
+static CService StartSilentLoopbackPeer(boost::thread& server, bool& serverSawClose)
+{
+    SOCKET listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    BOOST_REQUIRE(listener != INVALID_SOCKET);
+    struct sockaddr_in address;
+    std::memset(&address, 0, sizeof(address));
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    address.sin_port = 0;
+    BOOST_REQUIRE_EQUAL(bind(listener, (struct sockaddr*)&address, sizeof(address)), 0);
+    BOOST_REQUIRE_EQUAL(listen(listener, 1), 0);
+#ifdef WIN32
+    int addressLength = sizeof(address);
+#else
+    socklen_t addressLength = sizeof(address);
+#endif
+    BOOST_REQUIRE_EQUAL(getsockname(listener, (struct sockaddr*)&address, &addressLength), 0);
+    const CService service("127.0.0.1", ntohs(address.sin_port));
+
+    server = boost::thread([listener, &serverSawClose]() mutable {
+        SOCKET client = INVALID_SOCKET;
+        serverSawClose = false;
+        if (AcceptTestBootstrapClient(listener, client)) {
+            if (WaitForTestSocket(client, false)) {
+                char byte = 0;
+                serverSawClose = recv(client, &byte, 1, 0) == 0;
+            }
+            CloseSocket(client);
+        }
+        CloseSocket(listener);
+    });
+    return service;
 }
 
 static CService StartManifestLoopbackPeer(const CBootstrapSnapshotManifest& manifest,
@@ -1698,6 +1739,35 @@ BOOST_AUTO_TEST_CASE(bootstrap_loopback_chunk_reset_retries_verified_manifest_st
     const std::string got((std::istreambuf_iterator<char>(staged)), std::istreambuf_iterator<char>());
     BOOST_CHECK_EQUAL(got, bytes);
     boost::filesystem::remove_all(staging);
+}
+
+BOOST_AUTO_TEST_CASE(bootstrap_parallel_abort_cancels_blocked_receive)
+{
+    bool serverSawClose = false;
+    boost::thread server;
+    const CService peer = StartSilentLoopbackPeer(server, serverSawClose);
+    SOCKET client = INVALID_SOCKET;
+    bool proxyConnectionFailed = false;
+    BOOST_REQUIRE(ConnectSocket(peer, client, nConnectTimeout, &proxyConnectionFailed));
+
+    std::atomic<bool> abortFlag(false);
+    boost::thread cancel([&abortFlag]() {
+        MilliSleep(20);
+        abortFlag.store(true, std::memory_order_relaxed);
+    });
+    std::string error;
+    const int64_t started = GetSteadyTimeMicros();
+    BOOST_CHECK(!BootstrapAbortableReceiveForTest(client, 1000, abortFlag, error));
+    const int64_t elapsed = GetSteadyTimeMicros() - started;
+    CloseSocket(client);
+    cancel.join();
+    server.join();
+
+    BOOST_CHECK(error.find("canceled") != std::string::npos);
+    // The ordinary socket deadline is one second. Cancellation must instead
+    // be observed through the bounded poll, leaving prompt outer-peer retry.
+    BOOST_CHECK_LT(elapsed, 500000);
+    BOOST_CHECK(serverSawClose);
 }
 
 BOOST_AUTO_TEST_CASE(bootstrap_loopback_retry_retains_verified_prior_file)
