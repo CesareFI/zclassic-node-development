@@ -3151,6 +3151,29 @@ because the host has 11 GB free and the 10 GB reserve precludes a cold
 sanitizer build. Recommended next investigation: mixed resumed groups across
 multiple peer candidates, if distinct from the current worker retry coverage.
 
+## Mixed resume ignores an unavailable verified-only worker
+
+Coverage refinement: the all-verified regression proved that no completed tree
+opens a socket. The more operational failure mode is a partially resumed
+snapshot: before the scheduling fix, an unavailable worker assigned only a
+completed file could abort a different worker downloading the remaining file.
+
+Regression proof: an isolated two-file fixture pre-verifies the larger first
+file, supplies an unreachable first candidate, and serves the second file only
+from a healthy alternate. The downloader starts at 69%, opens one stream, and
+finishes successfully in 0.26 s at 28,956 KB RSS; the healthy peer receives
+only file index 1. The complete 90-case bootstrap protocol group passes in
+13.19 s at 170,396 KB maximum RSS; `git diff --check` passes.
+
+Consensus impact: NONE. This is deterministic coverage for the already
+committed temporary-file scheduling correction; chain history, consensus,
+serialization, PoW, monetary policy, upgrades, cryptography, wallets, and
+production datadirs remain unchanged. Worldstream remains complementary on
+startup/storage. ASan/UBSan remain unrun because the host has 11 GB free and
+the 10 GB reserve precludes a cold sanitizer build. Recommended next
+investigation: outer parallel restart only if it exercises behavior beyond
+these completed worker and outer-install boundaries.
+
 ## Legacy single-stream bootstrap rejects symlinked staging files
 
 Coverage gap: parallel staging reuse directly proved symlink refusal, while

@@ -2224,6 +2224,47 @@ BOOST_AUTO_TEST_CASE(bootstrap_parallel_reports_preverified_staging_progress)
     boost::filesystem::remove_all(staging);
 }
 
+BOOST_AUTO_TEST_CASE(bootstrap_parallel_skips_unreachable_verified_only_worker)
+{
+    namespace fs = boost::filesystem;
+    const std::vector<std::string> files = {DeterministicBytes(257, 163), DeterministicBytes(113, 164)};
+    CBootstrapSnapshotManifest manifest;
+    manifest.nChunkSize = 128;
+    manifest.nSnapshotBytes = files[0].size() + files[1].size();
+    for (size_t i = 0; i < files.size(); ++i) {
+        CBootstrapSnapshotFile file;
+        file.strPath = i == 0 ? "blocks/blk00000.dat" : "blocks/blk00001.dat";
+        file.nSize = files[i].size();
+        file.hashSha256 = Sha256OfBytes(std::vector<unsigned char>(files[i].begin(), files[i].end()));
+        manifest.vFiles.push_back(file);
+    }
+    const fs::path staging = fs::current_path() /
+        fs::unique_path("zclassic-bootstrap-mixed-verified-%%%%-%%%%-%%%%");
+    fs::create_directories((staging / manifest.vFiles[0].strPath).parent_path());
+    {
+        fs::ofstream output(staging / manifest.vFiles[0].strPath, std::ios::binary);
+        output.write(files[0].data(), files[0].size());
+    }
+
+    bool healthyOk = false;
+    unsigned int healthyFile = std::numeric_limits<unsigned int>::max();
+    boost::thread healthyServer;
+    const CService healthy = StartOneRequestBootstrapPeer(manifest, files, healthyServer, healthyOk, healthyFile);
+    const CService unavailable("127.0.0.1", 1);
+    std::string error;
+    BOOST_CHECK_MESSAGE(BootstrapDownloadSnapshotParallelFromPeersForTest(
+                            std::vector<CService>{unavailable, healthy}, manifest, staging, 1000, 2, error), error);
+    healthyServer.join();
+    BOOST_CHECK(healthyOk);
+    BOOST_CHECK_EQUAL(healthyFile, 1U);
+    for (size_t i = 0; i < files.size(); ++i) {
+        fs::ifstream input(staging / manifest.vFiles[i].strPath, std::ios::binary);
+        const std::string got((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+        BOOST_CHECK_EQUAL(got, files[i]);
+    }
+    fs::remove_all(staging);
+}
+
 BOOST_AUTO_TEST_CASE(bootstrap_single_stream_reports_preverified_staging_progress)
 {
     const std::string bytes = DeterministicBytes(257, 156);
