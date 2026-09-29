@@ -3715,3 +3715,29 @@ existing scheduler diagnostics; consensus, validation, cryptography, wire
 compatibility, wallets, production state, and Worldstream-owned storage remain
 unchanged.  Remaining risk: this small fixture cannot replace public-WAN or
 long-chain attribution measurements.
+
+## Report the effective IBD height look-ahead in the scheduler snapshot
+
+Bottleneck/risk: `blockdownload` reported the per-peer request bound but not
+the separately configured height look-ahead that determines how far healthy
+peers can buffer bodies beyond a missing predecessor.  Reading it only from
+`getnetworkinfo` requires a second non-atomic operator query during a stall.
+
+Fix: add `max_height_lookahead` to the existing locked
+`getblockchaininfo.blockdownload` object, sourced directly from the already
+configured `nBlockDownloadWindow`.  It is reporting only; the scheduler,
+default 4,096 value, peer messages, validation, and configuration parsing are
+unchanged.
+
+Regression proof: incremental native daemon rebuild passed.  The fresh
+localhost-only pidfile/RPC fixture asserts both `tracked_block_sources == 0`
+and `max_height_lookahead == 4096`, then passed duplicate-start rejection,
+primary ownership, clean shutdown, and write-failure checks.  No production
+state was used.  Sanitizer and cold full-suite gates remain unrun to preserve
+the disk reserve.
+
+Consensus impact: NONE.  This is a read-only scheduler snapshot field;
+consensus, chain history, validation, cryptography, wire compatibility,
+wallets, production data, and Worldstream-owned storage remain unchanged.
+Remaining risk: the snapshot still takes the existing `cs_main` lock and does
+not claim lock-free status responsiveness.

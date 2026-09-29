@@ -824,6 +824,7 @@ UniValue getblockchaininfo(const UniValue& params, bool fHelp)
     download.push_back(Pair("header_sync_peers", downloadStats.nHeaderSyncPeers));
     download.push_back(Pair("tracked_block_sources", downloadStats.nTrackedBlockSources));
     download.push_back(Pair("max_blocks_per_peer", nMaxBlocksInTransitPerPeer));
+    download.push_back(Pair("max_height_lookahead", nBlockDownloadWindow));
     obj.push_back(Pair("blockdownload", download));
     obj.push_back(Pair("headers",               pindexBestHeader ? pindexBestHeader->nHeight : -1));
     // Best estimate of the network tip height. Headers sync ahead of blocks during
