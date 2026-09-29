@@ -2660,8 +2660,10 @@ maximum RSS. Related notfound teardown (1.02 s), late-duplicate source
 preservation (1.01 s), timeout cleanup (1.10 s), socket cleanup (1.11 s),
 cross-peer `notfound` ownership (1.00 s), and alternate outbound unavailable
 recovery (1.16 s) pass after an incremental native rebuild. `git diff --check`
-passes. The baseline failure is a deterministic stale-accounting proof, not a
-validation failure.
+passes. The full relevant 108-case `block_download_tests` group subsequently
+passed in 111.64 s at 215,368 KB maximum RSS under a 120-second bound. The
+baseline failure is a deterministic stale-accounting proof, not a validation
+failure.
 
 Consensus impact: NONE. Block validation and storage decisions are unchanged;
 only non-consensus peer provenance is withheld after teardown has made the
