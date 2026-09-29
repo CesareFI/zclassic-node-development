@@ -2218,6 +2218,32 @@ Consensus impact: NONE. This is evidence only; no runtime or validation code
 changed. Worldstream C23 `origin/main` at `af4e1082e` remains complementary
 wallet/storage/startup work. Sanitizers remain unrun: 11 GB free preserves the
 required 10 GB reserve. Recommended next investigation: examine a fresh,
+
+## September wallet/ECC reproduction follow-up
+
+Baseline and evidence: the original `/tmp/zclassic-overnight-diagnostic.log`
+is no longer present, so its historical first failure cannot be replayed from
+that file. Preserved coordination evidence identifies that first failure as a
+missing Sapling spend parameter rather than an ECC lifecycle assertion. The
+three required parameter files are present in the configured default params
+directory. With the current incremental `test_bitcoin` binary, the complete
+21-case `rpc_wallet_tests` group ran in one isolated test process and passed
+without an ECC assertion (31.74 s, 234,540 KB maximum RSS).
+
+The separately owned, long-running loopback-bootstrap process was inspected
+read-only and is a deleted older `test_bitcoin` executable: its main thread is
+waiting in `futex_do_wait` while its worker is blocked in `inet_csk_accept`.
+It is therefore an abandoned fixture wait, not current wallet/ECC evidence and
+was not interrupted. The current fixture's bounded accept/read/write handling
+remains the applicable regression protection.
+
+Consensus impact: NONE. This records bounded test evidence only; no ECC
+assertion, wallet safeguard, consensus behavior, parameters, production
+datadir, or live process was changed. Worldstream C23 `origin/main` at
+`c9b7f20bb` remains complementary storage/startup work. Sanitizers remain
+unrun because 11 GB free preserves the required 10 GB reserve. Recommended
+next investigation: continue bounded outbound header/block scheduling under
+partial, valid header delivery rather than revisiting the resolved ECC cascade.
 uncovered block-source ownership or scheduler invariant using the current
 binary, rather than retrying the obsolete test image.
 
