@@ -2854,3 +2854,29 @@ remain unrun because the host has 11 GB free and the 10 GB reserve precludes a
 cold sanitizer build. Recommended next investigation: bounded recovery when
 the sole header owner sends an empty response while an alternate already owns
 a body window.
+
+## Empty header reply preserves an alternate peer's body window
+
+Coverage gap: an empty headers reply correctly releases the discovery role,
+and alternate header delivery correctly fills a second body window, but their
+interaction had no direct proof. Releasing all download state on an empty
+reply would discard 256 valid outstanding bodies; retaining the role would
+starve another healthy peer's header discovery.
+
+After-result: production behavior was already correct. A owns header discovery
+and bodies 1--128 while B has valid alternate headers and bodies 129--256. A's
+empty reply releases only A's header role. Both body windows remain in flight;
+B immediately receives `getheaders`, owns the released role, and its own empty
+completion again preserves all 128 of its bodies.
+
+Regression proof: the focused two-peer case passes in 1.17 s at 155,800 KB
+maximum RSS. The complete 112-case `block_download_tests` group passes in
+115.69 s at 237,780 KB maximum RSS; `git diff --check` passes.
+
+Consensus impact: NONE. This is deterministic scheduler coverage only; header
+acceptance, validation, serialization, chain history, PoW, monetary policy,
+upgrades, cryptography, wallets, and production datadirs are unchanged.
+Worldstream remains complementary on startup/storage. ASan/UBSan remain unrun
+because the host has 11 GB free and the 10 GB reserve precludes a cold sanitizer
+build. Recommended next investigation: response-order recovery when an empty
+header reply and a delayed valid body from the retiring header owner cross.
