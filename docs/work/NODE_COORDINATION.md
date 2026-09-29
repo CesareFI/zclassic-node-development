@@ -4077,3 +4077,18 @@ Consensus impact: NONE.  Documentation of a rejected candidate only; there
 is no residual source change.  Remaining risk: future non-headers-first paths
 have different call patterns and require their own evidence before any header
 validation optimization is considered.
+
+## Receive-path optimization cross-checks bootstrap import and source failover
+
+Cross-path regression: the current optimized native binary passed all 90
+`bootstrap_snapshot_protocol_tests` in 13.5 seconds.  This covers exact
+manifest revalidation after reconnect, multi-source round-robin, reset-time
+source rotation, divergent-manifest failure, retained verified staging, and
+snapshot import/finalization fixtures.  It complements the 113-case
+block-download group and verifies that the shared `ProcessNewBlock` path did
+not alter bootstrap recovery semantics.
+
+Consensus impact: NONE.  Test evidence only; the receive-path change continues
+to retain the direct public validation path, contextual header/body checks,
+and strict proof verification.  No source, wallet, production data, or
+Worldstream-owned storage change is included here.
