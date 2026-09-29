@@ -74,6 +74,9 @@ def main():
             wait_for_rpc(primary, rpccommand)
             original = pidpath.read_text()
             assert int(original) == primary.pid
+            initial_download = json.loads(subprocess.run(
+                rpccommand + ["getblockchaininfo"], capture_output=True, text=True, check=True).stdout)["blockdownload"]
+            assert initial_download["tracked_block_sources"] == 0
             cases = [("locked", [], "Cannot obtain a lock on data directory"),
                      ("invalid", ["-maxblocksinflight=0"],
                       "-maxblocksinflight must be an integer"),

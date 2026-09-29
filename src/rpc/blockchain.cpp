@@ -751,7 +751,7 @@ UniValue getblockchaininfo(const UniValue& params, bool fHelp)
             "{\n"
             "  \"chain\": \"xxxx\",        (string) current network name as defined in BIP70 (main, test, regtest)\n"
             "  \"blocks\": xxxxxx,         (numeric) the current number of blocks processed in the server\n"
-            "  \"blockdownload\": { ... },       (object) global request counts, preferred/header-sync peer counts, and per-peer limit\n"
+            "  \"blockdownload\": { ... },       (object) global request/provenance counts, preferred/header-sync peer counts, and per-peer limit\n"
             "  \"headers\": xxxxxx,        (numeric) the current number of headers we have validated\n"
             "  \"bestblockhash\": \"...\", (string) the hash of the currently best block\n"
             "  \"mediantime\" : ttt,       (numeric) The median block time of the current best block\n"
@@ -822,6 +822,7 @@ UniValue getblockchaininfo(const UniValue& params, bool fHelp)
     download.push_back(Pair("validated_blocks_in_flight", downloadStats.nValidatedBlocksInFlight));
     download.push_back(Pair("preferred_peers", downloadStats.nPreferredDownloadPeers));
     download.push_back(Pair("header_sync_peers", downloadStats.nHeaderSyncPeers));
+    download.push_back(Pair("tracked_block_sources", downloadStats.nTrackedBlockSources));
     download.push_back(Pair("max_blocks_per_peer", nMaxBlocksInTransitPerPeer));
     obj.push_back(Pair("blockdownload", download));
     obj.push_back(Pair("headers",               pindexBestHeader ? pindexBestHeader->nHeight : -1));

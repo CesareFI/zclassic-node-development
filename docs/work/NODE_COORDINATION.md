@@ -3623,3 +3623,32 @@ changed; consensus, wire behavior, validation, cryptography, wallets,
 production data, and Worldstream-owned storage remain unchanged.  Remaining
 risk: public-WAN conditions, 300-second request-deadline behavior, and diverse
 multi-peer replacement remain unmeasured.
+
+## Expose bounded block-source attribution in IBD diagnostics
+
+Bottleneck/risk: the native scheduler already counts `mapBlockSource` entries
+through `CBlockDownloadStats::nTrackedBlockSources`, but
+`getblockchaininfo.blockdownload` did not expose that value.  An operator
+could see no in-flight request while being unable to distinguish clean
+recovery from retained unlinked-body provenance during a stall investigation.
+
+Fix: add the existing locked `tracked_block_sources` count to the existing
+`blockdownload` RPC object.  It is diagnostic only: no scheduling, ownership,
+validation, storage, wire message, or peer policy changes.  The existing
+isolated pidfile/startup fixture now asserts the field is present and zero on
+a fresh node, while retaining its duplicate-start and cleanup checks.
+
+Regression proof: focused native
+`block_download_tests/disconnected_peer_releases_unlinked_block_source` passed
+and directly proves the counter changes from zero to one for a retained child,
+then returns to zero on disconnect and deferred finalization.  The rebuilt
+daemon passed the localhost-only pidfile RPC fixture: primary exit zero,
+failed duplicate starts clean, PID ownership preserved, and the new RPC field
+returned zero.  Sanitizer and cold full-suite gates remain unrun to preserve
+the disk reserve.
+
+Consensus impact: NONE.  This exposes already-maintained local diagnostic
+state only; chain history, consensus, cryptography, validation, wallets,
+production data, and Worldstream-owned storage are unchanged.  Remaining
+risk: it does not make a status RPC lock-free; proof-validation lock
+contention still needs representative profiling before any snapshot design.
