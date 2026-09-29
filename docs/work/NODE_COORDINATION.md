@@ -2270,6 +2270,28 @@ remain unrun because 11 GB free preserves the 10 GB reserve. Recommended next
 investigation: controlled valid partial header/body delivery or slow-peer
 throughput measurement, not another ECC cascade permutation.
 
+## Controlled slow-peer scheduler measurement
+
+Baseline: three existing deterministic native fixtures were re-run on the
+current incremental binary to separate scheduler recovery from wall-clock test
+cost. A stalled outbound body source releases its 128 requests to a healthy
+outbound peer in 1.42 s (154,696 KB RSS); continuous valid headers do not hide
+the body stall and healthy advancement completes in 1.54 s (153,840 KB RSS);
+and header-timeout window takeover completes in 1.40 s (155,252 KB RSS).
+
+Result: all fixtures use mock monotonic clocks, so their elapsed wall time is
+test/setup overhead rather than a network throughput figure. The limiting
+stage is the intended monotonic scheduler deadline, followed by same-pass
+ownership release and healthy-peer reassignment; no block delivery or
+validation bottleneck reproduced. No policy or source change is justified.
+
+Consensus impact: NONE. Evidence only; chain history, consensus, PoW, monetary
+policy, validation, cryptography, wallets, and production datadirs are
+unchanged. Worldstream remains complementary on startup/storage. Sanitizers
+remain unrun because 11 GB free preserves the 10 GB reserve. Recommended next
+investigation: a bounded valid partial header/body delivery fixture if it
+exercises behavior beyond these established timeout and takeover cases.
+
 ## Late duplicate block bodies preserve the accepted source
 
 Baseline and root cause: `AcceptBlock()` deliberately returns success for an
