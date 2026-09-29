@@ -2640,3 +2640,34 @@ production datadirs are unchanged. Worldstream C23 `origin/main` at
 unrun because 11 GB free preserves the 10 GB reserve. Recommended next
 investigation: measure whether a healthy alternate that receives a late
 duplicate block after its window is released can perturb surviving ownership.
+
+## Disconnecting peers cannot resurrect unlinked block provenance
+
+Baseline and root cause: `notfound` immediately releases a peer's requests and
+erases its block-source entries, but a valid body already queued from that
+same peer was still accepted and then reinserted into `mapBlockSource`. The
+new focused regression reproduced the stale entry (`1 != 0`) after an owned
+parent `notfound` followed by a queued valid unlinked child.
+
+Fix: `ProcessNewBlock` continues to validate and accept that queued body under
+the ordinary path, but does not record source provenance when `pfrom` is
+already marked for disconnect. Such provenance cannot result in a later reject
+or ban and contradicted the prior teardown cleanup. Existing bodies from live
+sources retain their exact attribution behavior.
+
+After-result and regression proof: the new case passes in 1.01 s at 154,084 KB
+maximum RSS. Related notfound teardown (1.02 s), late-duplicate source
+preservation (1.01 s), timeout cleanup (1.10 s), socket cleanup (1.11 s),
+cross-peer `notfound` ownership (1.00 s), and alternate outbound unavailable
+recovery (1.16 s) pass after an incremental native rebuild. `git diff --check`
+passes. The baseline failure is a deterministic stale-accounting proof, not a
+validation failure.
+
+Consensus impact: NONE. Block validation and storage decisions are unchanged;
+only non-consensus peer provenance is withheld after teardown has made the
+source unusable. Chain history, serialization, PoW, monetary policy, upgrades,
+cryptography, wallets, and production datadirs remain unchanged. Worldstream
+C23 `origin/main` at `c9b7f20bb` remains complementary storage/startup work.
+ASan/UBSan remain unrun because 11 GB free preserves the 10 GB reserve.
+Recommended next investigation: inspect header-role teardown for the analogous
+late queued valid-header behavior after a source is marked disconnected.

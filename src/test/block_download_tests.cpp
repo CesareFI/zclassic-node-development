@@ -1508,6 +1508,12 @@ BOOST_AUTO_TEST_CASE(notfound_releases_unlinked_block_source_before_socket_clean
     BOOST_CHECK_EQUAL(Stats(unavailable).nBlocksInFlight, 0);
     BOOST_CHECK_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 0);
 
+    // A frame already queued before the disconnect may still contain a valid
+    // unlinked body. It remains subject to normal validation, but its source
+    // is no longer actionable and must not resurrect stale attribution.
+    Deliver(unavailable, 3);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nTrackedBlockSources, 0);
+
     // Usual socket/finalization cleanup remains safe when it follows later.
     GetNodeSignals().DisconnectNode(unavailable.GetId());
     GetNodeSignals().FinalizeNode(unavailable.GetId());

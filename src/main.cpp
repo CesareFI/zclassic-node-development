@@ -4975,7 +4975,11 @@ bool ProcessNewBlock(CValidationState &state, CNode* pfrom, CBlock* pblock, bool
         // An unrequested far-ahead body is deliberately ignored to protect disk
         // and prune behavior; attributing that ignored body would let a peer
         // grow mapBlockSource without any later validation work to perform.
-        if (ret && !hadBlockData && pindex && pfrom &&
+        // A queued valid body from a peer already marked for disconnect still
+        // receives ordinary validation, but that peer can no longer receive a
+        // reject or ban. Do not recreate source attribution that teardown has
+        // deliberately removed.
+        if (ret && !hadBlockData && pindex && pfrom && !pfrom->fDisconnect &&
             (pindex->nStatus & BLOCK_HAVE_DATA)) {
             mapBlockSource[pindex->GetBlockHash()] = pfrom->GetId();
         }
