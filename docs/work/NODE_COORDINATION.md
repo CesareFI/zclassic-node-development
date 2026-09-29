@@ -2827,3 +2827,30 @@ Worldstream remains complementary on startup/storage. ASan/UBSan remain unrun
 because the host has 11 GB free and the 10 GB reserve precludes a cold sanitizer
 build. Recommended next investigation: bounded takeover when a peer's body
 deadline expires while a different peer still holds the header role.
+
+## Timed-out alternate window returns to the live header-sync owner
+
+Coverage gap: alternate source disconnect and `notfound` release paths were
+covered, but not an ordinary body deadline while a different outbound peer
+still owns the bounded header-discovery role. That combination must not stop
+the header owner, strand the released hashes, or wait for final CNode cleanup.
+
+After-result: production scheduling was already correct. A valid alternate
+header response gives B the earlier 1--128 body window; A retains the live
+header role and receives 129--256. When B's monotonic body deadline expires,
+its 128 requests are released immediately while A's header role remains live.
+After A validates 129, its next scheduler visit uses the newly freed capacity
+for height 1, with exactly 128 global requests still bounded.
+
+Regression proof: the focused two-peer timeout test passes in 1.14 s at
+155,184 KB maximum RSS. The complete 111-case `block_download_tests` group
+passes in 116.60 s at 235,992 KB maximum RSS; `git diff --check` passes.
+
+Consensus impact: NONE. This is deterministic volatile scheduling coverage;
+header acceptance, validation, serialization, chain history, PoW, monetary
+policy, upgrades, cryptography, wallets, and production datadirs are
+unchanged. Worldstream remains complementary on startup/storage. ASan/UBSan
+remain unrun because the host has 11 GB free and the 10 GB reserve precludes a
+cold sanitizer build. Recommended next investigation: bounded recovery when
+the sole header owner sends an empty response while an alternate already owns
+a body window.

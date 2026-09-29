@@ -1032,6 +1032,57 @@ BOOST_AUTO_TEST_CASE(unavailable_alternate_outbound_releases_next_window)
     BOOST_CHECK_EQUAL(Stats(first).vHeightInFlight.back(), 129);
 }
 
+BOOST_AUTO_TEST_CASE(timed_out_alternate_window_returns_to_header_sync_owner)
+{
+    const auto headers = ExtendedHeaders();
+    CNode first(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "A", false);
+    CNode alternate(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "B", false);
+    Handshake(first);
+    Handshake(alternate);
+    BOOST_REQUIRE(SendMessages(&first, false));
+    BOOST_REQUIRE(Stats(first).fHeaderSyncStarted);
+
+    // B learns the chain through a valid unsolicited header response while A
+    // retains the only discovery role, and therefore owns the earlier body
+    // window. A then learns the same extending headers and owns the next one.
+    BOOST_REQUIRE(SendMessages(&alternate, false));
+    HeaderBatch(alternate, headers, 1, MAX_HEADERS_RESULTS);
+    HeaderBatch(alternate, headers, 161, MAX_HEADERS_RESULTS);
+    BOOST_REQUIRE(SendMessages(&alternate, false));
+    BOOST_REQUIRE_EQUAL(Stats(alternate).nBlocksInFlight, 128);
+    const int64_t alternateDeadline = Stats(alternate).nDownloadDeadline;
+
+    HeaderBatch(first, headers, 1, MAX_HEADERS_RESULTS);
+    HeaderBatch(first, headers, 161, MAX_HEADERS_RESULTS);
+    BOOST_REQUIRE(SendMessages(&first, false));
+    BOOST_REQUIRE_EQUAL(Stats(first).nBlocksInFlight, 128);
+    BOOST_REQUIRE(Stats(first).fHeaderSyncStarted);
+    BOOST_REQUIRE_GT(Stats(first).nHeaderSyncDeadline, alternateDeadline);
+
+    SetClocks(alternateDeadline + 1);
+    BOOST_REQUIRE(SendMessages(&alternate, false));
+    BOOST_CHECK(alternate.fDisconnect);
+    BOOST_CHECK(Stats(alternate).fBlockDownloadStopped);
+    BOOST_CHECK_EQUAL(Stats(alternate).nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 128);
+    BOOST_CHECK(Stats(first).fHeaderSyncStarted);
+
+    // A body advance opens a single slot. The header-sync owner must reuse it
+    // for B's released next window, not wait for B's CNode finalization.
+    Deliver(first, 129);
+    BOOST_REQUIRE(SendMessages(&first, false));
+    BOOST_CHECK(!first.fDisconnect);
+    BOOST_CHECK_EQUAL(Stats(first).nBlocksInFlight, 128);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 128);
+    bool ownsReleasedHeight = false;
+    for (int height : Stats(first).vHeightInFlight) {
+        if (height == 1) {
+            ownsReleasedHeight = true;
+        }
+    }
+    BOOST_CHECK(ownsReleasedHeight);
+}
+
 BOOST_AUTO_TEST_CASE(empty_header_response_releases_inbound_fallback_role)
 {
     CNode first(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "A", true);
