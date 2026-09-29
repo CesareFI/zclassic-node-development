@@ -17,10 +17,13 @@ SPEC.loader.exec_module(STATUS)
 
 
 class SyncStatusTests(unittest.TestCase):
-    def snapshot(self, peers, tracked_sources=None):
+    def snapshot(self, peers, tracked_sources=None, max_lookahead=None):
         download = {"blocks_in_flight": 1, "validated_blocks_in_flight": 0}
         if tracked_sources is not None:
             download["tracked_block_sources"] = tracked_sources
+        if max_lookahead is not None:
+            download["max_blocks_per_peer"] = 128
+            download["max_height_lookahead"] = max_lookahead
         responses = [
             {"blocks": 0, "headers": 129, "initialblockdownload": True,
              "blockdownload": download},
@@ -88,6 +91,15 @@ class SyncStatusTests(unittest.TestCase):
         with contextlib.redirect_stdout(output):
             STATUS.render(state)
         self.assertIn("tracked_sources=7", output.getvalue())
+
+    def test_scheduler_limits_are_reported_when_available(self):
+        state = self.snapshot([], max_lookahead=512)
+        self.assertEqual(state["max_height_lookahead"], 512)
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            STATUS.render(state)
+        self.assertIn("per_peer=128", output.getvalue())
+        self.assertIn("lookahead=512", output.getvalue())
 
 
 if __name__ == "__main__":

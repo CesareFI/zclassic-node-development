@@ -46,6 +46,7 @@ def snapshot(cli):
         "header_sync_peers": download.get("header_sync_peers"),
         "tracked_block_sources": download.get("tracked_block_sources"),
         "max_blocks_per_peer": download.get("max_blocks_per_peer"),
+        "max_height_lookahead": download.get("max_height_lookahead"),
         "peers": [{key: peer[key] for key in FIELDS if key in peer} for peer in peers],
     }
 
@@ -58,6 +59,10 @@ def render(state):
         state["global_validated_blocks_in_flight"])
     if state["tracked_block_sources"] is not None:
         download += " tracked_sources={}".format(state["tracked_block_sources"])
+    if state["max_blocks_per_peer"] is not None:
+        download += " per_peer={}".format(state["max_blocks_per_peer"])
+    if state["max_height_lookahead"] is not None:
+        download += " lookahead={}".format(state["max_height_lookahead"])
     print(download, flush=True)
     for peer in state["peers"]:
         print("peer={} {} services={} preferred={} headers={} header_sync={} header_remaining={}s stopped={} "

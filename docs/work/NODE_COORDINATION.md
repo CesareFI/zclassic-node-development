@@ -3762,3 +3762,21 @@ consensus, validation, cryptography, wire compatibility, wallets, production
 state, and Worldstream-owned storage remain unchanged.  Remaining risk:
 representative WAN peer diversity and long historical transaction mixes remain
 outside this fixture.
+
+## Render IBD scheduler bounds in the read-only sync report
+
+Follow-through: the read-only sync report already retained the per-peer limit
+but did not print it, and it did not yet retain the new same-snapshot
+look-ahead.  It now renders `per_peer=<n>` and `lookahead=<n>` when the daemon
+supplies those fields, alongside `tracked_sources`.  Older compatible daemons
+omit each unavailable suffix cleanly.
+
+Regression proof: the eight-case recorded-RPC diagnostics group passed,
+covering the new two-limit render path, tracked-source rendering, and prior
+RPC field compatibility.  This performs no node restart, wallet access,
+production-datadir operation, or peer connection.
+
+Consensus impact: NONE.  Read-only diagnostics only; consensus, validation,
+cryptography, peer policy, wallets, production state, and Worldstream-owned
+storage remain unchanged.  Remaining risk: it reports the native snapshot but
+does not claim a lock-free sampling path.
