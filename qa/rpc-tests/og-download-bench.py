@@ -202,8 +202,7 @@ def run(args, blocks, headers, limit, repeat):
             before = resources(daemon.pid)
             host_before = host_cpu()
             started = time.monotonic()
-            for name, bandwidth in (("A", args.first_peer_bandwidth_kib or args.bandwidth_kib),
-                                    ("B", args.second_peer_bandwidth_kib or args.bandwidth_kib)):
+            def start_peer(name, bandwidth):
                 peer = BenchPeer(args.port, name, blocks, headers,
                                  not (args.stall and name == "A"),
                                  latency=args.latency_ms / 1000, bandwidth=bandwidth * 1024,
@@ -216,9 +215,19 @@ def run(args, blocks, headers, limit, repeat):
                     assert peer.requested.wait(20), "A never received requests"
                     assert len(peer.requests) == limit
                     report["initial_stalled_peers"] = rpc("getpeerinfo")
+
+            first_bandwidth = args.first_peer_bandwidth_kib or args.bandwidth_kib
+            second_bandwidth = args.second_peer_bandwidth_kib or args.bandwidth_kib
+            start_peer("A", first_bandwidth)
+            if not args.start_second_peer_after_first_drop:
+                start_peer("B", second_bandwidth)
             deadline = started + args.timeout
             peak_gap, last_progress, longest_no_progress, previous_height = 0, started, 0, 0
             while time.monotonic() < deadline:
+                if (args.start_second_peer_after_first_drop and len(peers) == 1 and
+                        peers[0].dropped.is_set()):
+                    report["second_peer_started_after_drop_seconds"] = time.monotonic() - started
+                    start_peer("B", second_bandwidth)
                 try:
                     chain = rpc("getblockchaininfo")
                 except RPCUnavailable as error:
@@ -336,6 +345,8 @@ def main():
                         help="Override B's payload bandwidth for a diverse-speed fixture")
     parser.add_argument("--first-peer-drop-after-blocks", type=int,
                         help="Have A close after this many delivered blocks")
+    parser.add_argument("--start-second-peer-after-first-drop", action="store_true",
+                        help="Delay B's connection until configured A closes")
     parser.add_argument("--sample-ms", type=float, default=100)
     parser.add_argument("--timeout", type=float, default=600)
     parser.add_argument("--port", type=int, default=18643)
@@ -361,6 +372,9 @@ def main():
     if (args.first_peer_drop_after_blocks is not None and
             args.first_peer_drop_after_blocks >= len(headers)):
         parser.error("--first-peer-drop-after-blocks must leave blocks for recovery")
+    if (args.start_second_peer_after_first_drop and
+            (args.stall or args.first_peer_drop_after_blocks is None)):
+        parser.error("--start-second-peer-after-first-drop needs a non-stalled dropping A")
     manifest = {"fixture_sha256": args.sha256, "blocks": len(headers),
                 "daemon_sha256": hashlib.sha256(args.daemon.read_bytes()).hexdigest(),
                 "delay_mode": args.delay_mode, "delay_ms_per_getdata": args.latency_ms,
@@ -374,6 +388,7 @@ def main():
                      "require_window_stall": args.require_window_stall,
                      "block_download_window": args.block_download_window,
                      "first_peer_drop_after_blocks": args.first_peer_drop_after_blocks,
+                     "start_second_peer_after_first_drop": args.start_second_peer_after_first_drop,
                      "fixture_peer_tcp_nodelay_requested": args.tcp_nodelay,
                      "timeout_seconds": args.timeout, "request_counting": "on getdata receipt"})
     (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")

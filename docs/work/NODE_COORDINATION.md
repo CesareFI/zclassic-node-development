@@ -3565,3 +3565,32 @@ change; consensus, validation, cryptography, P2P compatibility, wallets,
 production state, and Worldstream-owned storage are unchanged.  Remaining
 risk: reconnect after a source loss and multiple independently diverse
 replacement sources still need representative WAN/loss evidence.
+
+## Late replacement source resumes IBD after the original source closes
+
+Measurement support: the isolated benchmark can now defer B's loopback
+connection until a configured non-stalled A has closed.  The guard rejects a
+missing drop threshold or a stalled A, so this tests a real replacement source
+rather than a hidden preconnected fallback.  Its manifest records the choice.
+
+Result: with the same checksummed 4,609-block fixture, A closed after 256
+responses; B was first connected 1.02 s later.  The daemon accepted B's
+ordinary header announcement, reissued 126 requests, and reached height 4,608
+in 113.87 s (40.47 blocks/s).  A received 288 requests and sent 256; B then
+received and sent 4,446.  Final block and validated-block reservations were
+zero, there were no peer errors or status-RPC failures, peak RSS was 98,096
+KiB, swap was zero, daemon CPU was 147.57 s, the largest sampled progress gap
+was 1.42 s, and the node shut down gracefully.
+
+Decision: connection-state loss followed by a newly arriving independent
+source recovers safely in this bounded full-node lane.  The 1.81 s elapsed
+difference from the already-connected replacement lane is a single-run
+laboratory observation, not a scheduler regression.  No C++ change is
+justified because every historical height was reacquired under normal
+validation and no stale ownership remained.
+
+Consensus impact: NONE.  This is fixture/documentation work only; consensus,
+wire behavior, validation, cryptography, wallets, production state, and
+Worldstream-owned storage remain unchanged.  Remaining risk: public-WAN loss,
+long reconnection delays, and more than one independently diverse replacement
+source remain unmeasured.
