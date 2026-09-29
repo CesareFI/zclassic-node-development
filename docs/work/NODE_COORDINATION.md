@@ -3860,3 +3860,39 @@ production data, and Worldstream-owned storage remain unchanged.  Remaining
 risk: send completion is a local socket-queue boundary, not an Internet
 receive timestamp, so WAN conclusions still require a controlled remote-peer
 experiment.
+
+## Rule out the healthy peer's configured payload cap in the bounded lane
+
+Bottleneck/risk: the delivery/validation split left open the possibility that
+the fixture's 1 MiB/s healthy-peer payload cap, rather than native scheduling,
+was pacing initial sync.
+
+Measurement: rerun the same fresh 4,609-block, 512-height-look-ahead, 100 ms
+stalled-A lane with only B's configured payload capacity raised tenfold to
+10 MiB/s.  The fixture retained normal validation, 128 initial stalled
+requests, loopback-only peers, disabled wallet/bootstrap, and the 180-second
+bound.
+
+Before/after result: the 1 MiB/s run completed in 119.19 s (38.66 blocks/s),
+with B's final local send at 115.82 s and a 3.37-second validation drain.  The
+10 MiB/s run completed in 120.06 s (38.38 blocks/s), with final send at 116.03
+s and a 4.02-second drain.  Daemon CPU was 148.80 versus 148.28 seconds and
+RSS 97,540 versus 98,064 KiB; neither run swapped.  Both disconnected A at
+about nine seconds, reassigned 128 requests, ended with zero in-flight and
+tracked-source counters, had no RPC failures, and shut down gracefully.  The
+configured healthy-peer payload cap is therefore not the actionable limit in
+this deterministic lane; changing bandwidth or request-window defaults would
+be unsupported.
+
+Regression proof: both bounded runs passed full normal block validation.  The
+first fast-cap attempt correctly failed closed because the separate `/tmp`
+tmpfs had only 58 MiB available, below the daemon's 50 MiB disk floor; after
+removing only this session's completed regenerable fixture artifacts, `/tmp`
+had 190 MiB free and the exact rerun passed.  This was an environmental safety
+guard, not a node failure.  Cold sanitizer and full-suite gates remain unrun
+to preserve the root filesystem's 10 GiB reserve.
+
+Consensus impact: NONE.  Measurement and documentation only; chain history,
+validation, cryptography, peer wire behavior, wallets, production data, and
+Worldstream-owned storage are unchanged.  Remaining risk: the fixture has a
+single healthy source and local sockets; it cannot establish WAN swarm limits.
