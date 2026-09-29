@@ -4256,3 +4256,27 @@ about 0.35 GiB over the mandatory 10 GiB reserve.  Next: use these counters in
 a bounded mixed-peer fixture to measure whether healthy sources can retain a
 useful share after a timeout/reassignment, before considering any scheduler
 policy change.
+
+## Healthy peer retains useful delivery after a stalled-source timeout
+
+Measurement: the existing deterministic two-outbound fixture starts A with
+128 historical requests and lets healthy B deliver one independent tip body.
+At A's existing bounded deadline, it disconnects A and immediately assigns B
+the released range.  Before this observation, the fixture proved only final
+height and queue release; it did not quantify which source supplied useful
+bodies across recovery.
+
+After-result and regression proof: B records one owned delivery before the
+timeout, A records zero deliveries and exactly one timeout, and B records 129
+owned deliveries after it receives the released 128-body range.  Its
+cross-peer count remains zero.  The exact test and the foreign-delivery
+ownership control both pass after an incremental test-binary build.  This is a
+controlled local fixture, not an Internet-IBD throughput claim.
+
+Consensus impact: NONE.  This is assertions over existing bounded scheduler
+behavior and local diagnostic state only.  It does not alter selection,
+timeouts, block acceptance, cryptography, chain history, PoW, wallets, or
+production data.  Worldstream's accessible branch was refreshed before this
+slice and contains no independently owned C++ networking edit.  Remaining
+risk: real peers may have different latency and header availability; capture a
+representative isolated multi-peer receipt before proposing adaptive policy.

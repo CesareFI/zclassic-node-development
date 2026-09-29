@@ -1837,10 +1837,14 @@ BOOST_AUTO_TEST_CASE(stalled_outbound_source_releases_work_to_healthy_outbound)
     BOOST_CHECK_EQUAL(Stats(healthy).nBlocksInFlight, 1);
     Deliver(healthy, 129);
     BOOST_CHECK_EQUAL(chainActive.Height(), 0);
+    BOOST_CHECK_EQUAL(Stats(healthy).nBlocksReceived, 1);
+    BOOST_CHECK_EQUAL(Stats(healthy).nBlocksReceivedFromOtherPeer, 0);
 
     SetClocks(Stats(stalled).nDownloadDeadline + 1);
     BOOST_REQUIRE(SendMessages(&stalled, false));
     BOOST_REQUIRE(stalled.fDisconnect);
+    BOOST_CHECK_EQUAL(Stats(stalled).nBlocksReceived, 0);
+    BOOST_CHECK_EQUAL(Stats(stalled).nBlockDownloadTimeouts, 1);
     BOOST_CHECK_EQUAL(Stats(stalled).nBlocksInFlight, 0);
     BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
 
@@ -1850,6 +1854,8 @@ BOOST_AUTO_TEST_CASE(stalled_outbound_source_releases_work_to_healthy_outbound)
         Deliver(healthy, height);
     }
     BOOST_CHECK_EQUAL(chainActive.Height(), 129);
+    BOOST_CHECK_EQUAL(Stats(healthy).nBlocksReceived, 129);
+    BOOST_CHECK_EQUAL(Stats(healthy).nBlocksReceivedFromOtherPeer, 0);
     BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
 }
 
