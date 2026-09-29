@@ -885,6 +885,39 @@ BOOST_AUTO_TEST_CASE(short_header_response_preserves_blocks_and_releases_header_
     BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
 }
 
+BOOST_AUTO_TEST_CASE(alternate_outbound_headers_fill_the_next_block_window)
+{
+    const auto headers = ExtendedHeaders();
+    CNode first(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "A", false);
+    CNode alternate(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "B", false);
+    Handshake(first);
+    Handshake(alternate);
+
+    // A owns the one bounded header-sync role and fills the first body
+    // window. B is still an ordinary eligible outbound source, however, and
+    // valid headers it supplies must make the next window schedulable rather
+    // than leaving all download capacity behind A.
+    BOOST_REQUIRE(SendMessages(&first, false));
+    HeaderBatch(first, headers, 1, MAX_HEADERS_RESULTS);
+    BOOST_REQUIRE(SendMessages(&first, false));
+    BOOST_REQUIRE_EQUAL(Stats(first).nBlocksInFlight, 128);
+    BOOST_REQUIRE(Stats(first).fHeaderSyncStarted);
+
+    BOOST_REQUIRE(SendMessages(&alternate, false));
+    BOOST_CHECK_EQUAL(Sent(alternate, "getheaders"), 0);
+    HeaderBatch(alternate, headers, 1, MAX_HEADERS_RESULTS);
+    HeaderBatch(alternate, headers, 161, MAX_HEADERS_RESULTS);
+    BOOST_CHECK(!Stats(alternate).fHeaderSyncStarted);
+    BOOST_CHECK_EQUAL(Stats(alternate).nSyncHeight, 320);
+
+    BOOST_REQUIRE(SendMessages(&alternate, false));
+    BOOST_CHECK_EQUAL(Stats(first).nBlocksInFlight, 128);
+    BOOST_CHECK_EQUAL(Stats(alternate).nBlocksInFlight, 128);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 256);
+    BOOST_CHECK_EQUAL(Stats(alternate).vHeightInFlight.front(), 129);
+    BOOST_CHECK_EQUAL(Stats(alternate).vHeightInFlight.back(), 256);
+}
+
 BOOST_AUTO_TEST_CASE(empty_header_response_releases_inbound_fallback_role)
 {
     CNode first(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "A", true);

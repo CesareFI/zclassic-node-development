@@ -2561,3 +2561,30 @@ changed. Worldstream `origin/main` at `c9b7f20bb` remains complementary C23
 storage/startup work. ASan/UBSan remain unrun under the 10 GB disk reserve.
 Recommended next investigation: ordinary block-download scheduling under mixed
 healthy and stalled outbound peers.
+
+## Alternate outbound headers keep the block swarm utilized
+
+Coverage gap: a preferred outbound peer is intentionally the sole bounded
+historical header-sync owner, but a second healthy outbound peer can still
+advertise a validated longer chain. The previous tests did not directly prove
+that those valid alternate headers make the next body window usable while the
+first peer retains its header role and first 128 requests.
+
+Regression proof: with two isolated outbound peers, A owns the header-sync
+role and heights 1--128. B supplies two valid 160-header batches through
+height 320 without owning that role. B then receives heights 129--256, leaving
+256 validated block requests in flight across the two peers. The new case
+passed in 1.17 s at 155,484 KB maximum RSS. Adjacent short-header release,
+advancing-header-batch, and stalled-outbound-takeover cases passed in 1.46 s,
+1.60 s, and 1.48 s respectively; `git diff --check` passes after the
+incremental native rebuild. This is deterministic local scheduling coverage,
+not a WAN time-to-tip claim.
+
+Consensus impact: NONE. The change adds only a test; header acceptance,
+serialization, validation, chain history, PoW, monetary policy, upgrades,
+cryptography, wallets, and production datadirs are unchanged. Worldstream C23
+`origin/main` at `c9b7f20bb` remains complementary storage/startup work.
+ASan/UBSan remain unrun because 11 GB free preserves the 10 GB reserve.
+Recommended next investigation: measure recovery when the alternate source
+disconnects after advertising the next window but before delivering its first
+body.
