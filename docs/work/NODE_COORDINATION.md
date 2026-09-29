@@ -4281,3 +4281,27 @@ production data.  Worldstream's accessible branch was refreshed before this
 slice and contains no independently owned C++ networking edit.  Remaining
 risk: real peers may have different latency and header availability; capture a
 representative isolated multi-peer receipt before proposing adaptive policy.
+
+## Current 4,609-block lane exposes stale RPC-sampler debt, not a scheduler stall
+
+Measurement: the freshly linked candidate daemon ran the preserved 18 MiB,
+4,609-block localhost fixture with a 128-request window, a withholding A,
+10 MiB/s B, normal validation, isolated datadir, disabled wallet/bootstrap,
+and a 180-second bound.  The raw disposable receipt is preserved outside Git
+at `mission/bench-4609-current-rpc-timeout`.
+
+Result: the lane's legacy sampler made one five-second `getblockchaininfo`
+call during active validation and declared failure at height 1,086.  Its final
+diagnostic immediately observed height 1,139, 126 validated requests in
+flight, and 3,010 tracked sources; the daemon then completed orderly RPC stop
+and exited normally.  The old runner therefore cannot support a throughput or
+recovery regression claim: it lacks the bounded retry behavior described by
+the newer historical harness report.  This is not evidence that block
+scheduling stopped or that validation failed.
+
+Consensus impact: NONE.  No C++ policy or validation code changed.  The
+failure receipt is isolated and untracked, contains no wallet or production
+data, and is retained for a future harness-owner repair.  Do not change the
+scheduler based on this telemetry failure.  Remaining risk: a retry-capable,
+maintained isolated peer harness is required to measure current time-to-tip
+and the new per-peer outcomes under this historical corpus.
