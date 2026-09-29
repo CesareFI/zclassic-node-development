@@ -676,6 +676,54 @@ BOOST_AUTO_TEST_CASE(advancing_header_batches_keep_slow_discovery_alive)
     BOOST_CHECK_EQUAL(Stats(peer).nHeaderSyncDeadline, 0);
 }
 
+BOOST_AUTO_TEST_CASE(header_timeout_releases_full_window_for_healthy_outbound_takeover)
+{
+    const auto headers = ExtendedHeaders();
+    CNode stalled(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "stalled", false);
+    CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "healthy", false);
+    Handshake(stalled);
+    Handshake(healthy);
+    BOOST_REQUIRE(SendMessages(&stalled, false));
+    BOOST_REQUIRE_EQUAL(Sent(stalled, "getheaders"), 1);
+
+    // A full response both exposes enough bodies for the bounded first window
+    // and leaves the follow-up headers request outstanding.
+    HeaderBatch(stalled, headers, 1, MAX_HEADERS_RESULTS);
+    BOOST_REQUIRE(SendMessages(&stalled, false));
+    BOOST_REQUIRE_EQUAL(Stats(stalled).nBlocksInFlight, 128);
+    BOOST_REQUIRE(Stats(stalled).fHeaderSyncStarted);
+    const int64_t headerDeadline = Stats(stalled).nHeaderSyncDeadline;
+    BOOST_REQUIRE_GT(headerDeadline, start);
+
+    // The healthy source is connected before the timeout, but the stalled peer
+    // owns the only header-discovery role until its bounded deadline expires.
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_CHECK_EQUAL(Sent(healthy, "getheaders"), 0);
+
+    SetClocks(headerDeadline + 1);
+    BOOST_REQUIRE(SendMessages(&stalled, false));
+    BOOST_CHECK(stalled.fDisconnect);
+    BOOST_CHECK(Stats(stalled).fBlockDownloadStopped);
+    BOOST_CHECK_EQUAL(Stats(stalled).nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 0);
+
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_CHECK_EQUAL(Sent(healthy, "getheaders"), 1);
+    HeaderBatch(healthy, headers, 1, MAX_HEADERS_RESULTS);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_CHECK_EQUAL(Stats(healthy).nBlocksInFlight, 128);
+    for (size_t height = 1; height <= 128; ++height) Deliver(healthy, height);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    Deliver(healthy, 129);
+    BOOST_CHECK_EQUAL(chainActive.Height(), 129);
+    // The 160 advertised headers leave the final 31 bodies (130--160) in
+    // flight after height 129 advances. Keeping that bounded pipeline full is
+    // useful work, not stale ownership from the disconnected source.
+    BOOST_CHECK_EQUAL(Stats(healthy).nBlocksInFlight, 31);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 31);
+}
+
 namespace {
 struct ImportGuard {
     std::atomic<bool>& flag;

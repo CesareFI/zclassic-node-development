@@ -2797,3 +2797,33 @@ because the host has 11 GB free and the 10 GB reserve precludes a cold sanitizer
 build. Recommended next investigation: measure a bounded healthy-peer takeover
 when the stalled peer has both a full block window and an outstanding header
 sync deadline.
+
+## Header timeout releases a full block window to a healthy outbound peer
+
+Coverage gap: header-role timeout and 128-block ownership cleanup were tested
+separately, but a normal maximum headers response can leave both active at
+once: the peer owns the first full body window while its follow-up `getheaders`
+deadline is still pending. A timeout must release both kinds of volatile work
+without waiting for socket finalization.
+
+After-result: production behavior was already correct. The bounded two-peer
+fixture makes the first outbound peer advertise 160 valid headers, fill its
+128-body window, then stop. Its monotonic header deadline disconnects it and
+clears all 128 requests plus the header role. The healthy connected outbound
+peer immediately receives `getheaders`, fills a new 128-body window, validates
+through height 129, and retains only the expected 31 advertised tail bodies
+(130--160), proving useful pipeline continuation rather than stale ownership.
+
+Regression proof: the new combined timeout/takeover test passes in 1.40 s at
+155,864 KB maximum RSS. Existing monotonic header-timeout cases pass in 1.78 s
+at 158,972 KB; alternate-window utilization passes in 1.15 s at 155,768 KB.
+The complete 110-case `block_download_tests` group passes in 111.23 s at
+237,832 KB maximum RSS; `git diff --check` passes.
+
+Consensus impact: NONE. This is deterministic scheduler coverage only; header
+acceptance, validation, serialization, chain history, PoW, monetary policy,
+upgrades, cryptography, wallets, and production datadirs are unchanged.
+Worldstream remains complementary on startup/storage. ASan/UBSan remain unrun
+because the host has 11 GB free and the 10 GB reserve precludes a cold sanitizer
+build. Recommended next investigation: bounded takeover when a peer's body
+deadline expires while a different peer still holds the header role.
