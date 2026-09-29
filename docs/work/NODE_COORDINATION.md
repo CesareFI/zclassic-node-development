@@ -2367,3 +2367,29 @@ unchanged. Worldstream remains complementary C23 storage/startup work.
 Sanitizers remain unrun with 11 GB free and the required 10 GB reserve.
 Recommended next investigation: inspect added-node reconnect behavior only if
 an observable scheduling or lifetime defect is demonstrated.
+
+## Relay cache policy measurement (no default change)
+
+Baseline: `RelayTransaction` stores one serialized entry per distinct relay
+inventory hash for fifteen minutes. The existing deterministic duplicate-relay
+regression confirms that retransmitting the same transaction leaves one map
+entry and one expiration record; it passed in 0.96 s at 152,580 KB maximum
+RSS. Source inspection confirms that expiry is swept on the next relay and
+that there is intentionally no independent entry-count or byte-budget cap.
+Thus cache growth is one entry plus its serialized transaction bytes for every
+unique relay in the active fifteen-minute window; it is not an IBD block-data
+cache and is not exercised by header/block scheduling.
+
+Policy options, intentionally deferred: retain the compatibility-preserving
+time-only cache; add a separately reviewed count/byte cap with deterministic
+oldest-entry eviction; or make such a bound an explicit operator option. Each
+alternative changes relay availability under sustained transaction load, so no
+default or runtime behavior was changed on this networking branch without a
+workload requirement and compatibility review.
+
+Consensus impact: NONE. This is measurement and coordination evidence only.
+Worldstream `origin/main` at `580eba3ce` remains complementary C23
+storage/startup work. Remaining risk: a high unique-transaction relay rate can
+make the fixed retention cache materially large; this does not justify a
+speculative policy change. Recommended next investigation: bounded bootstrap
+manifest/reconnect behavior or block-download scheduling evidence.
