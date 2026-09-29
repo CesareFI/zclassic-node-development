@@ -2077,6 +2077,46 @@ BOOST_AUTO_TEST_CASE(bootstrap_single_stream_replaces_corrupt_completed_staging_
     boost::filesystem::remove_all(staging);
 }
 
+#ifndef WIN32
+BOOST_AUTO_TEST_CASE(bootstrap_single_stream_rejects_symlinked_completed_staging_file)
+{
+    namespace fs = boost::filesystem;
+    const std::string bytes = DeterministicBytes(17, 158);
+    CBootstrapSnapshotManifest manifest;
+    manifest.nSnapshotBytes = bytes.size();
+    manifest.nChunkSize = 128;
+    CBootstrapSnapshotFile file;
+    file.strPath = "blocks/blk00000.dat";
+    file.nSize = bytes.size();
+    file.hashSha256 = Sha256OfBytes(std::vector<unsigned char>(bytes.begin(), bytes.end()));
+    manifest.vFiles.push_back(file);
+
+    const fs::path root = fs::current_path() /
+        fs::unique_path("zclassic-bootstrap-single-symlink-%%%%-%%%%-%%%%");
+    const fs::path target = root / "outside-staging-file";
+    const fs::path staged = root / file.strPath;
+    fs::create_directories(staged.parent_path());
+    {
+        fs::ofstream output(target, std::ios::binary);
+        output.write(bytes.data(), bytes.size());
+    }
+    fs::create_symlink(target, staged);
+
+    bool serverOk = false;
+    boost::thread server;
+    const CService peer = StartManifestLoopbackPeer(manifest, false, false, false, "", false,
+                                                     server, serverOk);
+    std::string error;
+    BOOST_CHECK(!BootstrapDownloadSnapshotSingleForTest(peer, manifest, root, 1000, error));
+    server.join();
+    BOOST_CHECK(serverOk);
+    BOOST_CHECK(error.find("not a regular file") != std::string::npos);
+    BOOST_CHECK(fs::is_symlink(fs::symlink_status(staged)));
+    BOOST_CHECK_EQUAL(fs::file_size(target), bytes.size());
+    fs::remove_all(root);
+}
+#endif
+
 BOOST_AUTO_TEST_CASE(bootstrap_parallel_replaces_corrupt_completed_staging_file)
 {
     const std::string bytes = DeterministicBytes(257, 154);

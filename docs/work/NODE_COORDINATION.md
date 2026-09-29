@@ -2934,3 +2934,28 @@ datadirs are unchanged. Worldstream remains complementary on startup/storage.
 ASan/UBSan remain unrun because the host has 11 GB free and the 10 GB reserve
 precludes a cold sanitizer build. Recommended next investigation: safely
 bounded outer-process staging resume.
+
+## Legacy single-stream bootstrap rejects symlinked staging files
+
+Coverage gap: parallel staging reuse directly proved symlink refusal, while
+the legacy one-stream path began using that reuse preflight only recently. A
+regression in call ordering could otherwise open a chunk stream or follow a
+staging link before the common gate ran.
+
+After-result: no production change was needed. The loopback single-stream
+fixture completes only the exact-manifest handshake, then finds the staged
+file is a symlink. It fails with the regular-file refusal, sends no chunk
+request, and leaves both the symlink and its target intact.
+
+Regression proof: direct symlink refusal passes in 0.07 s at 28,316 KB maximum
+RSS; corrupt-file recovery passes in 0.07 s at 28,832 KB. The complete bootstrap
+protocol group passes in 12.89 s at 227,684 KB maximum RSS; `git diff --check`
+passes.
+
+Consensus impact: NONE. This is deterministic staging safety coverage;
+manifest equality, hashes, payload validation, serialization, chain history,
+PoW, monetary policy, upgrades, cryptography, wallets, and production
+datadirs are unchanged. Worldstream remains complementary on startup/storage.
+ASan/UBSan remain unrun because the host has 11 GB free and the 10 GB reserve
+precludes a cold sanitizer build. Recommended next investigation: safely
+bounded outer-process staging resume.
