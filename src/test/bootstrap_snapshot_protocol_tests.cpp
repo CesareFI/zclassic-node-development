@@ -60,6 +60,8 @@ extern bool DecodeBootstrapDiscoveryAddresses(CDataStream&, const CService&,
                                               std::vector<std::string>&, size_t&,
                                               std::string&);
 extern bool AddBootstrapDiscoveryCandidate(std::vector<CService>&, const CService&);
+extern std::vector<CService> InterleaveBootstrapDiscoveryCandidates(
+    const std::vector<CService>&, const std::vector<CService>&, size_t);
 
 extern bool BootstrapOpenStreamAndVerifyManifestForTest(const CService&, int,
                                                         const CBootstrapSnapshotManifest&,
@@ -3108,6 +3110,28 @@ BOOST_AUTO_TEST_CASE(bootstrap_peer_retry_schedule_round_robins_sources)
     BOOST_CHECK(!empty.Next(peer, attempt));
     BootstrapPeerRetrySchedule disabled(3, 0);
     BOOST_CHECK(!disabled.Next(peer, attempt));
+}
+
+BOOST_AUTO_TEST_CASE(bootstrap_discovery_interleaves_fixed_fallback_candidates)
+{
+    const CService dnsOne("8.8.8.8", Params().GetDefaultPort());
+    const CService dnsTwo("1.1.1.1", Params().GetDefaultPort());
+    const CService fixedOne("9.9.9.9", Params().GetDefaultPort());
+    const CService fixedTwo("208.67.222.222", Params().GetDefaultPort());
+    const std::vector<CService> dns = {dnsOne, dnsTwo};
+    const std::vector<CService> fixed = {fixedOne, fixedTwo};
+
+    const std::vector<CService> candidates = InterleaveBootstrapDiscoveryCandidates(dns, fixed, 3);
+    BOOST_REQUIRE_EQUAL(candidates.size(), 3U);
+    BOOST_CHECK(candidates[0] == dnsOne);
+    BOOST_CHECK(candidates[1] == fixedOne);
+    BOOST_CHECK(candidates[2] == dnsTwo);
+
+    const std::vector<CService> deduplicated = InterleaveBootstrapDiscoveryCandidates(
+        std::vector<CService>{dnsOne}, std::vector<CService>{dnsOne, fixedOne}, 3);
+    BOOST_REQUIRE_EQUAL(deduplicated.size(), 2U);
+    BOOST_CHECK(deduplicated[0] == dnsOne);
+    BOOST_CHECK(deduplicated[1] == fixedOne);
 }
 
 // The trustless-bootstrap finalization hold (option B consensus-safety mitigation):

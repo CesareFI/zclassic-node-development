@@ -2314,3 +2314,32 @@ remains complementary C23 storage/startup work. Sanitizers remain unrun with
 11 GB free and the required 10 GB reserve. Recommended next investigation:
 measure one bounded scheduler/IBD behavior from the native block-download
 harness rather than expanding bootstrap fixture permutations without evidence.
+
+## Bootstrap discovery reserves fixed-seed diversity
+
+Baseline and root cause: discovery only collected compiled fixed seeds when DNS
+produced zero candidates. DNS can instead return routable but stale endpoints;
+the three bounded direct dials were then all DNS-derived, and no fixed seed was
+tried even if none supplied a `NODE_BOOTSTRAP` address.
+
+Fix: DNS-derived and compiled fixed candidates are now interleaved, deduplicated,
+and capped by the existing 64-candidate and three-dial bounds. A fixed source
+therefore receives a probe within the normal budget when both source classes
+exist. Discovery still admits only valid routable addresses, uses the same
+handshake/getaddr protocol, and returns only `NODE_BOOTSTRAP` advertisements.
+
+Regression proof: `bootstrap_discovery_interleaves_fixed_fallback_candidates`
+proves DNS/fixed alternation, the three-candidate cap, and duplicate removal;
+it passed in 0.10 s at 28,640 KB maximum RSS. The established bootstrap peer
+round-robin schedule regression passed in 0.10 s at 28,336 KB. The incremental
+native `test_bitcoin` target rebuilt and `git diff --check` passed. This is a
+deterministic candidate-selection result, not a public-network throughput
+measurement.
+
+Consensus impact: NONE. Bootstrap discovery source selection only; no trusted
+peer is hard-coded, and block/transaction validation, serialization, chain
+history, PoW, monetary policy, upgrades, cryptography, wallets, and production
+datadirs are unchanged. Worldstream remains complementary C23 storage/startup
+work. Sanitizers remain unrun with 11 GB free and the required 10 GB reserve.
+Recommended next investigation: inspect bounded failure recovery after a
+malformed discovery `addr` response without repeating candidate-policy work.

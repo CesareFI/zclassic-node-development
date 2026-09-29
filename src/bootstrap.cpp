@@ -401,6 +401,28 @@ bool AddBootstrapDiscoveryCandidate(std::vector<CService>& candidates, const CSe
     return true;
 }
 
+// Preserve bounded discovery work while making the compiled fixed-seed
+// fallback useful even when DNS resolved only stale candidates. Alternating
+// sources gives each source class a chance within the small dial budget.
+std::vector<CService> InterleaveBootstrapDiscoveryCandidates(
+    const std::vector<CService>& dnsCandidates,
+    const std::vector<CService>& fixedCandidates,
+    size_t limit)
+{
+    std::vector<CService> candidates;
+    candidates.reserve(std::min(limit, dnsCandidates.size() + fixedCandidates.size()));
+    const size_t count = std::max(dnsCandidates.size(), fixedCandidates.size());
+    for (size_t index = 0; index < count && candidates.size() < limit; ++index) {
+        if (index < dnsCandidates.size()) {
+            AddBootstrapDiscoveryCandidate(candidates, dnsCandidates[index]);
+        }
+        if (index < fixedCandidates.size() && candidates.size() < limit) {
+            AddBootstrapDiscoveryCandidate(candidates, fixedCandidates[index]);
+        }
+    }
+    return candidates;
+}
+
 std::vector<std::string> DiscoverBootstrapPeers()
 {
     std::vector<std::string> discovered;
@@ -411,7 +433,8 @@ std::vector<std::string> DiscoverBootstrapPeers()
         //    falling back to the compiled fixed seeds. We do not consult addrman
         //    here because discovery runs in the pre-database init phase, before
         //    the peer DB / CNode machinery is up.
-        std::vector<CService> candidates;
+        std::vector<CService> dnsCandidates;
+        std::vector<CService> fixedCandidates;
 
         const std::vector<CDNSSeedData>& vSeeds = Params().DNSSeeds();
         const int defaultPort = Params().GetDefaultPort();
@@ -421,27 +444,28 @@ std::vector<std::string> DiscoverBootstrapPeers()
         if (!HaveNameProxy()) {
             for (size_t s = 0; s < vSeeds.size() &&
                                 seedsTried < BOOTSTRAP_DISCOVERY_MAX_SEEDS &&
-                                candidates.size() < BOOTSTRAP_DISCOVERY_MAX_CANDIDATES; ++s) {
+                                dnsCandidates.size() < BOOTSTRAP_DISCOVERY_MAX_CANDIDATES; ++s) {
                 ++seedsTried;
                 std::vector<CNetAddr> vIPs;
                 if (!LookupHost(vSeeds[s].host.c_str(), vIPs, 0, true)) {
                     continue;
                 }
-                for (size_t i = 0; i < vIPs.size() && candidates.size() < BOOTSTRAP_DISCOVERY_MAX_CANDIDATES; ++i) {
-                    AddBootstrapDiscoveryCandidate(candidates, CService(vIPs[i], (unsigned short)defaultPort));
+                for (size_t i = 0; i < vIPs.size() && dnsCandidates.size() < BOOTSTRAP_DISCOVERY_MAX_CANDIDATES; ++i) {
+                    AddBootstrapDiscoveryCandidate(dnsCandidates, CService(vIPs[i], (unsigned short)defaultPort));
                 }
             }
         }
 
-        if (candidates.empty()) {
-            const std::vector<SeedSpec6>& vFixed = Params().FixedSeeds();
-            for (size_t i = 0; i < vFixed.size() && candidates.size() < BOOTSTRAP_DISCOVERY_MAX_CANDIDATES; ++i) {
-                struct in6_addr ip;
-                memcpy(&ip, vFixed[i].addr, sizeof(ip));
-                CService svc(ip, vFixed[i].port);
-                AddBootstrapDiscoveryCandidate(candidates, svc);
-            }
+        const std::vector<SeedSpec6>& vFixed = Params().FixedSeeds();
+        for (size_t i = 0; i < vFixed.size() && fixedCandidates.size() < BOOTSTRAP_DISCOVERY_MAX_CANDIDATES; ++i) {
+            struct in6_addr ip;
+            memcpy(&ip, vFixed[i].addr, sizeof(ip));
+            CService svc(ip, vFixed[i].port);
+            AddBootstrapDiscoveryCandidate(fixedCandidates, svc);
         }
+
+        const std::vector<CService> candidates = InterleaveBootstrapDiscoveryCandidates(
+            dnsCandidates, fixedCandidates, BOOTSTRAP_DISCOVERY_MAX_CANDIDATES);
 
         if (candidates.empty()) {
             return discovered;
