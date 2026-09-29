@@ -3411,3 +3411,27 @@ this is an opt-in native scheduler bound.  Remaining risk: there is no
 representative WAN-loss or high-latency measurement establishing an automatic
 cap.  Recommended next investigation: collect that bounded evidence before
 considering any adaptive policy; do not alter the default from this result.
+
+## Stale bootstrap test process is not a current reconnect regression
+
+Evidence: an inherited `test_bitcoin` process had waited in `accept(2)` for
+nearly two days while its test runner waited in `boost::thread::join`.  Its
+mapped executable was a deleted inode with SHA-256
+`14fa1e7350f79e8dd6856f63ecd18b6c9d1044cdc5868d0be33d3dbebdcda463`, not the
+current `src/test/test_bitcoin` image
+`6df8d86da4cf1ea0b67eff1fa57b0cffea626397bd2cfb01d086124de9d019ec`.
+
+Current reproduction: the exact
+`bootstrap_loopback_chunk_reset_retries_verified_manifest_stream` case ran in
+a separate bounded process against the current binary and passed in 0.28 s at
+28,272 KiB RSS.  It exercised the first chunk response, source-side reset,
+reconnect, manifest revalidation, and final staging contents.  Therefore the
+old wait is historical fixture/process state, not evidence for changing the
+current bootstrap downloader or removing its assertions.  The inherited
+process remains untouched because ownership is not established.
+
+Consensus impact: NONE.  This is investigation evidence only.  No source,
+validation, peer policy, production data, or Worldstream-owned storage path
+changed.  Recommended next investigation: use the scheduler cap's existing
+fixture to measure only a materially different transport condition, or obtain
+representative historical/WAN evidence before an adaptive scheduler change.
