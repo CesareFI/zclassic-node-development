@@ -3091,6 +3091,34 @@ precludes a cold sanitizer build. Recommended next investigation: a similarly
 bounded outer parallel-stream resume proof, provided it can avoid duplicating
 the existing parallel worker coverage.
 
+## Outer parallel bootstrap opens independent verified streams
+
+Coverage gap: parallel worker tests already proved assignment, source rotation,
+and reconnect behavior below the outer client, but did not drive the public
+`BootstrapFromPeer` path that first obtains a master manifest and then starts
+its configured parallel workers.
+
+After-result: a small localhost-only fixture serves the real three-connection
+sequence: one master manifest session followed by two independently handshaked
+and manifest-verified worker sessions. The workers receive distinct nonempty
+files; a zero-byte index entry is still created and hash-checked by the normal
+local preamble. The outer path installs the verified snapshot and removes its
+staging tree.
+
+Regression proof: the focused outer-parallel install fixture passes in 0.27 s
+at 28,624 KB RSS under a 20-second process cap. The complete 89-case bootstrap
+protocol group passes in 13.30 s at 170,380 KB maximum RSS; `git diff --check`
+passes.
+
+Consensus impact: NONE. This adds deterministic isolated wire coverage only;
+manifest validation, payload hashes, post-import verification, serialization,
+chain history, PoW, monetary policy, upgrades, cryptography, wallets, and
+production datadirs are unchanged. Worldstream remains complementary on
+startup/storage. ASan/UBSan remain unrun because the host has 11 GB free and
+the 10 GB reserve precludes a cold sanitizer build. Recommended next
+investigation: a forced worker reset across an outer parallel invocation, only
+if it demonstrates a gap beyond the existing worker retry coverage.
+
 ## Legacy single-stream bootstrap rejects symlinked staging files
 
 Coverage gap: parallel staging reuse directly proved symlink refusal, while
