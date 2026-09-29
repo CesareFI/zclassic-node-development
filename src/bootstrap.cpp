@@ -1667,6 +1667,48 @@ static bool SendBootstrapChunkRequest(SOCKET socket, const CBootstrapSnapshotChu
     return SendBootstrapMessage(socket, NetMsgType::GETBSCHK, payload, timeout_ms, error);
 }
 
+// Bootstrap staging is a node-owned temporary tree, but never follow a path
+// supplied by a pre-existing staging entry. In particular, exists(path) follows
+// a dangling symlink and fopen("wb") would then create or truncate its target.
+// Check the link itself on every platform and ask the POSIX kernel to reject a
+// link replacement between that check and open.
+static bool OpenBootstrapStagingFileForWrite(const boost::filesystem::path& path,
+                                             FILE*& file, std::string& error)
+{
+    file = NULL;
+    try {
+        const boost::filesystem::file_status status = boost::filesystem::symlink_status(path);
+        if (boost::filesystem::is_symlink(status) ||
+            (boost::filesystem::exists(status) && !boost::filesystem::is_regular_file(status))) {
+            error = strprintf("bootstrap staging path is not a regular file: %s", path.string());
+            return false;
+        }
+    } catch (const boost::filesystem::filesystem_error& e) {
+        error = strprintf("could not inspect bootstrap staging file %s: %s", path.string(), e.what());
+        return false;
+    }
+#ifndef WIN32
+    const int fd = open(path.string().c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW, 0600);
+    if (fd < 0) {
+        error = strprintf("could not create bootstrap staging file: %s", path.string());
+        return false;
+    }
+    file = fdopen(fd, "wb");
+    if (!file) {
+        close(fd);
+        error = strprintf("could not open bootstrap staging file: %s", path.string());
+        return false;
+    }
+#else
+    file = fopen(path.string().c_str(), "wb");
+    if (!file) {
+        error = strprintf("could not create bootstrap staging file: %s", path.string());
+        return false;
+    }
+#endif
+    return true;
+}
+
 // Zero-length files are never requested over the wire (they produce no chunks),
 // so create and verify them directly in staging.
 static bool CreateEmptyBootstrapFiles(const CBootstrapSnapshotManifest& manifest, const boost::filesystem::path& staging, std::string& error)
@@ -1683,9 +1725,8 @@ static bool CreateEmptyBootstrapFiles(const CBootstrapSnapshotManifest& manifest
         }
         const boost::filesystem::path path = staging / relative;
         boost::filesystem::create_directories(path.parent_path());
-        FILE* fp = fopen(path.string().c_str(), "wb");
-        if (!fp) {
-            error = strprintf("could not create bootstrap staging file: %s", path.string());
+        FILE* fp = NULL;
+        if (!OpenBootstrapStagingFileForWrite(path, fp, error)) {
             return false;
         }
         fclose(fp);
@@ -1931,9 +1972,7 @@ static bool DownloadBootstrapFileSubset(SOCKET socket, const CBootstrapSnapshotM
             open_path = staging / relative;
             open_part = boost::filesystem::path(open_path.string() + ".part");
             boost::filesystem::create_directories(open_path.parent_path());
-            fp = fopen(open_part.string().c_str(), "wb");
-            if (!fp) {
-                error = strprintf("could not create bootstrap staging file: %s", open_part.string());
+            if (!OpenBootstrapStagingFileForWrite(open_part, fp, error)) {
                 ok = false;
                 break;
             }

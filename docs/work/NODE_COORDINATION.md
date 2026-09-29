@@ -2995,6 +2995,38 @@ ASan/UBSan remain unrun because the host has 11 GB free and the 10 GB reserve
 precludes a cold sanitizer build. Recommended next investigation: bounded
 outer loopback resume/install coverage.
 
+## Bootstrap staging refuses dangling symlinks before overwrite
+
+Baseline and root cause: the bootstrap staging policy already refused an
+existing completed-file symlink, but two writes occurred before that reuse
+gate: zero-length manifest files were created directly, and nonempty files
+were opened at their `.part` pathname. `boost::filesystem::exists(path)`
+follows a dangling symlink, and `fopen(path, "wb")` would create or truncate
+the link target outside the staging tree.
+
+Fix and after-result: both write paths now use one bounded staging-file opener.
+It inspects `symlink_status` (so dangling links are visible), permits only an
+absent or regular-file leaf, and on POSIX opens with `O_NOFOLLOW` to reject a
+link replacement in the check/open window. The existing completed-file hash
+reuse gate remains unchanged.
+
+Regression proof: prior to the fix the new isolated localhost fixture failed
+three checks: the downloader returned success, no regular-file refusal was
+reported, and its outside target was created. The fixed zero-byte-final and
+nonempty-`.part` dangling-link regressions, plus the existing completed-file
+link regression, each pass in 0.06 s at at most 28,808 KB RSS. The complete
+86-case bootstrap protocol group passes in 13.11 s at 170,096 KB maximum RSS;
+`git diff --check` passes.
+
+Consensus impact: NONE. This only hardens temporary filesystem writes;
+manifest validation, hashes, payload validation, serialization, chain history,
+PoW, monetary policy, upgrades, cryptography, wallets, and production
+datadirs are unchanged. Worldstream remains complementary on startup/storage.
+ASan/UBSan remain unrun because the host has 11 GB free and the 10 GB reserve
+precludes a cold sanitizer build. Recommended next investigation: bounded
+outer loopback resume/install coverage, or adversarial parent-directory link
+coverage if that path can be tested without a chain copy.
+
 ## Legacy single-stream bootstrap rejects symlinked staging files
 
 Coverage gap: parallel staging reuse directly proved symlink refusal, while

@@ -2122,6 +2122,73 @@ BOOST_AUTO_TEST_CASE(bootstrap_single_stream_rejects_symlinked_completed_staging
     BOOST_CHECK_EQUAL(fs::file_size(target), bytes.size());
     fs::remove_all(root);
 }
+
+BOOST_AUTO_TEST_CASE(bootstrap_single_stream_rejects_dangling_symlinked_empty_staging_file)
+{
+    namespace fs = boost::filesystem;
+    CBootstrapSnapshotManifest manifest;
+    manifest.nChunkSize = 128;
+    CBootstrapSnapshotFile file;
+    file.strPath = "blocks/empty.ldb";
+    file.nSize = 0;
+    file.hashSha256 = Sha256OfBytes(std::vector<unsigned char>());
+    manifest.vFiles.push_back(file);
+
+    const fs::path root = fs::current_path() /
+        fs::unique_path("zclassic-bootstrap-empty-dangling-symlink-%%%%-%%%%-%%%%");
+    const fs::path target = root / "outside-staging-file";
+    const fs::path staged = root / file.strPath;
+    fs::create_directories(staged.parent_path());
+    fs::create_symlink(target, staged);
+
+    bool serverOk = false;
+    boost::thread server;
+    const CService peer = StartManifestLoopbackPeer(manifest, false, false, false, "", false,
+                                                     server, serverOk);
+    std::string error;
+    BOOST_CHECK(!BootstrapDownloadSnapshotSingleForTest(peer, manifest, root, 1000, error));
+    server.join();
+    BOOST_CHECK(serverOk);
+    BOOST_CHECK(error.find("not a regular file") != std::string::npos);
+    BOOST_CHECK(fs::is_symlink(fs::symlink_status(staged)));
+    BOOST_CHECK(!fs::exists(target));
+    fs::remove_all(root);
+}
+
+BOOST_AUTO_TEST_CASE(bootstrap_single_stream_rejects_dangling_symlinked_partial_staging_file)
+{
+    namespace fs = boost::filesystem;
+    const std::string bytes = DeterministicBytes(17, 159);
+    CBootstrapSnapshotManifest manifest;
+    manifest.nSnapshotBytes = bytes.size();
+    manifest.nChunkSize = 128;
+    CBootstrapSnapshotFile file;
+    file.strPath = "blocks/blk00000.dat";
+    file.nSize = bytes.size();
+    file.hashSha256 = Sha256OfBytes(std::vector<unsigned char>(bytes.begin(), bytes.end()));
+    manifest.vFiles.push_back(file);
+
+    const fs::path root = fs::current_path() /
+        fs::unique_path("zclassic-bootstrap-part-dangling-symlink-%%%%-%%%%-%%%%");
+    const fs::path target = root / "outside-staging-file";
+    const fs::path staged = root / file.strPath;
+    const fs::path partial(staged.string() + ".part");
+    fs::create_directories(staged.parent_path());
+    fs::create_symlink(target, partial);
+
+    bool serverOk = false;
+    boost::thread server;
+    const CService peer = StartManifestLoopbackPeer(manifest, false, false, false, bytes, false,
+                                                     server, serverOk);
+    std::string error;
+    BOOST_CHECK(!BootstrapDownloadSnapshotSingleForTest(peer, manifest, root, 1000, error));
+    server.join();
+    BOOST_CHECK(serverOk);
+    BOOST_CHECK(error.find("not a regular file") != std::string::npos);
+    BOOST_CHECK(fs::is_symlink(fs::symlink_status(partial)));
+    BOOST_CHECK(!fs::exists(target));
+    fs::remove_all(root);
+}
 #endif
 
 BOOST_AUTO_TEST_CASE(bootstrap_resume_staging_is_manifest_bound_and_fail_closed)
