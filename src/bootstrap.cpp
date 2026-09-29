@@ -3521,6 +3521,114 @@ static bool WriteDurableDatadirMarker(const boost::filesystem::path& path,
     return true;
 }
 
+// A failed fast-sync may contain many GiB of already SHA-256-verified files.
+// Keep exactly one manifest-bound staging tree below a fresh datadir so a later
+// invocation can reuse it, but never mistake an arbitrary pre-existing tree
+// for node-owned resumable state.
+static boost::filesystem::path BootstrapResumeStagingPath(const boost::filesystem::path& data_dir)
+{
+    return data_dir / "bootstrap-peer-staging";
+}
+
+static boost::filesystem::path BootstrapResumeManifestPath(const boost::filesystem::path& staging)
+{
+    return staging / ".bootstrap-manifest";
+}
+
+static bool IsBootstrapManifestIdentity(const std::string& value)
+{
+    if (value.size() != 65 || value.back() != '\n') {
+        return false;
+    }
+    for (size_t i = 0; i + 1 < value.size(); ++i) {
+        const char c = value[i];
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool ReadBootstrapResumeManifest(const boost::filesystem::path& path,
+                                        std::string& value, std::string& error)
+{
+    value.clear();
+    FILE* file = fopen(path.string().c_str(), "rb");
+    if (!file) {
+        error = strprintf("could not open bootstrap staging manifest: %s", path.string());
+        return false;
+    }
+    char bytes[66] = {0};
+    const size_t count = fread(bytes, 1, sizeof(bytes), file);
+    const bool readError = ferror(file);
+    fclose(file);
+    if (readError || count == sizeof(bytes)) {
+        error = strprintf("bootstrap staging manifest is invalid: %s", path.string());
+        return false;
+    }
+    value.assign(bytes, count);
+    return true;
+}
+
+static bool PrepareBootstrapResumeStaging(const boost::filesystem::path& data_dir,
+                                          const CBootstrapSnapshotManifest& manifest,
+                                          boost::filesystem::path& staging,
+                                          std::string& error)
+{
+    staging = BootstrapResumeStagingPath(data_dir);
+    const std::string expected = SerializeHash(manifest).ToString() + "\n";
+    try {
+        if (boost::filesystem::exists(staging)) {
+            if (!boost::filesystem::is_directory(boost::filesystem::symlink_status(staging))) {
+                error = strprintf("bootstrap resume staging is not a directory: %s", staging.string());
+                return false;
+            }
+            const boost::filesystem::path marker = BootstrapResumeManifestPath(staging);
+            if (boost::filesystem::exists(marker)) {
+                if (!boost::filesystem::is_regular_file(boost::filesystem::symlink_status(marker))) {
+                    error = strprintf("bootstrap staging manifest is not a regular file: %s", marker.string());
+                    return false;
+                }
+                std::string recorded;
+                if (!ReadBootstrapResumeManifest(marker, recorded, error)) {
+                    return false;
+                }
+                if (recorded == expected) {
+                    return true;
+                }
+                if (!IsBootstrapManifestIdentity(recorded)) {
+                    error = strprintf("bootstrap staging manifest is unrecognized: %s", marker.string());
+                    return false;
+                }
+                boost::filesystem::remove_all(staging);
+            } else if (!boost::filesystem::is_empty(staging)) {
+                error = strprintf("bootstrap resume staging is unrecognized: %s", staging.string());
+                return false;
+            }
+        }
+        boost::filesystem::create_directories(staging);
+        std::string markerError;
+        if (!WriteDurableDatadirMarker(BootstrapResumeManifestPath(staging), expected, markerError)) {
+            error = strprintf("could not persist bootstrap staging manifest: %s", markerError);
+            return false;
+        }
+    } catch (const boost::filesystem::filesystem_error& e) {
+        error = strprintf("could not prepare bootstrap resume staging: %s", e.what());
+        return false;
+    }
+    return true;
+}
+
+// Narrow native test seam for the manifest-bound outer bootstrap staging
+// lifecycle. It does not open a peer socket or install chain data.
+bool BootstrapPrepareResumeStagingForTest(const boost::filesystem::path& data_dir,
+                                          const CBootstrapSnapshotManifest& manifest,
+                                          boost::filesystem::path& staging,
+                                          std::string& error)
+{
+    return PrepareBootstrapResumeStaging(data_dir, manifest, staging, error);
+}
+
 static boost::filesystem::path BootstrapTrustlessPendingPath(const boost::filesystem::path& data_dir)
 {
     return data_dir / "bootstrap-trustless-pending";
@@ -3740,41 +3848,38 @@ bool BootstrapFromPeer(const std::string& peer, const boost::filesystem::path& d
         return false;
     }
 
-    const boost::filesystem::path staging = data_dir / strprintf("bootstrap-peer-staging-%d", GetTime());
+    boost::filesystem::path staging;
     try {
-        boost::filesystem::remove_all(staging);
-        boost::filesystem::create_directories(staging);
-
         if (!BootstrapHandshake(socket, peerAddress, BOOTSTRAP_NET_TIMEOUT_MS, error)) {
             CloseSocket(socket);
-            boost::filesystem::remove_all(staging);
             return false;
         }
 
         CDataStream empty(SER_NETWORK, PROTOCOL_VERSION);
         if (!SendBootstrapMessage(socket, NetMsgType::GETBSMAN, empty, BOOTSTRAP_NET_TIMEOUT_MS, error)) {
             CloseSocket(socket);
-            boost::filesystem::remove_all(staging);
             return false;
         }
 
         CDataStream manifestPayload(SER_NETWORK, PROTOCOL_VERSION);
         if (!ReceiveExpectedBootstrapMessage(socket, NetMsgType::BSMAN, manifestPayload, BOOTSTRAP_NET_TIMEOUT_MS, error)) {
             CloseSocket(socket);
-            boost::filesystem::remove_all(staging);
             return false;
         }
 
         CBootstrapSnapshotManifest manifest;
         if (!DecodeBootstrapSnapshotManifestPayload(manifestPayload, manifest, error)) {
             CloseSocket(socket);
-            boost::filesystem::remove_all(staging);
             return false;
         }
 
         if (!ValidateBootstrapSnapshotManifest(manifest, error, fTrustless)) {
             CloseSocket(socket);
-            boost::filesystem::remove_all(staging);
+            return false;
+        }
+
+        if (!PrepareBootstrapResumeStaging(data_dir, manifest, staging, error)) {
+            CloseSocket(socket);
             return false;
         }
 
@@ -3805,17 +3910,16 @@ bool BootstrapFromPeer(const std::string& peer, const boost::filesystem::path& d
                                                            BOOTSTRAP_NET_TIMEOUT_MS, nStreams, error);
         }
         if (!downloadOk) {
-            boost::filesystem::remove_all(staging);
+            // Keep only the manifest-bound staging tree. The next attempt
+            // re-verifies every completed file before it is reused.
             return false;
         }
 
         if (!BootstrapSnapshotPathsExist(staging)) {
-            boost::filesystem::remove_all(staging);
             error = "downloaded bootstrap snapshot is incomplete";
             return false;
         }
         if (!IsBootstrapFreshChainDatadir(data_dir, error)) {
-            boost::filesystem::remove_all(staging);
             return false;
         }
 
@@ -3905,7 +4009,6 @@ bool BootstrapFromPeer(const std::string& peer, const boost::filesystem::path& d
         }
     } catch (const boost::filesystem::filesystem_error& e) {
         CloseSocket(socket);
-        boost::filesystem::remove_all(staging);
         error = e.what();
         return false;
     }

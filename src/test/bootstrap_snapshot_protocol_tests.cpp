@@ -77,6 +77,10 @@ extern bool BootstrapDownloadSnapshotSingleForTest(const CService&,
                                                    const CBootstrapSnapshotManifest&,
                                                    const boost::filesystem::path&, int,
                                                    std::string&);
+extern bool BootstrapPrepareResumeStagingForTest(const boost::filesystem::path&,
+                                                 const CBootstrapSnapshotManifest&,
+                                                 boost::filesystem::path&,
+                                                 std::string&);
 extern bool BootstrapDownloadSnapshotParallelFromPeersForTest(
     const std::vector<CService>&, const CBootstrapSnapshotManifest&,
     const boost::filesystem::path&, int, int, std::string&);
@@ -2116,6 +2120,51 @@ BOOST_AUTO_TEST_CASE(bootstrap_single_stream_rejects_symlinked_completed_staging
     fs::remove_all(root);
 }
 #endif
+
+BOOST_AUTO_TEST_CASE(bootstrap_resume_staging_is_manifest_bound_and_fail_closed)
+{
+    namespace fs = boost::filesystem;
+    const fs::path root = fs::temp_directory_path() /
+        fs::unique_path("zclassic-bootstrap-resume-%%%%-%%%%-%%%%");
+    fs::create_directories(root);
+    CBootstrapSnapshotManifest first;
+    first.nChunkSize = 128;
+    first.nSnapshotBytes = 1;
+    boost::filesystem::path staging;
+    std::string error;
+    BOOST_REQUIRE(BootstrapPrepareResumeStagingForTest(root, first, staging, error));
+    BOOST_REQUIRE(fs::exists(staging / ".bootstrap-manifest"));
+    {
+        fs::ofstream sentinel(staging / "verified-piece", std::ios::binary);
+        sentinel << "retained";
+    }
+
+    // The exact same manifest retains its verified partial staging tree.
+    BOOST_REQUIRE(BootstrapPrepareResumeStagingForTest(root, first, staging, error));
+    BOOST_CHECK(fs::exists(staging / "verified-piece"));
+
+    // A different valid manifest replaces only the old node-owned staging tree.
+    CBootstrapSnapshotManifest second = first;
+    second.nChunkSize = 64;
+    BOOST_REQUIRE(BootstrapPrepareResumeStagingForTest(root, second, staging, error));
+    BOOST_CHECK(!fs::exists(staging / "verified-piece"));
+    BOOST_CHECK(fs::exists(staging / ".bootstrap-manifest"));
+    fs::remove_all(root);
+
+    // A nonempty unmarked staging directory is not node-owned and must never
+    // be removed merely because it happens to use the reserved pathname.
+    const fs::path unknown = fs::temp_directory_path() /
+        fs::unique_path("zclassic-bootstrap-resume-unknown-%%%%-%%%%-%%%%");
+    fs::create_directories(unknown / "bootstrap-peer-staging");
+    {
+        fs::ofstream sentinel(unknown / "bootstrap-peer-staging" / "unknown", std::ios::binary);
+        sentinel << "preserve";
+    }
+    BOOST_CHECK(!BootstrapPrepareResumeStagingForTest(unknown, first, staging, error));
+    BOOST_CHECK(error.find("unrecognized") != std::string::npos);
+    BOOST_CHECK(fs::exists(unknown / "bootstrap-peer-staging" / "unknown"));
+    fs::remove_all(unknown);
+}
 
 BOOST_AUTO_TEST_CASE(bootstrap_parallel_replaces_corrupt_completed_staging_file)
 {

@@ -2935,6 +2935,38 @@ ASan/UBSan remain unrun because the host has 11 GB free and the 10 GB reserve
 precludes a cold sanitizer build. Recommended next investigation: safely
 bounded outer-process staging resume.
 
+## Outer bootstrap retries retain only manifest-bound staging state
+
+Baseline and root cause: `BootstrapFromPeer` created a timestamped staging
+directory and removed it on every transport failure. A restart or ordinary
+outer peer retry could never reach the already verified files retained by the
+inner downloader, forcing large snapshots to restart from zero.
+
+Fix and after-result: after the peer manifest passes the ordinary validation
+gate, the outer path prepares exactly one `bootstrap-peer-staging` directory
+bound to `SerializeHash(manifest)` by a durable marker. An exact matching
+manifest reuses that staging tree; a different well-formed prior marker
+replaces only the prior node-owned tree. A symlink, non-directory, malformed
+marker, or nonempty unmarked tree fails closed and is not removed. Download
+and filesystem failures now retain the marked tree for the next attempt; the
+existing per-file SHA-256 gate still discards corrupt regular files before any
+reuse, and successful install removes the staging directory as before.
+
+Regression proof: an isolated filesystem fixture proves same-manifest
+retention, valid manifest-change replacement, durable marker creation, and
+preservation of an unmarked nonempty reserved directory. It passes in 0.06 s
+at 29,312 KB maximum RSS. The complete 83-case bootstrap protocol group passes
+in 13.16 s at 170,536 KB maximum RSS; `git diff --check` passes.
+
+Consensus impact: NONE. This changes only temporary bootstrap lifecycle state;
+manifest validation, payload hashes, post-import verification, serialization,
+chain history, PoW, monetary policy, upgrades, cryptography, wallets, and
+production datadirs are unchanged. Worldstream remains complementary on
+startup/storage. ASan/UBSan remain unrun because the host has 11 GB free and
+the 10 GB reserve precludes a cold sanitizer build. Recommended next
+investigation: add a small outer loopback transfer/restart proof when a
+manifest matching a compiled anchor can be constructed without a chain copy.
+
 ## Legacy single-stream bootstrap rejects symlinked staging files
 
 Coverage gap: parallel staging reuse directly proved symlink refusal, while
