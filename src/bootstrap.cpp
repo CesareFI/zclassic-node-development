@@ -1620,7 +1620,7 @@ static bool ReuseOrDiscardBootstrapDownloadedFile(const boost::filesystem::path&
     if (!boost::filesystem::exists(path)) {
         return true;
     }
-    if (!boost::filesystem::is_regular_file(path)) {
+    if (!boost::filesystem::is_regular_file(boost::filesystem::symlink_status(path))) {
         error = strprintf("bootstrap staging path is not a regular file: %s", path.string());
         return false;
     }

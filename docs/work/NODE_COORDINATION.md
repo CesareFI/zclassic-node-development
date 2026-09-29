@@ -2738,3 +2738,33 @@ cold sanitizer build. Cross-process staging persistence is not claimed: the
 outer bootstrap caller still makes a fresh timestamped staging directory.
 Recommended next investigation: bounded header-role behavior when a peer is
 marked for teardown while a valid headers frame is already being decoded.
+
+## Bootstrap staging recovery refuses symlink paths
+
+Risk and root cause: filesystem `is_regular_file(path)` follows a symlink by
+default. The corrupt-staging recovery path would therefore hash a symlink
+target before unlinking the staging pathname. Even though unlinking a symlink
+does not remove its target, bootstrap staging must not follow an unexpected
+link outside its isolated directory.
+
+Fix and after-result: the reuse gate now evaluates `symlink_status`, so only a
+real regular staging entry is eligible for hash verification or removal. A
+symlink, directory, FIFO, or other unexpected entry fails closed before any
+bootstrap stream is opened.
+
+Regression proof: a bounded localhost-free fixture makes the nominal completed
+file a symlink to a separately-created file with the correct declared bytes.
+The downloader refuses it with the regular-file error, leaves the symlink and
+target intact, and makes no peer connection. The focused test passes in 0.06 s
+at 29,016 KB maximum RSS; corrupt-file replacement also passes in 0.27 s at
+29,248 KB. The complete 79-case bootstrap protocol group passes in 13.02 s at
+169,500 KB maximum RSS; `git diff --check` passes.
+
+Consensus impact: NONE. This only tightens temporary staging-file type checks;
+manifest equality, payload hashes, validation, serialization, chain history,
+PoW, monetary policy, upgrades, cryptography, wallets, and production
+datadirs are unchanged. Worldstream remains complementary on startup/storage.
+ASan/UBSan remain unrun because the host has 11 GB free and the 10 GB reserve
+precludes a cold sanitizer build. Recommended next investigation: bounded
+peer/header teardown timing under a real framed-message fixture, without
+changing validation or header acceptance policy absent a reproducible defect.
