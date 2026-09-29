@@ -2491,3 +2491,24 @@ unchanged. Worldstream `origin/main` at `c9b7f20bb` remains complementary C23
 storage/startup work. ASan/UBSan remain unrun under the 10 GB disk reserve.
 Recommended next investigation: ordinary block-download scheduling under mixed
 healthy and stalled outbound peers.
+
+## Alternate bootstrap manifests remain fail-closed
+
+Risk: source diversity must not turn a transport retry into acceptance of a
+different snapshot description. A later source that disagrees with the master
+manifest must stop the attempt before any further candidate is contacted.
+
+Regression proof: a localhost primary returns a well-formed but hash-divergent
+manifest, followed by a short-lived listener representing a later candidate.
+The worker fails with the exact manifest-difference error and the probe records
+no connection. This test passed in 0.56 s at 28,372 KB maximum RSS. The full
+76-case bootstrap protocol group passed in 12.49 s at 171,908 KB maximum RSS;
+the incremental native test binary rebuilt and `git diff --check` passed.
+
+Consensus impact: NONE. This is deterministic localhost regression coverage of
+the existing exact-manifest gate. No chain, serialization, validation, PoW,
+monetary policy, upgrade, cryptographic, wallet, or production-datadir behavior
+changed. Worldstream `origin/main` at `c9b7f20bb` remains complementary C23
+storage/startup work. ASan/UBSan remain unrun under the 10 GB disk reserve.
+Recommended next investigation: ordinary block-download scheduling under mixed
+healthy and stalled outbound peers.

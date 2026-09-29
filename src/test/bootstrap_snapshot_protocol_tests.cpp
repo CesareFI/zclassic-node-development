@@ -357,6 +357,47 @@ static CService StartDroppingLoopbackPeer(unsigned int drops, boost::thread& ser
     return service;
 }
 
+// A short-lived listener used to prove that a semantic failure does not cause
+// the worker to contact a later candidate source.
+static CService StartConnectionProbe(boost::thread& server, bool& connected)
+{
+    SOCKET listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    BOOST_REQUIRE(listener != INVALID_SOCKET);
+    struct sockaddr_in address;
+    std::memset(&address, 0, sizeof(address));
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    address.sin_port = 0;
+    BOOST_REQUIRE_EQUAL(bind(listener, (struct sockaddr*)&address, sizeof(address)), 0);
+    BOOST_REQUIRE_EQUAL(listen(listener, 1), 0);
+#ifdef WIN32
+    int addressLength = sizeof(address);
+#else
+    socklen_t addressLength = sizeof(address);
+#endif
+    BOOST_REQUIRE_EQUAL(getsockname(listener, (struct sockaddr*)&address, &addressLength), 0);
+    const CService service("127.0.0.1", ntohs(address.sin_port));
+
+    server = boost::thread([listener, &connected]() mutable {
+        connected = false;
+        fd_set fdset;
+        FD_ZERO(&fdset);
+        FD_SET(listener, &fdset);
+        struct timeval timeout;
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 500000;
+        if (select((int)listener + 1, &fdset, NULL, NULL, &timeout) > 0) {
+            SOCKET client = accept(listener, NULL, NULL);
+            connected = client != INVALID_SOCKET;
+            if (client != INVALID_SOCKET) {
+                CloseSocket(client);
+            }
+        }
+        CloseSocket(listener);
+    });
+    return service;
+}
+
 // One independent bootstrap source for the source-diversity regression. It
 // serves exactly one fully verified file request after returning the same
 // manifest, so two workers must use two distinct loopback listeners.
@@ -2038,6 +2079,40 @@ BOOST_AUTO_TEST_CASE(bootstrap_parallel_open_reset_rotates_to_verified_source)
     boost::filesystem::ifstream staged(staging / file.strPath, std::ios::binary);
     const std::string got((std::istreambuf_iterator<char>(staged)), std::istreambuf_iterator<char>());
     BOOST_CHECK_EQUAL(got, bytes);
+    boost::filesystem::remove_all(staging);
+}
+
+BOOST_AUTO_TEST_CASE(bootstrap_parallel_divergent_manifest_stops_before_next_source)
+{
+    const std::string bytes = DeterministicBytes(127, 192);
+    CBootstrapSnapshotManifest master;
+    master.nChunkSize = 128;
+    master.nSnapshotBytes = bytes.size();
+    CBootstrapSnapshotFile file;
+    file.strPath = "blocks/blk00000.dat";
+    file.nSize = bytes.size();
+    file.hashSha256 = Sha256OfBytes(std::vector<unsigned char>(bytes.begin(), bytes.end()));
+    master.vFiles.push_back(file);
+    CBootstrapSnapshotManifest divergent = master;
+    divergent.vFiles[0].hashSha256 = uint256S("01");
+
+    bool divergentOk = false;
+    bool probeConnected = false;
+    boost::thread divergentServer;
+    boost::thread probeServer;
+    const CService bad = StartManifestLoopbackPeer(divergent, false, false, false, "", false,
+                                                   divergentServer, divergentOk);
+    const CService probe = StartConnectionProbe(probeServer, probeConnected);
+    const boost::filesystem::path staging = boost::filesystem::current_path() /
+        boost::filesystem::unique_path("zclassic-bootstrap-divergent-%%%%-%%%%-%%%%");
+    std::string error;
+    BOOST_CHECK(!BootstrapDownloadSnapshotParallelFromPeersForTest(
+                    std::vector<CService>{bad, probe}, master, staging, 1000, 1, error));
+    divergentServer.join();
+    probeServer.join();
+    BOOST_CHECK(divergentOk);
+    BOOST_CHECK(error.find("differs") != std::string::npos);
+    BOOST_CHECK(!probeConnected);
     boost::filesystem::remove_all(staging);
 }
 
