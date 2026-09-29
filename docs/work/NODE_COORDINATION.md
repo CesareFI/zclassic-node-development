@@ -3896,3 +3896,42 @@ Consensus impact: NONE.  Measurement and documentation only; chain history,
 validation, cryptography, peer wire behavior, wallets, production data, and
 Worldstream-owned storage are unchanged.  Remaining risk: the fixture has a
 single healthy source and local sockets; it cannot establish WAN swarm limits.
+
+## Measure block-request cadence after stalled-source reassignment
+
+Bottleneck/risk: even after ruling out B's payload cap, the node could be
+leaving peer capacity idle through an avoidable request batching defect.  The
+prior fixture counted requested blocks but not the bounded number or timing of
+`getdata` batches.
+
+Measurement support: retain only three monotonic values per fixture peer—the
+first and last block-request times and the number of block-bearing `getdata`
+batches—rather than an unbounded per-message trace.  A successful fresh run
+asserts both a final request and final block send, then reports request-to-send
+and post-send timing.
+
+Result: the checked 4,609-block lane with 10 MiB/s B completed in 117.60 s
+(39.18 blocks/s), 148.12 daemon CPU seconds, and 97,628 KiB RSS with no swap.
+B received 4,608 requests in 4,286 `getdata` batches (1.08 blocks/batch).
+The final request issued at 114.05 s, the local peer completed its final send
+0.10 s later, and the node reached tip 3.45 s after that.  A disconnected at
+7.71 s; all 128 abandoned requests reassigned; final in-flight, validated,
+and tracked-source counters were zero; no RPC sample failed; shutdown was
+graceful.  This directly places useful request release alongside normal
+validated-chain advancement in this lane, rather than behind B's configured
+payload capacity.  A scheduler widening or request coalescing change has no
+evidence of a safe benefit here and could increase bounded memory/validation
+pressure.
+
+Regression proof: the complete normal-validation isolated benchmark passed
+with bounded per-peer timing state and a 180-second timeout.  Its datadir was
+fresh and disposable with `-disablewallet`, `-bootstrap=0`, and loopback-only
+peers.  Cold sanitizer and full-suite gates remain unrun because root has only
+11 GiB free and the required 10 GiB reserve must be retained.
+
+Consensus impact: NONE.  Fixture observability only; chain history,
+validation ordering and semantics, cryptography, wire compatibility, wallets,
+production data, and Worldstream-owned storage are unchanged.  Remaining
+risk: this does not profile individual consensus validation operations; a
+representative safe profiling environment is still needed before considering
+their performance.

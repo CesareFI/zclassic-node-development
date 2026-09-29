@@ -40,6 +40,9 @@ class BenchPeer(WIRE.Peer):
         self.send_lock = threading.Lock()
         self.pending = queue.Queue(maxsize=256)
         self.first_request = None
+        self.first_block_request = None
+        self.last_block_request = None
+        self.block_getdata_batches = 0
         self.first_block = None
         self.last_block = None
         self.bytes_sent = 0
@@ -69,10 +72,18 @@ class BenchPeer(WIRE.Peer):
             count, offset = WIRE.compact(payload)
             if count > 50000 or len(payload) != offset + count * 36:
                 raise ValueError("invalid getdata")
+            block_count = 0
             for index in range(count):
                 begin = offset + index * 36
                 if int.from_bytes(payload[begin:begin + 4], "little") == 2:
                     self.wire_requests.append(self.blocks[payload[begin + 4:begin + 36]][0])
+                    block_count += 1
+            if block_count:
+                now = time.monotonic()
+                if self.first_block_request is None:
+                    self.first_block_request = now
+                self.last_block_request = now
+                self.block_getdata_batches += 1
             if self.first_request is None:
                 self.first_request = time.monotonic()
             if self.deliver:
@@ -285,8 +296,13 @@ def run(args, blocks, headers, limit, repeat):
                                    "no_restart": True})
                     last_delivery = max((peer.last_block for peer in peers if peer.last_block is not None),
                                         default=None)
+                    last_request = max((peer.last_block_request for peer in peers
+                                        if peer.last_block_request is not None), default=None)
                     assert last_delivery is not None
+                    assert last_request is not None
                     report["last_block_sent_seconds"] = last_delivery - started
+                    report["last_block_request_seconds"] = last_request - started
+                    report["request_to_last_send_seconds"] = (last_delivery - last_request)
                     report["post_delivery_validation_seconds"] = elapsed - report["last_block_sent_seconds"]
                     break
                 time.sleep(args.sample_ms / 1000)
@@ -317,11 +333,14 @@ def run(args, blocks, headers, limit, repeat):
                                 "tcp_nodelay": peer.tcp_nodelay,
                                 "header_messages": peer.header_messages,
                                 "blocks_sent": peer.blocks_sent,
+                                "block_getdata_batches": peer.block_getdata_batches,
                                 "intentional_drop": peer.dropped.is_set(),
                                 "first_response_seconds": (peer.first_block - peer.first_request
                                     if peer.first_block is not None and peer.first_request is not None else None),
                                 "last_block_sent_seconds": (peer.last_block - started
-                                    if peer.last_block is not None else None)}
+                                    if peer.last_block is not None else None),
+                                "last_block_request_seconds": (peer.last_block_request - started
+                                    if peer.last_block_request is not None else None)}
                                for peer in peers]
     report["disconnect_events"] = [line for line in (output / "daemon.log").read_text().splitlines()
                                    if "is stalling block download, disconnecting" in line
