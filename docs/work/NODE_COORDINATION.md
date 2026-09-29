@@ -2880,3 +2880,32 @@ Worldstream remains complementary on startup/storage. ASan/UBSan remain unrun
 because the host has 11 GB free and the 10 GB reserve precludes a cold sanitizer
 build. Recommended next investigation: response-order recovery when an empty
 header reply and a delayed valid body from the retiring header owner cross.
+
+## Legacy single-stream bootstrap reports verified staging progress
+
+Baseline and root cause: the legacy `-bootstrapstreams=1` path reuses a
+completed staged file only after its SHA-256 matches the manifest, but seeded
+its progress counter at zero. If every nonempty file was already verified, it
+returned success without a chunk response and left operator status at 0 bytes
+and 0%, unlike the parallel transfer path.
+
+Fix and after-result: before the one-stream chunk loop starts, it now applies
+the same regular-file and SHA-256 reuse gate as the parallel path, seeds the
+counter with verified bytes, and publishes the initial status. A corrupt
+regular staging file is still discarded and reacquired; symlinks and other
+unexpected types still fail closed.
+
+Regression proof: a localhost stream passes an exact manifest, finds a
+preverified 257-byte staged file, requests no chunk, and reports 257/257 bytes
+at 100%. The focused case passes in 0.07 s at 28,496 KB maximum RSS; the
+parallel equivalent passes in 0.26 s at 28,484 KB. The complete bootstrap
+protocol group passes in 13.17 s at 170,908 KB maximum RSS; `git diff --check`
+passes.
+
+Consensus impact: NONE. This is bootstrap status and staging-reuse accounting;
+manifest equality, hashes, payload validation, serialization, chain history,
+PoW, monetary policy, upgrades, cryptography, wallets, and production
+datadirs are unchanged. Worldstream remains complementary on startup/storage.
+ASan/UBSan remain unrun because the host has 11 GB free and the 10 GB reserve
+precludes a cold sanitizer build. Recommended next investigation: a safely
+manifest-bound outer restart lifecycle before claiming cross-process resume.

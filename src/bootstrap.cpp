@@ -2006,7 +2006,24 @@ static bool DownloadBootstrapSnapshot(SOCKET socket, const CBootstrapSnapshotMan
         }
     }
 
-    std::atomic<uint64_t> progressBytes(0);
+    uint64_t preverifiedBytes = 0;
+    for (size_t i = 0; i < order.size(); ++i) {
+        const CBootstrapSnapshotFile& file = manifest.vFiles[order[i]];
+        const boost::filesystem::path path = staging / boost::filesystem::path(file.strPath);
+        bool reusable = false;
+        if (!ReuseOrDiscardBootstrapDownloadedFile(path, file, reusable, error)) {
+            return false;
+        }
+        if (reusable) {
+            preverifiedBytes += file.nSize;
+        }
+    }
+
+    const int initialPercent = manifest.nSnapshotBytes > 0
+        ? (int)((preverifiedBytes * 100) / manifest.nSnapshotBytes) : 100;
+    SetBootstrapInfoProgress(initialPercent, preverifiedBytes, manifest.nSnapshotBytes,
+                             0.0, 1, peer, 0, 0, 0, 0, "", manifest.nVersion);
+    std::atomic<uint64_t> progressBytes(preverifiedBytes);
     std::atomic<bool> abortFlag(false);
     bool retryable = false;
     return DownloadBootstrapFileSubset(socket, manifest, staging, order, timeout_ms,
@@ -2108,6 +2125,26 @@ bool BootstrapOpenStreamAndVerifyManifestForTest(const CService& peerAddress,
     if (socket != INVALID_SOCKET) {
         CloseSocket(socket);
     }
+    return ok;
+}
+
+// Narrow native-test seam for the legacy one-stream transfer path. It opens a
+// localhost bootstrap stream through the same exact-manifest gate used by a
+// parallel worker, then runs the production single-stream downloader.
+bool BootstrapDownloadSnapshotSingleForTest(const CService& peerAddress,
+                                            const CBootstrapSnapshotManifest& manifest,
+                                            const boost::filesystem::path& staging,
+                                            int timeout_ms, std::string& error)
+{
+    SOCKET socket = INVALID_SOCKET;
+    bool retryable = false;
+    if (!OpenBootstrapStreamAndVerifyManifest(peerAddress, timeout_ms, manifest,
+                                              socket, retryable, error)) {
+        return false;
+    }
+    const bool ok = DownloadBootstrapSnapshot(socket, manifest, staging, timeout_ms,
+                                              "loopback", error);
+    CloseSocket(socket);
     return ok;
 }
 

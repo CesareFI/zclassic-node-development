@@ -73,6 +73,10 @@ extern bool BootstrapDownloadSnapshotParallelForTest(const CService&,
                                                      const boost::filesystem::path&, int,
                                                      int,
                                                      std::string&);
+extern bool BootstrapDownloadSnapshotSingleForTest(const CService&,
+                                                   const CBootstrapSnapshotManifest&,
+                                                   const boost::filesystem::path&, int,
+                                                   std::string&);
 extern bool BootstrapDownloadSnapshotParallelFromPeersForTest(
     const std::vector<CService>&, const CBootstrapSnapshotManifest&,
     const boost::filesystem::path&, int, int, std::string&);
@@ -1996,6 +2000,41 @@ BOOST_AUTO_TEST_CASE(bootstrap_parallel_reports_preverified_staging_progress)
     SetBootstrapInfoProgress(0, 0, manifest.nSnapshotBytes, 0.0, 1, "", 0, 0, 0, 0, "", 0);
     std::string error;
     BOOST_CHECK_MESSAGE(BootstrapDownloadSnapshotParallelForTest(peer, manifest, staging, 1000, 1, error), error);
+    server.join();
+    BOOST_CHECK(serverOk);
+    const BootstrapInfo info = GetBootstrapInfo();
+    BOOST_CHECK_EQUAL(info.bytesReceived, manifest.nSnapshotBytes);
+    BOOST_CHECK_EQUAL(info.percent, 100);
+    boost::filesystem::remove_all(staging);
+}
+
+BOOST_AUTO_TEST_CASE(bootstrap_single_stream_reports_preverified_staging_progress)
+{
+    const std::string bytes = DeterministicBytes(257, 156);
+    CBootstrapSnapshotManifest manifest;
+    manifest.nSnapshotBytes = bytes.size();
+    manifest.nChunkSize = 128;
+    CBootstrapSnapshotFile file;
+    file.strPath = "blocks/blk00000.dat";
+    file.nSize = bytes.size();
+    file.hashSha256 = Sha256OfBytes(std::vector<unsigned char>(bytes.begin(), bytes.end()));
+    manifest.vFiles.push_back(file);
+
+    const boost::filesystem::path staging = boost::filesystem::current_path() /
+        boost::filesystem::unique_path("zclassic-bootstrap-single-progress-%%%%-%%%%-%%%%");
+    boost::filesystem::create_directories((staging / file.strPath).parent_path());
+    {
+        boost::filesystem::ofstream output(staging / file.strPath, std::ios::binary);
+        output.write(bytes.data(), bytes.size());
+    }
+
+    bool serverOk = false;
+    boost::thread server;
+    const CService peer = StartManifestLoopbackPeer(manifest, false, false, false, "", false,
+                                                     server, serverOk);
+    SetBootstrapInfoProgress(0, 0, manifest.nSnapshotBytes, 0.0, 1, "", 0, 0, 0, 0, "", 0);
+    std::string error;
+    BOOST_CHECK_MESSAGE(BootstrapDownloadSnapshotSingleForTest(peer, manifest, staging, 1000, error), error);
     server.join();
     BOOST_CHECK(serverOk);
     const BootstrapInfo info = GetBootstrapInfo();
