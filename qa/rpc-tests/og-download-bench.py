@@ -196,6 +196,8 @@ def run(args, blocks, headers, limit, repeat):
         command.append(f"-blockdownloadwindow={args.block_download_window}")
     if args.script_threads is not None:
         command.append(f"-par={args.script_threads}")
+    if args.debug_bench:
+        command.append("-debug=bench")
     report = {"limit": limit, "repeat": repeat, "stall": args.stall, "pass": False,
               "command": command, "rpc_unavailable_samples": []}
     peers, samples = [], []
@@ -368,6 +370,8 @@ def main():
                         help="Pass a bounded startup look-ahead cap to the daemon")
     parser.add_argument("--script-threads", type=int, choices=range(-2, 65),
                         help="Pass an explicit supported -par setting to the daemon")
+    parser.add_argument("--debug-bench", action="store_true",
+                        help="Enable the daemon's existing per-stage bench log in this isolated run")
     parser.add_argument("--repeat", type=int, default=1)
     parser.add_argument("--stall", action="store_true")
     parser.add_argument("--require-window-stall", action="store_true",
@@ -433,6 +437,7 @@ def main():
                      "require_window_stall": args.require_window_stall,
                      "block_download_window": args.block_download_window,
                      "script_threads": args.script_threads,
+                     "debug_bench": args.debug_bench,
                      "first_peer_drop_after_blocks": args.first_peer_drop_after_blocks,
                      "start_second_peer_after_first_drop": args.start_second_peer_after_first_drop,
                      "second_peer_delay_after_drop_seconds": args.second_peer_delay_after_drop_seconds,

@@ -4092,3 +4092,37 @@ Consensus impact: NONE.  Test evidence only; the receive-path change continues
 to retain the direct public validation path, contextual header/body checks,
 and strict proof verification.  No source, wallet, production data, or
 Worldstream-owned storage change is included here.
+
+## Expose existing native validation stage counters in the bounded IBD harness
+
+Bottleneck/risk: stack samples showed active shielded-proof and PoW work but
+could not quantify it.  The daemon already has opt-in `-debug=bench` stage
+logging; the isolated harness could not request or record it, forcing either a
+cold profiler build or hand-edited command line.
+
+Measurement support: add an opt-in `--debug-bench` harness switch that adds
+the existing daemon `-debug=bench` category and records the choice in its
+manifest.  Default benchmark behavior and node logging remain unchanged.
+
+Result: a fresh 4,609-block, 10 MiB/s healthy-peer, 100 ms stalled-A run with
+normal validation completed safely in 111.69 s (41.26 blocks/s), with 140.31
+daemon CPU seconds, 97,720 KiB peak RSS, and no swap.  Existing native
+counters reported 91.79 cumulative seconds in `Connect block`, versus 7.01 s
+for transaction connection, 7.14 s including queued script checks, 0.28 s
+index writing, and 0.02 s callbacks.  The remaining unitemized portion is
+consistent with the prior live stacks in strict shielded-proof/PoW checks and
+surrounding block-connect work.  This is an opt-in logging run, not a
+performance comparison with non-debug runs.
+
+Regression proof: the benchmark retained its 128-request staller disconnect,
+reassignment, zero final in-flight/source counts, normal validation to height
+4,608, no RPC failure, and graceful shutdown.  Its native bench log contained
+4,609 connect-block stage observations.  No C++ consensus or scheduler change
+is justified until a representative profile can separate strict cryptographic
+operations without weakening or skipping them.
+
+Consensus impact: NONE.  Isolated harness configuration only; chain history,
+validation, cryptography, peer behavior, wallets, production data, and
+Worldstream-owned storage are unchanged.  Remaining risk: verbose bench logs
+are intentionally opt-in and perturb wall time; use them for stage attribution,
+not throughput claims.
