@@ -3281,3 +3281,36 @@ not model WAN loss, real historical block mix, or public peer diversity.
 Recommended next investigation: obtain a bounded, independently verified
 historical fixture with symbols/profiling support, then attribute user-space
 block validation and chain activation before changing their code.
+
+## Debug-symbol snapshots identify shielded proof arithmetic on the active path
+
+Attribution refinement: the current daemon has debug information and an
+unstripped symbol table, so a third isolated 4,096-block run took two bounded
+GDB snapshots of the disposable daemon. Both snapshots independently found a
+`zcl-msghand` thread in libsnark alt_bn128 field arithmetic (Fp/Fp2/Fp6/Fp12);
+a libgomp worker was active at the same time. The scheduler was sleeping and
+the socket handler was in `select`. The run still verified every final-chain
+and in-flight invariant, completed a graceful RPC stop, and used no swap.
+
+After-result: the snapshot run completed in 102.91 s at 39.79 blocks/s with
+129.03 daemon CPU seconds and 97 MiB peak RSS. Its wall time and 3.14 s maximum
+observed progress gap are intentionally not compared with the uninstrumented
+98.52 s baseline because debugger attachment pauses the target. The repeated
+stacks, the uninstrumented CPU result, and the negligible durable-write
+syscall time establish a concrete next bottleneck candidate: shielded proof
+verification during block validation, not peer scheduling, socket I/O, or
+durable writes in this workload.
+
+Safety decision: no optimization is made. Those libsnark operations enforce
+consensus validity and need a representative historical transaction mix plus
+a real sampling profiler before any candidate can be evaluated without
+changing cryptographic semantics. `perf` is absent; installing or rebuilding
+profiling tooling is the precise external resource needed for a statistically
+sound function profile.
+
+Consensus impact: NONE. This is measurement/documentation only; validation,
+serialization, chain history, PoW, monetary policy, upgrades, cryptography,
+wallets, production datadirs, and peer policy are unchanged. Worldstream
+remains complementary on startup/storage. Recommended next investigation:
+add no more scheduler permutations; provision bounded sampling support and a
+verified historical fixture before considering a cryptographic hot-path change.
