@@ -4056,3 +4056,24 @@ wire compatibility, wallets, production data, and Worldstream-owned storage
 are unchanged.  Remaining risk: the performance fixture is controlled and
 short; a representative long historical mix remains needed before claiming a
 WAN-wide percentage.
+
+## Do not duplicate the indexed-header fast-path investigation
+
+Follow-up evidence: after the receive-body improvement, a proposed
+same-body shortcut for `AcceptBlockHeader` was measured but deliberately not
+kept.  In headers-first IBD, a received body's header is already in
+`mapBlockIndex`; `AcceptBlockHeader` returns through its existing duplicate
+header path before it reaches `CheckBlockHeader`.  Removing a hypothetical
+second Equihash/claimed-target check therefore cannot improve this lane.
+
+Two isolated candidate runs completed safely in 110.30 s and 109.48 s versus
+the preceding 108.19/109.34-second receive-body runs, all within fixture
+variance and all still faster than the 117.60-second pre-receive-body baseline.
+The temporary candidate was explicitly reverted and the native binary rebuilt
+to the published source state.  Retain full header validation for the public
+header API; no header-path source change is justified.
+
+Consensus impact: NONE.  Documentation of a rejected candidate only; there
+is no residual source change.  Remaining risk: future non-headers-first paths
+have different call patterns and require their own evidence before any header
+validation optimization is considered.
