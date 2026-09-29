@@ -67,6 +67,7 @@ extern bool BootstrapOpenStreamAndVerifyManifestForTest(const CService&, int,
 extern bool BootstrapDownloadSnapshotParallelForTest(const CService&,
                                                      const CBootstrapSnapshotManifest&,
                                                      const boost::filesystem::path&, int,
+                                                     int,
                                                      std::string&);
 
 // Test-only seam (defined in bootstrapvalidation.cpp, not the public header) to
@@ -518,6 +519,101 @@ static CService StartTwoFileRetryLoopbackPeer(const CBootstrapSnapshotManifest& 
         }
         if (client != INVALID_SOCKET) {
             CloseSocket(client);
+        }
+        CloseSocket(listener);
+    });
+    return service;
+}
+
+// A bounded two-client peer for the actual parallel worker path. Each client
+// owns one complete file; the server accepts either file first so scheduling
+// order cannot make this fixture flaky.
+static CService StartParallelTwoFileLoopbackPeer(const CBootstrapSnapshotManifest& manifest,
+                                                 const std::vector<std::string>& files,
+                                                 boost::thread& server,
+                                                 bool& serverOk,
+                                                 std::array<unsigned int, 2>& requests)
+{
+    BOOST_REQUIRE_EQUAL(files.size(), 2U);
+    SOCKET listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    BOOST_REQUIRE(listener != INVALID_SOCKET);
+    struct sockaddr_in address;
+    std::memset(&address, 0, sizeof(address));
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    address.sin_port = 0;
+    BOOST_REQUIRE_EQUAL(bind(listener, (struct sockaddr*)&address, sizeof(address)), 0);
+    BOOST_REQUIRE_EQUAL(listen(listener, 2), 0);
+#ifdef WIN32
+    int addressLength = sizeof(address);
+#else
+    socklen_t addressLength = sizeof(address);
+#endif
+    BOOST_REQUIRE_EQUAL(getsockname(listener, (struct sockaddr*)&address, &addressLength), 0);
+    const CService service("127.0.0.1", ntohs(address.sin_port));
+
+    server = boost::thread([=, &serverOk, &requests]() mutable {
+        serverOk = false;
+        requests = {{0, 0}};
+        try {
+            for (unsigned int session = 0; session < files.size(); ++session) {
+                SOCKET client = INVALID_SOCKET;
+                if (!AcceptTestBootstrapClient(listener, client)) {
+                    throw std::runtime_error("missing parallel bootstrap client");
+                }
+                std::string command;
+                if (!ReceiveTestBootstrapMessage(client, command) || command != "version") {
+                    CloseSocket(client);
+                    throw std::runtime_error("missing parallel bootstrap version");
+                }
+                CDataStream version(SER_NETWORK, INIT_PROTO_VERSION);
+                const CAddress remote(service, NODE_BOOTSTRAP);
+                version << PROTOCOL_VERSION << uint64_t(NODE_BOOTSTRAP) << GetTime()
+                        << remote << remote << uint64_t(1) << std::string("/loopback/") << 0 << true;
+                CDataStream empty(SER_NETWORK, PROTOCOL_VERSION);
+                if (!SendTestBootstrapMessage(client, "version", version) ||
+                    !ReceiveTestBootstrapMessage(client, command) || command != "verack" ||
+                    !SendTestBootstrapMessage(client, "verack", empty) ||
+                    !ReceiveTestBootstrapMessage(client, command) || command != NetMsgType::GETBSMAN) {
+                    CloseSocket(client);
+                    throw std::runtime_error("invalid parallel bootstrap handshake");
+                }
+                CDataStream manifestPayload(SER_NETWORK, PROTOCOL_VERSION);
+                manifestPayload << manifest;
+                if (!SendTestBootstrapMessage(client, NetMsgType::BSMAN, manifestPayload)) {
+                    CloseSocket(client);
+                    throw std::runtime_error("could not send parallel bootstrap manifest");
+                }
+
+                CDataStream requestPayload(SER_NETWORK, PROTOCOL_VERSION);
+                if (!ReceiveTestBootstrapMessage(client, command, &requestPayload) ||
+                    command != NetMsgType::GETBSCHK) {
+                    CloseSocket(client);
+                    throw std::runtime_error("missing parallel bootstrap chunk request");
+                }
+                CBootstrapSnapshotChunkRequest request;
+                requestPayload >> request;
+                if (!requestPayload.empty() || request.nFileIndex >= files.size() ||
+                    request.nOffset != 0 || request.nLength != files[request.nFileIndex].size()) {
+                    CloseSocket(client);
+                    throw std::runtime_error("invalid parallel bootstrap chunk request");
+                }
+                ++requests[request.nFileIndex];
+                CBootstrapSnapshotChunk chunk;
+                chunk.nFileIndex = request.nFileIndex;
+                chunk.nOffset = 0;
+                chunk.vData.assign(files[request.nFileIndex].begin(), files[request.nFileIndex].end());
+                CDataStream chunkPayload(SER_NETWORK, PROTOCOL_VERSION);
+                chunkPayload << chunk;
+                const bool sent = SendTestBootstrapMessage(client, NetMsgType::BSCHK, chunkPayload);
+                CloseSocket(client);
+                if (!sent) {
+                    throw std::runtime_error("could not send parallel bootstrap chunk");
+                }
+            }
+            serverOk = requests[0] == 1 && requests[1] == 1;
+        } catch (const std::exception&) {
+            serverOk = false;
         }
         CloseSocket(listener);
     });
@@ -1584,7 +1680,7 @@ BOOST_AUTO_TEST_CASE(bootstrap_loopback_chunk_reset_retries_verified_manifest_st
     const boost::filesystem::path staging = boost::filesystem::current_path() /
         boost::filesystem::unique_path("zclassic-bootstrap-retry-%%%%-%%%%-%%%%");
     std::string error;
-    BOOST_CHECK_MESSAGE(BootstrapDownloadSnapshotParallelForTest(peer, manifest, staging, 1000, error), error);
+    BOOST_CHECK_MESSAGE(BootstrapDownloadSnapshotParallelForTest(peer, manifest, staging, 1000, 1, error), error);
     server.join();
     BOOST_CHECK(serverOk);
 
@@ -1619,11 +1715,45 @@ BOOST_AUTO_TEST_CASE(bootstrap_loopback_retry_retains_verified_prior_file)
     const boost::filesystem::path staging = boost::filesystem::current_path() /
         boost::filesystem::unique_path("zclassic-bootstrap-retain-%%%%-%%%%-%%%%");
     std::string error;
-    BOOST_CHECK_MESSAGE(BootstrapDownloadSnapshotParallelForTest(peer, manifest, staging, 1000, error), error);
+    BOOST_CHECK_MESSAGE(BootstrapDownloadSnapshotParallelForTest(peer, manifest, staging, 1000, 1, error), error);
     server.join();
     BOOST_CHECK(serverOk);
     BOOST_CHECK_EQUAL(retryFileZeroRequests, 0U);
 
+    for (size_t i = 0; i < files.size(); ++i) {
+        boost::filesystem::ifstream staged(staging / manifest.vFiles[i].strPath, std::ios::binary);
+        const std::string got((std::istreambuf_iterator<char>(staged)), std::istreambuf_iterator<char>());
+        BOOST_CHECK_EQUAL(got, files[i]);
+    }
+    boost::filesystem::remove_all(staging);
+}
+
+BOOST_AUTO_TEST_CASE(bootstrap_loopback_parallel_streams_assign_disjoint_files)
+{
+    const std::vector<std::string> files = {DeterministicBytes(127, 161), DeterministicBytes(113, 162)};
+    CBootstrapSnapshotManifest manifest;
+    manifest.nChunkSize = 128;
+    manifest.nSnapshotBytes = files[0].size() + files[1].size();
+    for (size_t i = 0; i < files.size(); ++i) {
+        CBootstrapSnapshotFile file;
+        file.strPath = i == 0 ? "blocks/blk00000.dat" : "blocks/blk00001.dat";
+        file.nSize = files[i].size();
+        file.hashSha256 = Sha256OfBytes(std::vector<unsigned char>(files[i].begin(), files[i].end()));
+        manifest.vFiles.push_back(file);
+    }
+
+    bool serverOk = false;
+    std::array<unsigned int, 2> requests;
+    boost::thread server;
+    const CService peer = StartParallelTwoFileLoopbackPeer(manifest, files, server, serverOk, requests);
+    const boost::filesystem::path staging = boost::filesystem::current_path() /
+        boost::filesystem::unique_path("zclassic-bootstrap-parallel-%%%%-%%%%-%%%%");
+    std::string error;
+    BOOST_CHECK_MESSAGE(BootstrapDownloadSnapshotParallelForTest(peer, manifest, staging, 1000, 2, error), error);
+    server.join();
+    BOOST_CHECK(serverOk);
+    BOOST_CHECK_EQUAL(requests[0], 1U);
+    BOOST_CHECK_EQUAL(requests[1], 1U);
     for (size_t i = 0; i < files.size(); ++i) {
         boost::filesystem::ifstream staged(staging / manifest.vFiles[i].strPath, std::ios::binary);
         const std::string got((std::istreambuf_iterator<char>(staged)), std::istreambuf_iterator<char>());

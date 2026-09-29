@@ -2183,10 +2183,11 @@ static bool DownloadBootstrapSnapshotParallel(const CService& peerAddress, const
 bool BootstrapDownloadSnapshotParallelForTest(const CService& peerAddress,
                                               const CBootstrapSnapshotManifest& manifest,
                                               const boost::filesystem::path& staging,
-                                              int timeout_ms, std::string& error)
+                                              int timeout_ms, int nStreams,
+                                              std::string& error)
 {
     return DownloadBootstrapSnapshotParallel(peerAddress, "loopback", manifest, staging,
-                                             timeout_ms, 1, error);
+                                             timeout_ms, nStreams, error);
 }
 
 static bool BootstrapHandshake(SOCKET socket, const CService& peer_address, int timeout_ms, std::string& error)

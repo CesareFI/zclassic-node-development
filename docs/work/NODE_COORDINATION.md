@@ -2257,3 +2257,35 @@ remains above the required 10 GB reserve, and this legacy checkout exposes no
 such checked target. Recommended next investigation: use a controlled valid
 late-body case to inspect whether stale peer attribution can affect any other
 post-acceptance peer accounting.
+
+## Bootstrap parallel-stream localhost coverage
+
+Baseline and risk: the native bootstrap test seam always forced one stream,
+even though production can use multiple independently handshaked streams.
+The existing loopback tests proved manifest verification and reconnect retention
+only in that single-worker configuration; they could not prove disjoint file
+assignment or concurrent-stream staging behavior.
+
+Fix: the test-only seam now accepts an explicit stream count. A bounded
+localhost fixture accepts exactly two independently handshaked clients in
+either arrival order, returns the same manifest to both, and serves one whole
+file per client. The new regression requests two streams, proves each file is
+requested exactly once, and byte-compares both SHA-256-verified staged files.
+Production bootstrap selection, peer trust, manifest validation, download
+scheduling, and on-wire messages are unchanged.
+
+After-result and regression proof: the two-stream regression passed in 0.30 s
+at 28,044 KB maximum RSS. The pre-existing reconnect-retention regression
+passed in 0.30 s at 28,236 KB, and the reset/reconnect manifest regression
+passed in 0.30 s at 27,548 KB. The incremental native `test_bitcoin` target
+rebuilt successfully; `git diff --check` passes. This is localhost protocol
+coverage, not a WAN throughput or time-to-tip measurement.
+
+Consensus impact: NONE. Test seam and deterministic fixture only; block and
+transaction validation, serialization, chain history, PoW, monetary policy,
+upgrades, cryptography, and production datadirs are untouched. Worldstream
+`origin/main` at `580eba3ce` remains complementary C23 storage/startup work.
+Sanitizers remain unrun with 11 GB free and the required 10 GB reserve.
+Recommended next investigation: exercise a bounded multi-stream transport
+failure where one verified worker reconnects while another completes, without
+relaxing manifest equality or per-file hash checks.
