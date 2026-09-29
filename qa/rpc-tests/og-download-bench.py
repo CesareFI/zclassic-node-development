@@ -130,6 +130,7 @@ def check_complete(chain, peers, headers, stall, limit, first_peer_drops):
     counters = chain["blockdownload"]
     assert counters["blocks_in_flight"] == 0, counters
     assert counters["validated_blocks_in_flight"] == 0, counters
+    assert counters["tracked_block_sources"] == 0, counters
     requests = [height for peer in peers for height in peer.wire_requests]
     assert set(requests) == set(range(1, len(headers)))
     duplicates = len(requests) - len(set(requests))
@@ -197,8 +198,9 @@ def run(args, blocks, headers, limit, repeat):
                         raise
                     time.sleep(0.2)
             assert rpc("getnetworkinfo")["maxblocksinflight"] == limit
-            assert rpc("getnetworkinfo")["blockdownloadwindow"] == (
-                args.block_download_window if args.block_download_window is not None else 4096)
+            expected_lookahead = args.block_download_window if args.block_download_window is not None else 4096
+            assert rpc("getnetworkinfo")["blockdownloadwindow"] == expected_lookahead
+            assert rpc("getblockchaininfo")["blockdownload"]["max_height_lookahead"] == expected_lookahead
             before = resources(daemon.pid)
             host_before = host_cpu()
             started = time.monotonic()

@@ -3741,3 +3741,24 @@ consensus, chain history, validation, cryptography, wire compatibility,
 wallets, production data, and Worldstream-owned storage remain unchanged.
 Remaining risk: the snapshot still takes the existing `cs_main` lock and does
 not claim lock-free status responsiveness.
+
+## Full IBD harness pins scheduler diagnostics to final cleanup
+
+Regression extension: the 4,609-block isolated benchmark now requires zero
+final `tracked_block_sources` and verifies the effective look-ahead through
+both `getnetworkinfo.blockdownloadwindow` and the same-snapshot
+`getblockchaininfo.blockdownload.max_height_lookahead` before starting peers.
+
+Proof: a fresh 512-height-cap, 100 ms latency, 1 MiB/s stalled-first-source
+run passed.  It reached height 4,608 in 118.40 s under normal validation;
+healthy B served the chain after A's 128 requests stalled; A was disconnected
+at 8.87 s; 128 requests were reassigned; final in-flight, validated-in-flight,
+and tracked-source counts were zero; the final reported look-ahead was 512;
+there were no status-RPC failures or swap; and shutdown was graceful.  This is
+one current validation run, not a new cross-run performance comparison.
+
+Consensus impact: NONE.  This extends isolated regression assertions only;
+consensus, validation, cryptography, wire compatibility, wallets, production
+state, and Worldstream-owned storage remain unchanged.  Remaining risk:
+representative WAN peer diversity and long historical transaction mixes remain
+outside this fixture.
