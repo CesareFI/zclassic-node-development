@@ -3780,3 +3780,46 @@ Consensus impact: NONE.  Read-only diagnostics only; consensus, validation,
 cryptography, peer policy, wallets, production state, and Worldstream-owned
 storage remain unchanged.  Remaining risk: it reports the native snapshot but
 does not claim a lock-free sampling path.
+
+## Measure explicit script-verification concurrency in the bounded IBD lane
+
+Bottleneck/risk: prior bounded IBD measurements showed roughly 1.25 daemon
+CPU-cores consumed while ordinary block validation dominated wall time, but
+the effect of the daemon's supported `-par` script-verification setting on
+this two-core host was not measured.  Changing its automatic default from a
+single synthetic result would affect every node and is not justified.
+
+Measurement support: extend the existing isolated download fixture with an
+optional, range-checked `--script-threads=-2..64` argument.  It records the
+exact daemon command and manifest value, leaving the daemon's default
+unchanged when omitted.  The parser rejects 65 before it can start a daemon.
+
+Before/after result: the closest preceding 512-height-look-ahead, 100 ms,
+1 MiB/s stalled-A run completed in 118.40 s (38.92 blocks/s), using 147.67
+daemon CPU seconds and 97,652 KiB RSS.  The daemon maps `-par=1` to its
+documented serial script-check path.  A fresh otherwise equivalent `-par=1`
+run validated the same 4,609 checked historical blocks in 119.53 s
+(38.55 blocks/s), using 148.53 CPU seconds and 97,872 KiB RSS, with no swap.
+The one actual-script-worker configuration, `-par=2`, was observationally
+indistinguishable in this one run: 119.58 s (38.53 blocks/s), 148.62 CPU
+seconds, and 97,888 KiB RSS.  The serial run disconnected the stalled source at 7.99 s and
+recovered useful delivery within 8.57 s; the two-thread run did so at 9.15 s
+and 9.44 s.  Both reassigned all 128 requests, ended with all
+scheduler/source counters zero, and shut down cleanly.  One-run environmental
+variance is possible, but there is no measured speed or memory gain to
+justify a C++ default change; the measured lane remains dominated by work
+outside the optional transparent script-check worker.
+
+Regression proof: the isolated full-validation benchmark passed with both
+explicit supported settings; its disposable datadir used `-disablewallet`,
+`-bootstrap=0`, loopback-only peers, and no production state.  The parser's
+out-of-range rejection also passed.  Cold sanitizer and full-suite gates were
+not run because the filesystem has only 11 GiB free, preserving the required
+10 GiB reserve.
+
+Consensus impact: NONE.  This adds a benchmark-only pass-through for an
+existing non-consensus daemon option.  Chain history, validation, cryptography,
+wire behavior, wallets, production data, and Worldstream-owned storage remain
+unchanged.  Remaining risk: this short checked fixture is not a representative
+WAN or long-chain transaction mix; retain the automatic default unless a
+repeatable representative profile demonstrates a benefit.

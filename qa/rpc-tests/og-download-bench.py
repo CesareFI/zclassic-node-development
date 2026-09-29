@@ -181,6 +181,8 @@ def run(args, blocks, headers, limit, repeat):
                f"-maxblocksinflight={limit}", "-printtoconsole=1"]
     if args.block_download_window is not None:
         command.append(f"-blockdownloadwindow={args.block_download_window}")
+    if args.script_threads is not None:
+        command.append(f"-par={args.script_threads}")
     report = {"limit": limit, "repeat": repeat, "stall": args.stall, "pass": False,
               "command": command, "rpc_unavailable_samples": []}
     peers, samples = [], []
@@ -336,6 +338,8 @@ def main():
     parser.add_argument("--limits", nargs="+", type=int, choices=(16, 32, 64, 128), default=[16, 32, 64, 128])
     parser.add_argument("--block-download-window", type=int,
                         help="Pass a bounded startup look-ahead cap to the daemon")
+    parser.add_argument("--script-threads", type=int, choices=range(-2, 65),
+                        help="Pass an explicit supported -par setting to the daemon")
     parser.add_argument("--repeat", type=int, default=1)
     parser.add_argument("--stall", action="store_true")
     parser.add_argument("--require-window-stall", action="store_true",
@@ -400,6 +404,7 @@ def main():
     manifest.update({"limits": args.limits, "repeat": args.repeat, "stall": args.stall,
                      "require_window_stall": args.require_window_stall,
                      "block_download_window": args.block_download_window,
+                     "script_threads": args.script_threads,
                      "first_peer_drop_after_blocks": args.first_peer_drop_after_blocks,
                      "start_second_peer_after_first_drop": args.start_second_peer_after_first_drop,
                      "second_peer_delay_after_drop_seconds": args.second_peer_delay_after_drop_seconds,
