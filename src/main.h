@@ -293,9 +293,9 @@ struct CNodeStateStats {
     std::vector<int> vHeightInFlight;
     int nBlocksInFlight;
     int nValidatedBlocksInFlight;
-    //! Valid bodies that completed a request owned by this peer.
+    //! Bodies passing preliminary CheckBlock that completed this peer's request.
     uint64_t nBlocksReceived;
-    //! Valid bodies supplied by this peer while another peer owned the request.
+    //! Preliminary-checked bodies supplied while another peer owned the request.
     uint64_t nBlocksReceivedFromOtherPeer;
     //! Block-download deadline expirations that disconnected this peer.
     uint64_t nBlockDownloadTimeouts;

@@ -4221,8 +4221,8 @@ different peer, or timed out.  That prevented evidence-based peer-diversity
 and fairness work without retaining unbounded request history.
 
 Baseline and root cause: the deterministic foreign-body fixture demonstrates
-that an invalid foreign body must preserve the owner's request while a valid
-foreign body legitimately completes it.  The state machine deliberately
+that an invalid foreign body must preserve the owner's request while a
+preliminary-checked foreign body legitimately completes it.  The state machine deliberately
 discarded that completed ownership entry, so no bounded per-peer outcome was
 available afterwards.  The timeout path similarly had no persistent
 per-connection event count.
@@ -4231,7 +4231,8 @@ Fix and after-result: add three saturating `uint64_t` fields to the existing
 per-connection `CNodeState`, copy them into `CNodeStateStats`, and expose them
 as `blocks_received`, `blocks_received_from_other_peer`, and
 `block_download_timeouts` in `getpeerinfo`.  Only a body that passed the
-existing `CheckBlock` path is recorded.  It increments its sender's own
+existing preliminary `CheckBlock` path is recorded; this is not a claim of
+contextual acceptance or active-chain advancement.  It increments its sender's own
 delivery count only when that sender owned the outstanding request; otherwise
 it increments the cross-peer count.  Unrequested and invalid input remains
 unrecorded.  The pre-existing deadline branch increments once before its
@@ -4241,7 +4242,7 @@ and saturates rather than wrapping.
 Regression proof: the invalid-foreign/valid-cross-peer test proves zero
 outcomes after the rejected body and one cross-peer outcome after the valid
 body while the original owner's queue falls from 128 to 127.  The timeout
-fixture proves one useful owned delivery and exactly one timeout before the
+fixture proves one preliminary-checked owned delivery and exactly one timeout before the
 existing release/teardown assertions.  The RPC diagnostics fixture proves the
 new zero-valued fields are present.  Each focused registered case passed using
 the rebuilt native `test_bitcoin` binary; `git diff --check` passed.
