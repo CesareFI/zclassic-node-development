@@ -4161,3 +4161,25 @@ production data, and Worldstream-owned storage are unchanged.  Remaining
 risk: worker count depends on host and proof mix.  A representative historical
 fixture and host-level CPU isolation are required before selecting any user
 guidance, and a source-level OpenMP policy change is explicitly out of scope.
+
+## Stale bootstrap test process ruled out on the current binary
+
+Investigation: an inherited `test_bitcoin` process had been running the
+loopback chunk-reset manifest-retry case for more than two days.  It consumed
+no CPU, waited in `futex_do_wait`, and its executable had already been
+unlinked.  Its parent was the mission's Codex process; no daemon, service, or
+production datadir process was involved.
+
+Result: the exact registered test was rerun as a separate process against the
+current `src/test/test_bitcoin` binary with a 45-second timeout.  It passed in
+under one second with no errors.  The old process therefore was not evidence
+of a current reconnect defect.  After recording its command, wait state and
+zero CPU progress, it received SIGTERM and exited within two seconds; no force
+kill was used.  It had no file-backed log or child process to preserve.
+
+Consensus impact: NONE.  This is bounded test-process recovery evidence only.
+No source behavior, validation, chain data, wallet, configuration, bootstrap
+content, or Worldstream-owned storage/startup surface changed.  The next
+networking investigation remains a distinct, measured source-diversity or
+block-scheduler condition; do not reinterpret this stale process as a node
+failure.
