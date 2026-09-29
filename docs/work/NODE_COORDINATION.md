@@ -2462,3 +2462,32 @@ the 10 GB disk reserve. Remaining risk: named-proxy source diversity remains
 intentionally unchanged pending a proxy-native design. Recommended next
 investigation: bounded block-download scheduler source utilization under mixed
 healthy and slow outbound peers.
+
+## Bootstrap source rotation survives open-time resets
+
+Baseline and root cause: the configured-source parallelization path distributed
+initial workers, but `OpenBootstrapStreamAndVerifyManifest` did not return its
+transport retryability. A worker whose source reset during its bounded
+connect/handshake retries then treated `opened == false` as terminal and never
+rotated to the next manifest-verified source.
+
+Fix: the open helper now returns the final transport-retryability result. The
+parallel worker carries that result into its existing bounded retry loop, so a
+transport reset rotates to the next source while malformed, divergent, or other
+semantic manifest failures remain fail-fast. No retry count, manifest equality
+check, file hash, or validation criterion was relaxed.
+
+After-result and regression proof: a primary localhost source drops both of
+its bounded open attempts; the worker then connects to the alternate, verifies
+the same manifest, downloads the file, and verifies its SHA-256 (0.27 s,
+28,808 KB maximum RSS). The full 75-case bootstrap protocol group passed in
+12.15 s at 170,232 KB maximum RSS after an incremental native rebuild; `git
+diff --check` passes.
+
+Consensus impact: NONE. This changes only bounded transport failover after an
+already validated manifest; chain history, serialization, validation, PoW,
+monetary policy, upgrades, cryptography, wallets, and production data remain
+unchanged. Worldstream `origin/main` at `c9b7f20bb` remains complementary C23
+storage/startup work. ASan/UBSan remain unrun under the 10 GB disk reserve.
+Recommended next investigation: ordinary block-download scheduling under mixed
+healthy and stalled outbound peers.

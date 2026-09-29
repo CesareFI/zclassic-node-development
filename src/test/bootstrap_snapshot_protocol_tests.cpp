@@ -320,6 +320,43 @@ static CService StartSilentLoopbackPeer(boost::thread& server, bool& serverSawCl
     return service;
 }
 
+// Drop a bounded number of raw connections before any handshake. This models a
+// source that resets while parallel workers are opening replacement streams.
+static CService StartDroppingLoopbackPeer(unsigned int drops, boost::thread& server,
+                                          bool& serverOk)
+{
+    SOCKET listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    BOOST_REQUIRE(listener != INVALID_SOCKET);
+    struct sockaddr_in address;
+    std::memset(&address, 0, sizeof(address));
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    address.sin_port = 0;
+    BOOST_REQUIRE_EQUAL(bind(listener, (struct sockaddr*)&address, sizeof(address)), 0);
+    BOOST_REQUIRE_EQUAL(listen(listener, (int)drops), 0);
+#ifdef WIN32
+    int addressLength = sizeof(address);
+#else
+    socklen_t addressLength = sizeof(address);
+#endif
+    BOOST_REQUIRE_EQUAL(getsockname(listener, (struct sockaddr*)&address, &addressLength), 0);
+    const CService service("127.0.0.1", ntohs(address.sin_port));
+
+    server = boost::thread([listener, drops, &serverOk]() mutable {
+        serverOk = true;
+        for (unsigned int index = 0; index < drops; ++index) {
+            SOCKET client = INVALID_SOCKET;
+            if (!AcceptTestBootstrapClient(listener, client)) {
+                serverOk = false;
+                break;
+            }
+            CloseSocket(client);
+        }
+        CloseSocket(listener);
+    });
+    return service;
+}
+
 // One independent bootstrap source for the source-diversity regression. It
 // serves exactly one fully verified file request after returning the same
 // manifest, so two workers must use two distinct loopback listeners.
@@ -1963,6 +2000,44 @@ BOOST_AUTO_TEST_CASE(bootstrap_parallel_streams_use_distinct_verified_sources)
         const std::string got((std::istreambuf_iterator<char>(staged)), std::istreambuf_iterator<char>());
         BOOST_CHECK_EQUAL(got, files[i]);
     }
+    boost::filesystem::remove_all(staging);
+}
+
+BOOST_AUTO_TEST_CASE(bootstrap_parallel_open_reset_rotates_to_verified_source)
+{
+    const std::string bytes = DeterministicBytes(127, 191);
+    CBootstrapSnapshotManifest manifest;
+    manifest.nChunkSize = 128;
+    manifest.nSnapshotBytes = bytes.size();
+    CBootstrapSnapshotFile file;
+    file.strPath = "blocks/blk00000.dat";
+    file.nSize = bytes.size();
+    file.hashSha256 = Sha256OfBytes(std::vector<unsigned char>(bytes.begin(), bytes.end()));
+    manifest.vFiles.push_back(file);
+
+    bool droppingOk = false;
+    bool healthyOk = false;
+    boost::thread droppingServer;
+    boost::thread healthyServer;
+    // The opener retries each source twice. Both primary opens reset; the
+    // worker must then rotate to the alternate, re-verify its manifest, and
+    // download rather than treating the transient open failure as terminal.
+    const CService dropping = StartDroppingLoopbackPeer(2, droppingServer, droppingOk);
+    const CService healthy = StartManifestLoopbackPeer(manifest, false, false, false, bytes, false,
+                                                        healthyServer, healthyOk);
+    const boost::filesystem::path staging = boost::filesystem::current_path() /
+        boost::filesystem::unique_path("zclassic-bootstrap-open-rotate-%%%%-%%%%-%%%%");
+    std::string error;
+    BOOST_CHECK_MESSAGE(BootstrapDownloadSnapshotParallelFromPeersForTest(
+                            std::vector<CService>{dropping, healthy}, manifest, staging,
+                            1000, 1, error), error);
+    droppingServer.join();
+    healthyServer.join();
+    BOOST_CHECK(droppingOk);
+    BOOST_CHECK(healthyOk);
+    boost::filesystem::ifstream staged(staging / file.strPath, std::ios::binary);
+    const std::string got((std::istreambuf_iterator<char>(staged)), std::istreambuf_iterator<char>());
+    BOOST_CHECK_EQUAL(got, bytes);
     boost::filesystem::remove_all(staging);
 }
 

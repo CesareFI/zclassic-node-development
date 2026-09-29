@@ -2031,17 +2031,22 @@ static const int BOOTSTRAP_STREAM_OPEN_ATTEMPTS = 2;
 // files. Semantic peer faults and local write/hash failures remain terminal.
 static const int BOOTSTRAP_STREAM_DOWNLOAD_ATTEMPTS = 2;
 
-static bool OpenBootstrapStreamAndVerifyManifest(const CService& peerAddress, int timeout_ms, const CBootstrapSnapshotManifest& masterManifest, SOCKET& outSocket, std::string& error)
+static bool OpenBootstrapStreamAndVerifyManifest(const CService& peerAddress, int timeout_ms,
+                                                 const CBootstrapSnapshotManifest& masterManifest,
+                                                 SOCKET& outSocket, bool& retryable,
+                                                 std::string& error)
 {
     outSocket = INVALID_SOCKET;
+    retryable = false;
     std::string lastError;
     for (int attempt = 0; attempt < BOOTSTRAP_STREAM_OPEN_ATTEMPTS; ++attempt) {
-        bool retryable = false;
+        bool attemptRetryable = false;
         if (OpenBootstrapStreamAndVerifyManifestOnce(peerAddress, timeout_ms,
-                                                     masterManifest, outSocket, retryable, error)) {
+                                                     masterManifest, outSocket, attemptRetryable, error)) {
             return true;
         }
         lastError = error;
+        retryable = attemptRetryable;
         if (!retryable || ShutdownRequested()) {
             break;
         }
@@ -2055,11 +2060,12 @@ static bool OpenBootstrapStreamAndVerifyManifest(const CService& peerAddress, in
 bool BootstrapOpenStreamAndVerifyManifestForTest(const CService& peerAddress,
                                                  int timeout_ms,
                                                  const CBootstrapSnapshotManifest& masterManifest,
-                                                 std::string& error)
+    std::string& error)
 {
     SOCKET socket = INVALID_SOCKET;
+    bool retryable = false;
     const bool ok = OpenBootstrapStreamAndVerifyManifest(peerAddress, timeout_ms,
-                                                          masterManifest, socket, error);
+                                                          masterManifest, socket, retryable, error);
     if (socket != INVALID_SOCKET) {
         CloseSocket(socket);
     }
@@ -2159,9 +2165,10 @@ static bool DownloadBootstrapSnapshotParallel(const std::vector<CService>& peerA
                     // chunk. Rotate retries so a reconnecting source cannot
                     // monopolize every parallel worker.
                     const CService& source = peerAddresses[(w + attempt) % peerAddresses.size()];
+                    bool openRetryable = false;
                     const bool opened = OpenBootstrapStreamAndVerifyManifest(source, timeout_ms,
-                                                                              manifest, s, e);
-                    bool retryable = false;
+                                                                              manifest, s, openRetryable, e);
+                    bool retryable = !opened && openRetryable;
                     if (opened) {
                         bool downloadRetryable = false;
                         completed = DownloadBootstrapFileSubset(s, manifest, staging, groups[w], timeout_ms,
@@ -2176,7 +2183,7 @@ static bool DownloadBootstrapSnapshotParallel(const std::vector<CService>& peerA
                         break;
                     }
                     lastError = e;
-                    if (!opened || !retryable || ShutdownRequested()) {
+                    if (!retryable || ShutdownRequested()) {
                         break;
                     }
                 }
