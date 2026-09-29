@@ -3960,3 +3960,44 @@ Consensus impact: NONE.  This corrects the measurement interpretation only;
 there is no source behavior change.  The next valid optimization target needs
 a representative operation-level profile of normal validation, not a wider
 request window, altered ordering, or reduced validation.
+
+## Lightweight current-binary stack samples locate the bounded IBD hot work
+
+Bottleneck/risk: transport capacity and scheduler occupancy are now measured,
+but an IBD optimization still needed current-binary evidence about whether the
+remaining wall time was networking, script-check workers, or mandatory block
+validation.  A cold profiling or sanitizer build would violate the 10 GiB
+root-disk reserve.
+
+Measurement: on the debug-symbol-bearing committed daemon, attach `gdb` twice
+to one owned, loopback-only, disposable 4,609-block high-capacity fixture
+process.  Each attach only captured thread backtraces and detached; it did not
+modify source, service state, or production data.  The first active message
+handler was in Sprout `JoinSplitCircuit::verify` / libsnark's
+`alt_bn128_ate_miller_loop`; the second was in `CheckEquihashSolution` through
+`CheckBlock`.  In both samples the script-check queue worker waited idle and
+the socket handler waited in `select`; a libgomp message-handler worker was
+also present.
+
+Result: the profiling fixture completed normal validation through height 4,608
+and graceful shutdown (126.31 s, 148.12 daemon CPU seconds, 97,644 KiB RSS,
+no swap; all final scheduler/source counters zero).  Its elapsed time is not a
+performance comparison because debugger stops intentionally perturb it.  The
+two independent active stacks nevertheless rule out a network-thread or
+optional script-check-worker bottleneck in this controlled lane and identify
+mandatory shielded-proof and PoW verification as the current hot work.
+
+Regression proof: the fixture kept the previous bounded stalled-source
+reassignment assertions, normal block validation, disabled wallet/bootstrap,
+and loopback-only peers.  No C++ change is made: changing these validation
+operations would approach consensus/cryptographic semantics and requires a
+separate representative optimization proposal with parity acceptance.  Cold
+sanitizer/full-suite gates remain unrun because only 11 GiB root space is
+available and the reserve is 10 GiB.
+
+Consensus impact: NONE.  Read-only debugger evidence and documentation only;
+chain history, consensus verification, cryptography, wire compatibility,
+wallets, production state, and Worldstream-owned storage are unchanged.
+Remaining risk: two stack samples establish active work but not inclusive CPU
+percentages; a non-perturbative profiler or a larger isolated profiling lane
+is required before a cryptographic performance change can be justified.
