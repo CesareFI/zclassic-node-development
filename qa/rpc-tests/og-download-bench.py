@@ -222,12 +222,17 @@ def run(args, blocks, headers, limit, repeat):
             if not args.start_second_peer_after_first_drop:
                 start_peer("B", second_bandwidth)
             deadline = started + args.timeout
+            first_drop_observed = None
             peak_gap, last_progress, longest_no_progress, previous_height = 0, started, 0, 0
             while time.monotonic() < deadline:
                 if (args.start_second_peer_after_first_drop and len(peers) == 1 and
                         peers[0].dropped.is_set()):
-                    report["second_peer_started_after_drop_seconds"] = time.monotonic() - started
-                    start_peer("B", second_bandwidth)
+                    if first_drop_observed is None:
+                        first_drop_observed = time.monotonic()
+                        report["first_peer_drop_observed_seconds"] = first_drop_observed - started
+                    if time.monotonic() - first_drop_observed >= args.second_peer_delay_after_drop_seconds:
+                        report["second_peer_started_after_drop_seconds"] = time.monotonic() - started
+                        start_peer("B", second_bandwidth)
                 try:
                     chain = rpc("getblockchaininfo")
                 except RPCUnavailable as error:
@@ -347,13 +352,15 @@ def main():
                         help="Have A close after this many delivered blocks")
     parser.add_argument("--start-second-peer-after-first-drop", action="store_true",
                         help="Delay B's connection until configured A closes")
+    parser.add_argument("--second-peer-delay-after-drop-seconds", type=float, default=0,
+                        help="Additional delay before starting B after configured A closes")
     parser.add_argument("--sample-ms", type=float, default=100)
     parser.add_argument("--timeout", type=float, default=600)
     parser.add_argument("--port", type=int, default=18643)
     parser.add_argument("--rpcport", type=int, default=18653)
     args = parser.parse_args()
     timing = (args.bandwidth_kib, args.first_peer_bandwidth_kib, args.second_peer_bandwidth_kib,
-              args.latency_ms, args.sample_ms, args.timeout)
+              args.latency_ms, args.second_peer_delay_after_drop_seconds, args.sample_ms, args.timeout)
     if not all(value is None or math.isfinite(value) for value in timing):
         parser.error("timing and bandwidth must be finite")
     if (args.repeat < 1 or args.bandwidth_kib <= 0 or args.latency_ms < 0 or
@@ -361,6 +368,7 @@ def main():
             (args.first_peer_bandwidth_kib is not None and args.first_peer_bandwidth_kib <= 0) or
             (args.second_peer_bandwidth_kib is not None and args.second_peer_bandwidth_kib <= 0) or
             (args.first_peer_drop_after_blocks is not None and args.first_peer_drop_after_blocks < 1) or
+            args.second_peer_delay_after_drop_seconds < 0 or
             (args.block_download_window is not None and
              not 1 <= args.block_download_window <= 4096)):
         parser.error("invalid repeat, bandwidth, latency, sample interval or timeout")
@@ -375,6 +383,9 @@ def main():
     if (args.start_second_peer_after_first_drop and
             (args.stall or args.first_peer_drop_after_blocks is None)):
         parser.error("--start-second-peer-after-first-drop needs a non-stalled dropping A")
+    if (args.second_peer_delay_after_drop_seconds != 0 and
+            not args.start_second_peer_after_first_drop):
+        parser.error("--second-peer-delay-after-drop-seconds needs delayed B")
     manifest = {"fixture_sha256": args.sha256, "blocks": len(headers),
                 "daemon_sha256": hashlib.sha256(args.daemon.read_bytes()).hexdigest(),
                 "delay_mode": args.delay_mode, "delay_ms_per_getdata": args.latency_ms,
@@ -389,6 +400,7 @@ def main():
                      "block_download_window": args.block_download_window,
                      "first_peer_drop_after_blocks": args.first_peer_drop_after_blocks,
                      "start_second_peer_after_first_drop": args.start_second_peer_after_first_drop,
+                     "second_peer_delay_after_drop_seconds": args.second_peer_delay_after_drop_seconds,
                      "fixture_peer_tcp_nodelay_requested": args.tcp_nodelay,
                      "timeout_seconds": args.timeout, "request_counting": "on getdata receipt"})
     (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")

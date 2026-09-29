@@ -3594,3 +3594,32 @@ wire behavior, validation, cryptography, wallets, production state, and
 Worldstream-owned storage remain unchanged.  Remaining risk: public-WAN loss,
 long reconnection delays, and more than one independently diverse replacement
 source remain unmeasured.
+
+## Ten-second source outage resumes on a late replacement peer
+
+Measurement support: delayed-B fixtures now accept a finite nonnegative
+post-drop wait and record both the first observed drop and B's actual start
+time.  The option is rejected outside the delayed-replacement scenario, so a
+normal two-peer lane cannot silently gain an artificial wait.
+
+Result: with the same isolated checked fixture and A closing after 256
+responses, B was deliberately withheld for 10 seconds.  The harness observed
+A's close at 1.12 s and opened B at 11.16 s.  The node accepted B, reissued 127
+requests, reached height 4,608 in 123.42 s (37.34 blocks/s), and had an 11.09
+s maximum observed validated-height gap.  That gap closely follows the
+intentional no-source interval rather than adding a second scheduler delay.
+Final request counters were zero; B served 4,449 blocks after A's 256; there
+were no peer errors, RPC failures, or swap; RSS peaked at 97,844 KiB; daemon
+CPU was 146.91 s; and shutdown was graceful.
+
+Decision: this is bounded evidence that normal IBD scheduling resumes after a
+meaningful temporary absence of download sources.  The 9.54 s elapsed increase
+over the immediate-replacement run is expected from the configured 10-second
+wait and is not a code regression.  No C++ timeout, retry, or ownership change
+is justified without a recovery delay beyond the real source outage.
+
+Consensus impact: NONE.  Only isolated test harness and coordination evidence
+changed; consensus, wire behavior, validation, cryptography, wallets,
+production data, and Worldstream-owned storage remain unchanged.  Remaining
+risk: public-WAN conditions, 300-second request-deadline behavior, and diverse
+multi-peer replacement remain unmeasured.
