@@ -2074,8 +2074,17 @@ bool BootstrapOpenStreamAndVerifyManifestForTest(const CService& peerAddress,
 // still rests on the per-file hashes plus the post-import chainstate commitment
 // check, exactly as the single-stream path. Any stream failure aborts the whole
 // download.
-static bool DownloadBootstrapSnapshotParallel(const CService& peerAddress, const std::string& peer, const CBootstrapSnapshotManifest& manifest, const boost::filesystem::path& staging, int timeout_ms, int nStreams, std::string& error)
+static bool DownloadBootstrapSnapshotParallel(const std::vector<CService>& peerAddresses,
+                                              const std::string& peer,
+                                              const CBootstrapSnapshotManifest& manifest,
+                                              const boost::filesystem::path& staging,
+                                              int timeout_ms, int nStreams,
+                                              std::string& error)
 {
+    if (peerAddresses.empty()) {
+        error = "bootstrap parallel download has no peer address";
+        return false;
+    }
     LogPrintf("Bootstrap: downloading snapshot from peer %s over %d parallel streams: %u files, %llu bytes (height %d)\n",
         peer, nStreams,
         (unsigned int)manifest.vFiles.size(),
@@ -2145,7 +2154,12 @@ static bool DownloadBootstrapSnapshotParallel(const CService& peerAddress, const
                      !abortFlag.load(std::memory_order_relaxed); ++attempt) {
                     SOCKET s = INVALID_SOCKET;
                     std::string e;
-                    const bool opened = OpenBootstrapStreamAndVerifyManifest(peerAddress, timeout_ms,
+                    // Every source must return the exact manifest already
+                    // validated from the initiating peer before it can serve a
+                    // chunk. Rotate retries so a reconnecting source cannot
+                    // monopolize every parallel worker.
+                    const CService& source = peerAddresses[(w + attempt) % peerAddresses.size()];
+                    const bool opened = OpenBootstrapStreamAndVerifyManifest(source, timeout_ms,
                                                                               manifest, s, e);
                     bool retryable = false;
                     if (opened) {
@@ -2251,7 +2265,17 @@ bool BootstrapDownloadSnapshotParallelForTest(const CService& peerAddress,
                                               int timeout_ms, int nStreams,
                                               std::string& error)
 {
-    return DownloadBootstrapSnapshotParallel(peerAddress, "loopback", manifest, staging,
+    return DownloadBootstrapSnapshotParallel(std::vector<CService>(1, peerAddress), "loopback", manifest, staging,
+                                             timeout_ms, nStreams, error);
+}
+
+bool BootstrapDownloadSnapshotParallelFromPeersForTest(
+    const std::vector<CService>& peerAddresses,
+    const CBootstrapSnapshotManifest& manifest,
+    const boost::filesystem::path& staging, int timeout_ms, int nStreams,
+    std::string& error)
+{
+    return DownloadBootstrapSnapshotParallel(peerAddresses, "loopback", manifest, staging,
                                              timeout_ms, nStreams, error);
 }
 
@@ -3570,7 +3594,30 @@ bool ProvisionalAcceptTrustlessSnapshot(const boost::filesystem::path& data_dir,
     return true;
 }
 
-bool BootstrapFromPeer(const std::string& peer, const boost::filesystem::path& data_dir, std::string& error)
+static bool AddBootstrapParallelPeerAddress(std::vector<CService>& addresses,
+                                            const std::string& peer)
+{
+    // The parallel downloader opens direct CService sockets. Keep named-proxy
+    // routing on the existing single-source path rather than resolving a
+    // hostname outside its proxy policy.
+    if (HaveNameProxy()) {
+        return false;
+    }
+    int port = Params().GetDefaultPort();
+    std::string host;
+    SplitHostPort(peer, port, host);
+    const CService address(CNetAddr(host, fNameLookup), port);
+    if (!address.IsValid() ||
+        std::find(addresses.begin(), addresses.end(), address) != addresses.end()) {
+        return false;
+    }
+    addresses.push_back(address);
+    return true;
+}
+
+bool BootstrapFromPeer(const std::string& peer, const boost::filesystem::path& data_dir,
+                       std::string& error,
+                       const std::vector<std::string>& peerCandidates)
 {
     if (!IsBootstrapFreshChainDatadir(data_dir, error)) {
         return false;
@@ -3645,7 +3692,13 @@ bool BootstrapFromPeer(const std::string& peer, const boost::filesystem::path& d
             // manifest connection (manifest already fetched and validated).
             CloseSocket(socket);
             socket = INVALID_SOCKET;
-            downloadOk = DownloadBootstrapSnapshotParallel(peerAddress, peer, manifest, staging, BOOTSTRAP_NET_TIMEOUT_MS, nStreams, error);
+            std::vector<CService> parallelPeers(1, peerAddress);
+            for (size_t i = 0; i < peerCandidates.size() && i < BOOTSTRAP_MAX_STREAMS &&
+                               parallelPeers.size() < BOOTSTRAP_MAX_STREAMS; ++i) {
+                AddBootstrapParallelPeerAddress(parallelPeers, peerCandidates[i]);
+            }
+            downloadOk = DownloadBootstrapSnapshotParallel(parallelPeers, peer, manifest, staging,
+                                                           BOOTSTRAP_NET_TIMEOUT_MS, nStreams, error);
         }
         if (!downloadOk) {
             boost::filesystem::remove_all(staging);

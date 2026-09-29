@@ -106,7 +106,9 @@ bool ImportBootstrapDatadir(const boost::filesystem::path& source_root,
                             std::string& error);
 bool BootstrapFromPeer(const std::string& peer,
                        const boost::filesystem::path& data_dir,
-                       std::string& error);
+                       std::string& error,
+                       const std::vector<std::string>& peerCandidates =
+                           std::vector<std::string>());
 
 //! Best-effort decentralized discovery of NODE_BOOTSTRAP peers from the active
 //! network's DNS/fixed seeds, via a bounded bootstrap-handshake + getaddr/addr

@@ -21,6 +21,7 @@
 #include <atomic>
 #include <cstring>
 #include <iterator>
+#include <limits>
 #include <map>
 #include <set>
 #include <stdexcept>
@@ -72,6 +73,9 @@ extern bool BootstrapDownloadSnapshotParallelForTest(const CService&,
                                                      const boost::filesystem::path&, int,
                                                      int,
                                                      std::string&);
+extern bool BootstrapDownloadSnapshotParallelFromPeersForTest(
+    const std::vector<CService>&, const CBootstrapSnapshotManifest&,
+    const boost::filesystem::path&, int, int, std::string&);
 extern bool BootstrapAbortableReceiveForTest(SOCKET, int, std::atomic<bool>&,
                                              std::string&);
 
@@ -309,6 +313,85 @@ static CService StartSilentLoopbackPeer(boost::thread& server, bool& serverSawCl
                 char byte = 0;
                 serverSawClose = recv(client, &byte, 1, 0) == 0;
             }
+            CloseSocket(client);
+        }
+        CloseSocket(listener);
+    });
+    return service;
+}
+
+// One independent bootstrap source for the source-diversity regression. It
+// serves exactly one fully verified file request after returning the same
+// manifest, so two workers must use two distinct loopback listeners.
+static CService StartOneRequestBootstrapPeer(const CBootstrapSnapshotManifest& manifest,
+                                             const std::vector<std::string>& files,
+                                             boost::thread& server, bool& serverOk,
+                                             unsigned int& servedFile)
+{
+    SOCKET listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    BOOST_REQUIRE(listener != INVALID_SOCKET);
+    struct sockaddr_in address;
+    std::memset(&address, 0, sizeof(address));
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    address.sin_port = 0;
+    BOOST_REQUIRE_EQUAL(bind(listener, (struct sockaddr*)&address, sizeof(address)), 0);
+    BOOST_REQUIRE_EQUAL(listen(listener, 1), 0);
+#ifdef WIN32
+    int addressLength = sizeof(address);
+#else
+    socklen_t addressLength = sizeof(address);
+#endif
+    BOOST_REQUIRE_EQUAL(getsockname(listener, (struct sockaddr*)&address, &addressLength), 0);
+    const CService service("127.0.0.1", ntohs(address.sin_port));
+
+    server = boost::thread([=, &serverOk, &servedFile]() mutable {
+        SOCKET client = INVALID_SOCKET;
+        serverOk = false;
+        servedFile = std::numeric_limits<unsigned int>::max();
+        try {
+            if (!AcceptTestBootstrapClient(listener, client)) {
+                throw std::runtime_error("missing source-diversity client");
+            }
+            std::string command;
+            CDataStream requestPayload(SER_NETWORK, PROTOCOL_VERSION);
+            CDataStream empty(SER_NETWORK, PROTOCOL_VERSION);
+            CDataStream version(SER_NETWORK, INIT_PROTO_VERSION);
+            const CAddress remote(service, NODE_BOOTSTRAP);
+            version << PROTOCOL_VERSION << uint64_t(NODE_BOOTSTRAP) << GetTime()
+                    << remote << remote << uint64_t(1) << std::string("/loopback/") << 0 << true;
+            if (!ReceiveTestBootstrapMessage(client, command) || command != "version" ||
+                !SendTestBootstrapMessage(client, "version", version) ||
+                !ReceiveTestBootstrapMessage(client, command) || command != "verack" ||
+                !SendTestBootstrapMessage(client, "verack", empty) ||
+                !ReceiveTestBootstrapMessage(client, command) || command != NetMsgType::GETBSMAN) {
+                throw std::runtime_error("invalid source-diversity handshake");
+            }
+            CDataStream manifestPayload(SER_NETWORK, PROTOCOL_VERSION);
+            manifestPayload << manifest;
+            if (!SendTestBootstrapMessage(client, NetMsgType::BSMAN, manifestPayload) ||
+                !ReceiveTestBootstrapMessage(client, command, &requestPayload) ||
+                command != NetMsgType::GETBSCHK) {
+                throw std::runtime_error("missing source-diversity request");
+            }
+            CBootstrapSnapshotChunkRequest request;
+            requestPayload >> request;
+            if (!requestPayload.empty() || request.nFileIndex >= files.size() ||
+                request.nOffset != 0 || request.nLength != files[request.nFileIndex].size()) {
+                throw std::runtime_error("invalid source-diversity request");
+            }
+            servedFile = request.nFileIndex;
+            CBootstrapSnapshotChunk chunk;
+            chunk.nFileIndex = request.nFileIndex;
+            chunk.nOffset = 0;
+            chunk.vData.assign(files[request.nFileIndex].begin(), files[request.nFileIndex].end());
+            CDataStream chunkPayload(SER_NETWORK, PROTOCOL_VERSION);
+            chunkPayload << chunk;
+            serverOk = SendTestBootstrapMessage(client, NetMsgType::BSCHK, chunkPayload);
+        } catch (const std::exception&) {
+            serverOk = false;
+        }
+        if (client != INVALID_SOCKET) {
             CloseSocket(client);
         }
         CloseSocket(listener);
@@ -1834,6 +1917,47 @@ BOOST_AUTO_TEST_CASE(bootstrap_loopback_parallel_streams_assign_disjoint_files)
     BOOST_CHECK(serverOk);
     BOOST_CHECK_EQUAL(requests[0], 1U);
     BOOST_CHECK_EQUAL(requests[1], 1U);
+    for (size_t i = 0; i < files.size(); ++i) {
+        boost::filesystem::ifstream staged(staging / manifest.vFiles[i].strPath, std::ios::binary);
+        const std::string got((std::istreambuf_iterator<char>(staged)), std::istreambuf_iterator<char>());
+        BOOST_CHECK_EQUAL(got, files[i]);
+    }
+    boost::filesystem::remove_all(staging);
+}
+
+BOOST_AUTO_TEST_CASE(bootstrap_parallel_streams_use_distinct_verified_sources)
+{
+    const std::vector<std::string> files = {DeterministicBytes(127, 181), DeterministicBytes(113, 182)};
+    CBootstrapSnapshotManifest manifest;
+    manifest.nChunkSize = 128;
+    manifest.nSnapshotBytes = files[0].size() + files[1].size();
+    for (size_t i = 0; i < files.size(); ++i) {
+        CBootstrapSnapshotFile file;
+        file.strPath = i == 0 ? "blocks/blk00000.dat" : "blocks/blk00001.dat";
+        file.nSize = files[i].size();
+        file.hashSha256 = Sha256OfBytes(std::vector<unsigned char>(files[i].begin(), files[i].end()));
+        manifest.vFiles.push_back(file);
+    }
+
+    bool firstOk = false;
+    bool secondOk = false;
+    unsigned int firstFile = 99;
+    unsigned int secondFile = 99;
+    boost::thread firstServer;
+    boost::thread secondServer;
+    const CService first = StartOneRequestBootstrapPeer(manifest, files, firstServer, firstOk, firstFile);
+    const CService second = StartOneRequestBootstrapPeer(manifest, files, secondServer, secondOk, secondFile);
+    const boost::filesystem::path staging = boost::filesystem::current_path() /
+        boost::filesystem::unique_path("zclassic-bootstrap-diverse-%%%%-%%%%-%%%%");
+    std::string error;
+    const std::vector<CService> peers = {first, second};
+    BOOST_CHECK_MESSAGE(BootstrapDownloadSnapshotParallelFromPeersForTest(peers, manifest, staging,
+                                                                           1000, 2, error), error);
+    firstServer.join();
+    secondServer.join();
+    BOOST_CHECK(firstOk);
+    BOOST_CHECK(secondOk);
+    BOOST_CHECK_NE(firstFile, secondFile);
     for (size_t i = 0; i < files.size(); ++i) {
         boost::filesystem::ifstream staged(staging / manifest.vFiles[i].strPath, std::ios::binary);
         const std::string got((std::istreambuf_iterator<char>(staged)), std::istreambuf_iterator<char>());

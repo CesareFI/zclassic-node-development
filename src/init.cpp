@@ -2472,7 +2472,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
                                              peerIndex, nBootstrapPeers,
                                              attempt, nBootstrapAttempts,
                                              fTrustlessMode ? "trustless" : "anchor", 0);
-                    if (BootstrapFromPeer(peer, GetDataDir(), bootstrap_error)) {
+                    if (BootstrapFromPeer(peer, GetDataDir(), bootstrap_error, bootstrapPeers)) {
                         bootstrap_snapshot_ran = true;
                         break;
                     }
@@ -2515,7 +2515,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
                         const std::string& peer = discoveredPeers[discoveredOffset];
                         if (ShutdownRequested())
                             break;
-                        if (BootstrapFromPeer(peer, GetDataDir(), bootstrap_error)) {
+                        if (BootstrapFromPeer(peer, GetDataDir(), bootstrap_error, discoveredPeers)) {
                             bootstrap_snapshot_ran = true;
                             break;
                         }

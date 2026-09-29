@@ -2427,3 +2427,38 @@ storage/startup work. Remaining risk: a failed stream still relies on the
 existing bounded outer peer schedule for alternate-source recovery. Recommended
 next investigation: measure configured-peer manifest-source diversity under
 reconnect churn without weakening exact manifest verification.
+
+## Parallel bootstrap uses configured verified sources
+
+Baseline and root cause: even when the bounded bootstrap retry schedule had
+multiple configured peers, every parallel worker opened and retried streams
+only against the peer that supplied the initial manifest. A transiently
+reconnecting source could therefore monopolize all flows until the entire
+attempt failed and the outer retry schedule restarted from empty staging.
+
+Fix: `BootstrapFromPeer` now passes its current bounded candidate set into the
+parallel downloader. Workers begin round-robin across distinct directly
+resolvable `CService` endpoints and rotate retry attempts. Every stream still
+performs the existing handshake and requires a byte-identical match to the
+already validated master manifest before a chunk is accepted; per-file SHA-256
+and post-import validation are unchanged. Named-proxy routing deliberately
+retains the pre-existing primary-only path, avoiding any hostname resolution
+outside proxy policy. Sources are capped by the established 16-stream limit.
+
+After-result and regression proof: two independent localhost listeners serving
+the same manifest each received one worker request, and both staged files
+matched their declared SHA-256 hashes (0.27 s, 28,096 KB maximum RSS). Existing
+reconnect and abort cancellation cases passed in 0.28 s and 0.17 s. The full
+74-case bootstrap protocol group passed in 12.03 s at 170,184 KB maximum RSS;
+the incremental native binary rebuilt and `git diff --check` passed. The
+fixture is deterministic protocol evidence, not WAN throughput measurement.
+
+Consensus impact: NONE. Source selection occurs only after the master manifest
+has passed existing validation; serialization, validation, chain history, PoW,
+monetary policy, upgrades, cryptography, wallets, and production datadirs are
+unchanged. Worldstream `origin/main` at `580eba3ce` remains complementary C23
+storage/startup work. ASan/UBSan remain unrun because a cold build would breach
+the 10 GB disk reserve. Remaining risk: named-proxy source diversity remains
+intentionally unchanged pending a proxy-native design. Recommended next
+investigation: bounded block-download scheduler source utilization under mixed
+healthy and slow outbound peers.
