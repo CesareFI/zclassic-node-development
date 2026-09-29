@@ -76,7 +76,9 @@ def main():
             assert int(original) == primary.pid
             cases = [("locked", [], "Cannot obtain a lock on data directory"),
                      ("invalid", ["-maxblocksinflight=0"],
-                      "-maxblocksinflight must be an integer")]
+                      "-maxblocksinflight must be an integer"),
+                     ("invalid-window", ["-blockdownloadwindow=0"],
+                      "-blockdownloadwindow must be an integer")]
             for name, extra, expected_error in cases:
                 result = failed_start(command + extra, output / (name + ".log"), expected_error)
                 result["pid_preserved"] = pidpath.exists() and pidpath.read_text() == original

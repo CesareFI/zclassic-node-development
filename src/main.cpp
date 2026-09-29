@@ -93,6 +93,7 @@ uint64_t nPruneTarget = 0;
  */
 int64_t nMaxTipAge = DEFAULT_MAX_TIP_AGE;
 int nMaxBlocksInTransitPerPeer = MAX_BLOCKS_IN_TRANSIT_PER_PEER;
+int nBlockDownloadWindow = BLOCK_DOWNLOAD_WINDOW;
 
 boost::optional<unsigned int> expiryDeltaArg = boost::none;
 
@@ -825,7 +826,7 @@ void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<con
     // Never fetch further than the best block we know the peer has, or more than BLOCK_DOWNLOAD_WINDOW + 1 beyond the last
     // linked block we have in common with this peer. The +1 is so we can detect stalling, namely if we would be able to
     // download that next block if the window were 1 larger.
-    int nWindowEnd = state->pindexLastCommonBlock->nHeight + BLOCK_DOWNLOAD_WINDOW;
+    int nWindowEnd = state->pindexLastCommonBlock->nHeight + nBlockDownloadWindow;
     int nMaxHeight = std::min<int>(state->pindexBestKnownBlock->nHeight, nWindowEnd + 1);
     NodeId waitingfor = -1;
     while (pindexWalk->nHeight < nMaxHeight) {

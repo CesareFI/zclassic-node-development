@@ -99,6 +99,8 @@ static const unsigned int MAX_LOCATOR_SZ = 101;
  *  degree of disordering of blocks on disk (which make reindexing and in the future perhaps pruning
  *  harder). We'll probably want to make this a per-peer adaptive value at some point. */
 static const unsigned int BLOCK_DOWNLOAD_WINDOW = 4096;
+/** Startup-only configured look-ahead cap, bounded by the historic default. */
+extern int nBlockDownloadWindow;
 /** Time to wait (in seconds) between writing blocks/block index to disk. */
 static const unsigned int DATABASE_WRITE_INTERVAL = 60 * 60;
 /** Time to wait (in seconds) between flushing chainstate to disk. */

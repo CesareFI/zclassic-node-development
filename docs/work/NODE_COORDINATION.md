@@ -3360,3 +3360,54 @@ Recommended next investigation: use a representative verified historical mix
 and statistical profiler before evaluating either a lock-free immutable IBD
 status snapshot or pre-lock proof verification; both require explicit
 consensus-parity acceptance, not a timeout workaround.
+
+## Configurable bounded block-download look-ahead
+
+Bottleneck/risk: the measured stalled-first-peer run above is correct but lets
+healthy peers accumulate bodies through the fixed 4,096-block look-ahead before
+the existing two-second staller rule begins.  On a small node this also retains
+unconnected validated bodies and their bandwidth for that interval.
+
+Baseline: the existing 4,609-block isolated localhost fixture with a stalled
+first source, two peers, a 128-block per-peer request limit, 1 MiB/s pacing,
+and normal validation reached height 4,608 in 117.54 s.  It received
+39,130,247 bytes, served B as far as 4,096 heights ahead of the active tip,
+disconnected A at 21.15 s, and observed a 23.12 s longest validated-height
+gap.  The default must remain safe for ordinary peers, so this result does not
+justify silently shrinking it for every operator.
+
+Fix: add the startup-only `-blockdownloadwindow=<1..4096>` cap.  Its default
+is the unchanged historic 4,096.  It changes only the local scheduler's
+maximum height look-ahead; peer messages, block contents, validation, request
+ownership, per-peer in-flight capacity, and ordinary default behavior remain
+unchanged.  `getnetworkinfo` reports the effective value so an operator and
+the isolated harness can verify the startup configuration.  Invalid values
+fail closed during startup.
+
+After measurement: with the explicit cap `512`, otherwise identical fixture
+and one controlled run reached height 4,608 in 113.48 s (40.61 blocks/s),
+received 32,510,923 bytes, and had a 512-height maximum served-ahead value.
+A was disconnected at 6.04 s and the longest progress gap was 6.09 s.  The
+expected 128 stalled requests were reassigned; final ownership counters were
+zero, no swap occurred, and the daemon exited through a successful graceful
+RPC shutdown.  Against this particular single-run baseline, that is 3.5%
+less elapsed time, 16.9% less received payload, and much less unconnected
+look-ahead.  It is a bounded localhost result, not a WAN throughput claim;
+lower caps can trade buffer depth for throughput on high-latency paths.
+
+Regression proof: the exact 64-height scheduling regression passed, along
+with the existing out-of-order/window-stall and monotonic-clock cases.  The
+isolated pidfile startup group passed with the new zero-value rejection while
+the primary local node remained alive.  The bounded benchmark also verified
+the parsed RPC value and all end-state download invariants.  The captured full
+113-case `block_download_tests` group passed in 114.58 s at 214,852 KiB peak
+RSS.  Sanitizer and cold full-build gates remain unrun to retain the required
+disk reserve.
+
+Consensus impact: NONE.  No consensus predicate, serialization, chain
+history, PoW, monetary policy, upgrade behavior, cryptography, wallet, or
+production data changed.  Worldstream's startup/storage work is unaffected;
+this is an opt-in native scheduler bound.  Remaining risk: there is no
+representative WAN-loss or high-latency measurement establishing an automatic
+cap.  Recommended next investigation: collect that bounded evidence before
+considering any adaptive policy; do not alter the default from this result.

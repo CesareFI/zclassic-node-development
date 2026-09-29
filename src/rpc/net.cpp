@@ -476,6 +476,7 @@ UniValue getnetworkinfo(const UniValue& params, bool fHelp)
             "  \"subversion\": \"/MagicBean:x.y.z[-v]/\",     (string) the server subversion string\n"
             "  \"protocolversion\": xxxxx,              (numeric) the protocol version\n"
             "  \"maxblocksinflight\": xxxxx,             (numeric) maximum requested blocks per peer\n"
+            "  \"blockdownloadwindow\": xxxxx,           (numeric) maximum block-height look-ahead during download\n"
             "  \"localservices\": \"xxxxxxxxxxxxxxxx\", (string) the services we offer to the network\n"
             "  \"timeoffset\": xxxxx,                   (numeric) the time offset\n"
             "  \"connections\": xxxxx,                  (numeric) the number of connections\n"
@@ -511,6 +512,7 @@ UniValue getnetworkinfo(const UniValue& params, bool fHelp)
     obj.push_back(Pair("subversion",    strSubVersion));
     obj.push_back(Pair("protocolversion",PROTOCOL_VERSION));
     obj.push_back(Pair("maxblocksinflight", nMaxBlocksInTransitPerPeer));
+    obj.push_back(Pair("blockdownloadwindow", nBlockDownloadWindow));
     obj.push_back(Pair("localservices",       strprintf("%016x", nLocalServices.load())));
     obj.push_back(Pair("timeoffset",    GetTimeOffset()));
     {

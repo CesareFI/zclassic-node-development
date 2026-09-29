@@ -131,6 +131,7 @@ public:
 struct DownloadSetup : TestingSetup {
     std::vector<CBlock> blocks;
     const int savedDownloadLimit = nMaxBlocksInTransitPerPeer;
+    const int savedDownloadWindow = nBlockDownloadWindow;
     const int64_t start = 1800000000000000LL;
 
     void SetClocks(int64_t time)
@@ -166,7 +167,7 @@ struct DownloadSetup : TestingSetup {
         BOOST_REQUIRE(blocks.front().GetHash() == Params().GetConsensus().hashGenesisBlock);
     }
 
-    ~DownloadSetup() { SetMockTime(0); SetClocks(0); nMaxBlocksInTransitPerPeer = savedDownloadLimit; }
+    ~DownloadSetup() { SetMockTime(0); SetClocks(0); nMaxBlocksInTransitPerPeer = savedDownloadLimit; nBlockDownloadWindow = savedDownloadWindow; }
 
     void PrepareTransport(CNode& peer)
     {
@@ -1882,6 +1883,22 @@ BOOST_AUTO_TEST_CASE(out_of_order_block_does_not_reset_window_stall)
     BOOST_REQUIRE(SendMessages(owners.front().get(), false));
     BOOST_CHECK(owners.front()->fDisconnect);
     BOOST_CHECK_EQUAL(Stats(*owners.front()).nBlocksInFlight, 0);
+}
+
+BOOST_AUTO_TEST_CASE(configured_download_window_bounds_ahead_requests)
+{
+    BlockWindowFixture branch;
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "window-cap", false);
+    nMaxBlocksInTransitPerPeer = MAX_BLOCKS_IN_TRANSIT_PER_PEER;
+    nBlockDownloadWindow = 64;
+    PrepareTransport(peer);
+    CDataStream inventory(SER_NETWORK, PROTOCOL_VERSION);
+    inventory << std::vector<CInv>{CInv(MSG_BLOCK, branch.Tip())};
+    BOOST_REQUIRE(ProcessMessage(&peer, "inv", inventory, GetTime()));
+    BOOST_REQUIRE(SendMessages(&peer, false));
+    BOOST_CHECK_EQUAL(Stats(peer).nBlocksInFlight, nBlockDownloadWindow);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight,
+                      static_cast<uint64_t>(nBlockDownloadWindow));
 }
 
 BOOST_AUTO_TEST_CASE(socket_disconnect_releases_requests_before_finalization)

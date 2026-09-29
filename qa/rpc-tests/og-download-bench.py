@@ -164,6 +164,8 @@ def run(args, blocks, headers, limit, repeat):
                "-dnsseed=0", "-listenonion=0", "-upnp=0", "-natpmp=0", "-maxconnections=32",
                f"-rpcport={args.rpcport}", f"-port={args.port}", "-bind=127.0.0.1",
                f"-maxblocksinflight={limit}", "-printtoconsole=1"]
+    if args.block_download_window is not None:
+        command.append(f"-blockdownloadwindow={args.block_download_window}")
     report = {"limit": limit, "repeat": repeat, "stall": args.stall, "pass": False,
               "command": command, "rpc_unavailable_samples": []}
     peers, samples = [], []
@@ -181,6 +183,8 @@ def run(args, blocks, headers, limit, repeat):
                         raise
                     time.sleep(0.2)
             assert rpc("getnetworkinfo")["maxblocksinflight"] == limit
+            assert rpc("getnetworkinfo")["blockdownloadwindow"] == (
+                args.block_download_window if args.block_download_window is not None else 4096)
             before = resources(daemon.pid)
             host_before = host_cpu()
             started = time.monotonic()
@@ -294,6 +298,8 @@ def main():
     parser.add_argument("--daemon", type=pathlib.Path, default=WIRE.ROOT / "src/zclassicd")
     parser.add_argument("--cli", type=pathlib.Path, default=WIRE.ROOT / "src/zclassic-cli")
     parser.add_argument("--limits", nargs="+", type=int, choices=(16, 32, 64, 128), default=[16, 32, 64, 128])
+    parser.add_argument("--block-download-window", type=int,
+                        help="Pass a bounded startup look-ahead cap to the daemon")
     parser.add_argument("--repeat", type=int, default=1)
     parser.add_argument("--stall", action="store_true")
     parser.add_argument("--require-window-stall", action="store_true",
@@ -312,7 +318,10 @@ def main():
     timing = (args.bandwidth_kib, args.latency_ms, args.sample_ms, args.timeout)
     if not all(math.isfinite(value) for value in timing):
         parser.error("timing and bandwidth must be finite")
-    if args.repeat < 1 or args.bandwidth_kib <= 0 or args.latency_ms < 0 or args.sample_ms < 20 or args.timeout <= 0:
+    if (args.repeat < 1 or args.bandwidth_kib <= 0 or args.latency_ms < 0 or
+            args.sample_ms < 20 or args.timeout <= 0 or
+            (args.block_download_window is not None and
+             not 1 <= args.block_download_window <= 4096)):
         parser.error("invalid repeat, bandwidth, latency, sample interval or timeout")
     args.output = args.output.resolve()
     args.output.mkdir(parents=True)
@@ -328,6 +337,7 @@ def main():
                 "sample_ms": args.sample_ms}
     manifest.update({"limits": args.limits, "repeat": args.repeat, "stall": args.stall,
                      "require_window_stall": args.require_window_stall,
+                     "block_download_window": args.block_download_window,
                      "fixture_peer_tcp_nodelay_requested": args.tcp_nodelay,
                      "timeout_seconds": args.timeout, "request_counting": "on getdata receipt"})
     (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
