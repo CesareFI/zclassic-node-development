@@ -3498,3 +3498,37 @@ wire compatibility, validation, cryptography, wallets, production data, and
 Worldstream-owned storage work remain unchanged.  Recommended next
 investigation: measure a loss/diverse-speed fixture before considering
 latency-aware or fairness policy.
+
+## Diverse-speed fixture finds no safe scheduler change in this CPU-bound lane
+
+Measurement support: the isolated OG benchmark now accepts explicit payload
+bandwidths for its first and second local peers.  Both values must be finite
+and positive when supplied, are recorded in its manifest, and default to the
+existing shared bandwidth.  The invalid-zero rejection and the omitted-option
+parse path were checked without starting a daemon.
+
+Result: with the same verified fixture, 100 ms pipelined response latency,
+1 MiB/s second peer, a 512 KiB/s first peer, TCP_NODELAY, and one status sample
+per second, normal validation reached height 4,608 in 112.38 s (41.01
+blocks/s).  Daemon CPU was 146.96 s, peak RSS was 98,328 KiB, swap was zero,
+and final in-flight counters were zero.  The slower first peer still served
+3,857 requests while the faster later peer served 751; there were no duplicate
+requests, disconnects, peer errors, or status-RPC failures, and shutdown was
+graceful.
+
+Comparison and decision: this is statistically a near match for the
+same-speed 111.29 s two-peer run, not evidence that forced rebalancing would
+improve time-to-tip.  A separate 256 KiB/s first-peer attempt with 100 ms
+status polling became unobservable after repeated status RPC failures at
+85.3 s; the daemon remained alive and its peer cleanup followed the harness's
+failure path, so it is not counted as a network failure.  Reducing the
+observation frequency to one second yielded the valid result above.  No C++
+scheduler change is justified: duplicating healthy in-flight blocks would add
+bandwidth and validation work in a fixture already limited by proof
+verification.
+
+Consensus impact: NONE.  This adds only a deterministic isolated benchmark
+control; no node, consensus, validation, wire, wallet, production, or
+Worldstream-owned storage behavior changed.  Remaining risk: a representative
+loss/reconnect and heterogeneous-WAN fixture is still needed before evaluating
+latency-aware scheduling.

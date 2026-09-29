@@ -188,10 +188,11 @@ def run(args, blocks, headers, limit, repeat):
             before = resources(daemon.pid)
             host_before = host_cpu()
             started = time.monotonic()
-            for name in ("A", "B"):
+            for name, bandwidth in (("A", args.first_peer_bandwidth_kib or args.bandwidth_kib),
+                                    ("B", args.second_peer_bandwidth_kib or args.bandwidth_kib)):
                 peer = BenchPeer(args.port, name, blocks, headers,
                                  not (args.stall and name == "A"),
-                                 latency=args.latency_ms / 1000, bandwidth=args.bandwidth_kib * 1024,
+                                 latency=args.latency_ms / 1000, bandwidth=bandwidth * 1024,
                                  delay_mode=args.delay_mode, tcp_nodelay=args.tcp_nodelay)
                 peers.append(peer)
                 peer.start()
@@ -310,16 +311,23 @@ def main():
                         help="Pipelined block-response latency, or serial per-getdata service delay")
     parser.add_argument("--latency-ms", type=float, default=100)
     parser.add_argument("--bandwidth-kib", type=float, default=1024)
+    parser.add_argument("--first-peer-bandwidth-kib", type=float,
+                        help="Override A's payload bandwidth for a diverse-speed fixture")
+    parser.add_argument("--second-peer-bandwidth-kib", type=float,
+                        help="Override B's payload bandwidth for a diverse-speed fixture")
     parser.add_argument("--sample-ms", type=float, default=100)
     parser.add_argument("--timeout", type=float, default=600)
     parser.add_argument("--port", type=int, default=18643)
     parser.add_argument("--rpcport", type=int, default=18653)
     args = parser.parse_args()
-    timing = (args.bandwidth_kib, args.latency_ms, args.sample_ms, args.timeout)
-    if not all(math.isfinite(value) for value in timing):
+    timing = (args.bandwidth_kib, args.first_peer_bandwidth_kib, args.second_peer_bandwidth_kib,
+              args.latency_ms, args.sample_ms, args.timeout)
+    if not all(value is None or math.isfinite(value) for value in timing):
         parser.error("timing and bandwidth must be finite")
     if (args.repeat < 1 or args.bandwidth_kib <= 0 or args.latency_ms < 0 or
             args.sample_ms < 20 or args.timeout <= 0 or
+            (args.first_peer_bandwidth_kib is not None and args.first_peer_bandwidth_kib <= 0) or
+            (args.second_peer_bandwidth_kib is not None and args.second_peer_bandwidth_kib <= 0) or
             (args.block_download_window is not None and
              not 1 <= args.block_download_window <= 4096)):
         parser.error("invalid repeat, bandwidth, latency, sample interval or timeout")
@@ -332,6 +340,8 @@ def main():
                 "daemon_sha256": hashlib.sha256(args.daemon.read_bytes()).hexdigest(),
                 "delay_mode": args.delay_mode, "delay_ms_per_getdata": args.latency_ms,
                 "bandwidth_kib_per_peer": args.bandwidth_kib,
+                "first_peer_bandwidth_kib": args.first_peer_bandwidth_kib,
+                "second_peer_bandwidth_kib": args.second_peer_bandwidth_kib,
                 "harness_sha256": hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest(),
                 "peer_harness_sha256": hashlib.sha256(pathlib.Path(WIRE.__file__).read_bytes()).hexdigest(),
                 "sample_ms": args.sample_ms}
