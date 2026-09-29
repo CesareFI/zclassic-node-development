@@ -3468,3 +3468,33 @@ consensus, serialization, cryptography, peer wire behavior, wallets, and
 production state are unchanged.  Worldstream remains complementary.  The next
 useful evidence would be a representative historical/WAN fixture with loss and
 peer diversity, not another synthetic window-size permutation.
+
+## Two healthy sources make progress but retain connection-order request bias
+
+Measurement: one fresh isolated run used the same checksummed 4,609-block
+fixture, two healthy local peers, 100 ms pipelined response latency, 1 MiB/s
+per-peer pacing, TCP_NODELAY, the default 4,096 look-ahead, and ordinary full
+block validation.  It reached height 4,608 in 111.29 s (41.40 blocks/s), with
+146.96 daemon CPU seconds, 98,108 KiB peak RSS, and no swap.  It had no
+duplicate or abandoned request, no disconnect, zero final in-flight counters,
+and a successful graceful exit.
+
+Peer-use result: the peer connected first served 3,890 of 4,608 block requests
+(84.4%); the second served 718.  The scheduler did use both sources, but it
+does not forcibly equalize already-valid in-flight work when a later equal peer
+arrives.  The run was 5.5% faster than the matched 100 ms stalled-first-source
+case, yet its 146.96 CPU seconds for 111.29 seconds of elapsed time remains
+consistent with the existing proof-validation attribution.  The 2.83 s longest
+observed progress gap and zero request loss show no starvation or recovery
+failure in this controlled pair.
+
+Decision: connection-order skew alone is not a correctness defect.  Forcing
+duplicate reassignment from a healthy active source would increase bandwidth
+and contention, and this one CPU-bound fixture does not establish a
+time-to-tip benefit.  No scheduler change or duplicate test is justified.
+
+Consensus impact: NONE.  This is measurement/documentation only; consensus,
+wire compatibility, validation, cryptography, wallets, production data, and
+Worldstream-owned storage work remain unchanged.  Recommended next
+investigation: measure a loss/diverse-speed fixture before considering
+latency-aware or fairness policy.
