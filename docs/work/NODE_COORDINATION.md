@@ -3027,6 +3027,37 @@ precludes a cold sanitizer build. Recommended next investigation: bounded
 outer loopback resume/install coverage, or adversarial parent-directory link
 coverage if that path can be tested without a chain copy.
 
+## Bootstrap staging refuses symlinked parent directories
+
+Baseline and root cause: leaf-level no-follow protection does not constrain an
+already-existing parent link. A retained staging tree containing `blocks` as a
+symlink made the normal zero-byte-file preparation follow that parent and write
+`empty.ldb` outside staging. The isolated fixture reproduced this as a
+successful download and an unexpected outside file.
+
+Fix and after-result: parent preparation now walks each manifest-relative
+directory component below the staging root, creates only missing real
+directories, and fails closed on a symlink or any non-directory entry. Both
+the single-threaded precreation stage and each stream's write path use this
+same guard. POSIX leaf opens retain the previous `O_NOFOLLOW` protection.
+
+Regression proof: the parent-link fixture passes in 0.07 s at 29,004 KB RSS;
+the two dangling-leaf regressions also pass in 0.07 s and 0.06 s. The complete
+87-case bootstrap protocol group passes in 12.96 s at 170,404 KB maximum RSS;
+`git diff --check` passes.
+
+Consensus impact: NONE. This only rejects unsafe temporary staging paths;
+manifest validation, hashes, payload validation, serialization, chain history,
+PoW, monetary policy, upgrades, cryptography, wallets, and production
+datadirs are unchanged. Worldstream remains complementary on startup/storage.
+ASan/UBSan remain unrun because the host has 11 GB free and the 10 GB reserve
+precludes a cold sanitizer build. Remaining risk: POSIX protects the leaf
+check/open interval, while hostile concurrent mutation of a parent directory
+would require a larger descriptor-relative traversal to eliminate completely.
+Recommended next investigation: bounded outer loopback resume/install coverage
+or evaluate descriptor-relative directory traversal only if an actual race is
+observed.
+
 ## Legacy single-stream bootstrap rejects symlinked staging files
 
 Coverage gap: parallel staging reuse directly proved symlink refusal, while

@@ -2189,6 +2189,38 @@ BOOST_AUTO_TEST_CASE(bootstrap_single_stream_rejects_dangling_symlinked_partial_
     BOOST_CHECK(!fs::exists(target));
     fs::remove_all(root);
 }
+
+BOOST_AUTO_TEST_CASE(bootstrap_single_stream_rejects_symlinked_staging_parent_directory)
+{
+    namespace fs = boost::filesystem;
+    CBootstrapSnapshotManifest manifest;
+    manifest.nChunkSize = 128;
+    CBootstrapSnapshotFile file;
+    file.strPath = "blocks/empty.ldb";
+    file.nSize = 0;
+    file.hashSha256 = Sha256OfBytes(std::vector<unsigned char>());
+    manifest.vFiles.push_back(file);
+
+    const fs::path root = fs::current_path() /
+        fs::unique_path("zclassic-bootstrap-parent-symlink-%%%%-%%%%-%%%%");
+    const fs::path outside = root / "outside-staging-directory";
+    const fs::path staged = root / file.strPath;
+    fs::create_directories(outside);
+    fs::create_symlink(outside, root / "blocks");
+
+    bool serverOk = false;
+    boost::thread server;
+    const CService peer = StartManifestLoopbackPeer(manifest, false, false, false, "", false,
+                                                     server, serverOk);
+    std::string error;
+    BOOST_CHECK(!BootstrapDownloadSnapshotSingleForTest(peer, manifest, root, 1000, error));
+    server.join();
+    BOOST_CHECK(serverOk);
+    BOOST_CHECK(error.find("not a directory") != std::string::npos);
+    BOOST_CHECK(fs::is_symlink(fs::symlink_status(root / "blocks")));
+    BOOST_CHECK(!fs::exists(outside / "empty.ldb"));
+    fs::remove_all(root);
+}
 #endif
 
 BOOST_AUTO_TEST_CASE(bootstrap_resume_staging_is_manifest_bound_and_fail_closed)

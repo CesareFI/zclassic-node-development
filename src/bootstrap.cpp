@@ -1667,6 +1667,37 @@ static bool SendBootstrapChunkRequest(SOCKET socket, const CBootstrapSnapshotChu
     return SendBootstrapMessage(socket, NetMsgType::GETBSCHK, payload, timeout_ms, error);
 }
 
+// A manifest path is constrained to the staging tree, but an existing symlink
+// in one of its parent components would still redirect normal directory/file
+// creation outside that tree. Materialize each relative parent one component at
+// a time and accept only real directories already present there.
+static bool EnsureBootstrapStagingParents(const boost::filesystem::path& staging,
+                                          const boost::filesystem::path& relative,
+                                          std::string& error)
+{
+    boost::filesystem::path current = staging;
+    try {
+        const boost::filesystem::path parent = relative.parent_path();
+        for (boost::filesystem::path::const_iterator it = parent.begin(); it != parent.end(); ++it) {
+            current /= *it;
+            const boost::filesystem::file_status status = boost::filesystem::symlink_status(current);
+            if (!boost::filesystem::exists(status)) {
+                if (!boost::filesystem::create_directory(current)) {
+                    error = strprintf("could not create bootstrap staging directory: %s", current.string());
+                    return false;
+                }
+            } else if (!boost::filesystem::is_directory(status)) {
+                error = strprintf("bootstrap staging parent is not a directory: %s", current.string());
+                return false;
+            }
+        }
+    } catch (const boost::filesystem::filesystem_error& e) {
+        error = strprintf("could not prepare bootstrap staging directory %s: %s", staging.string(), e.what());
+        return false;
+    }
+    return true;
+}
+
 // Bootstrap staging is a node-owned temporary tree, but never follow a path
 // supplied by a pre-existing staging entry. In particular, exists(path) follows
 // a dangling symlink and fopen("wb") would then create or truncate its target.
@@ -1724,7 +1755,9 @@ static bool CreateEmptyBootstrapFiles(const CBootstrapSnapshotManifest& manifest
             return false;
         }
         const boost::filesystem::path path = staging / relative;
-        boost::filesystem::create_directories(path.parent_path());
+        if (!EnsureBootstrapStagingParents(staging, relative, error)) {
+            return false;
+        }
         FILE* fp = NULL;
         if (!OpenBootstrapStagingFileForWrite(path, fp, error)) {
             return false;
@@ -1831,7 +1864,8 @@ static bool DownloadBootstrapPrepareStaging(const CBootstrapSnapshotManifest& ma
 
     // Pre-create all parent directories up front (single-threaded) so parallel
     // download streams that open files in the same subdir cannot race on
-    // create_directories.
+    // create_directories, and refuse an existing parent symlink before a
+    // worker can redirect a staging write outside the tree.
     try {
         for (size_t i = 0; i < manifest.vFiles.size(); ++i) {
             const CBootstrapSnapshotFile& f = manifest.vFiles[i];
@@ -1843,7 +1877,9 @@ static bool DownloadBootstrapPrepareStaging(const CBootstrapSnapshotManifest& ma
                 error = strprintf("bootstrap manifest has unsafe file path: %s", f.strPath);
                 return false;
             }
-            boost::filesystem::create_directories((staging / relative).parent_path());
+            if (!EnsureBootstrapStagingParents(staging, relative, error)) {
+                return false;
+            }
         }
     } catch (const boost::filesystem::filesystem_error& e) {
         error = strprintf("could not create bootstrap staging directories: %s", e.what());
@@ -1971,7 +2007,10 @@ static bool DownloadBootstrapFileSubset(SOCKET socket, const CBootstrapSnapshotM
             }
             open_path = staging / relative;
             open_part = boost::filesystem::path(open_path.string() + ".part");
-            boost::filesystem::create_directories(open_path.parent_path());
+            if (!EnsureBootstrapStagingParents(staging, relative, error)) {
+                ok = false;
+                break;
+            }
             if (!OpenBootstrapStagingFileForWrite(open_part, fp, error)) {
                 ok = false;
                 break;
