@@ -1562,6 +1562,41 @@ BOOST_AUTO_TEST_CASE(headers_do_not_hide_stall_and_healthy_peer_advances_chain)
     BOOST_CHECK_EQUAL(Stats(healthy).nGlobalValidatedBlocksInFlight, 0);
 }
 
+BOOST_AUTO_TEST_CASE(stalled_outbound_source_releases_work_to_healthy_outbound)
+{
+    CNode stalled(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "A", false);
+    CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "B", false);
+    Handshake(stalled);
+    Handshake(healthy);
+    BOOST_REQUIRE(Stats(stalled).fPreferredDownload);
+    BOOST_REQUIRE(Stats(healthy).fPreferredDownload);
+    Headers(stalled);
+    BOOST_REQUIRE(SendMessages(&stalled, false));
+    BOOST_REQUIRE_EQUAL(Stats(stalled).nBlocksInFlight, 128);
+
+    // B remains eligible but cannot take A's owned historical bodies before
+    // the bounded timeout has established that A made no useful progress.
+    Headers(healthy);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_CHECK_EQUAL(Stats(healthy).nBlocksInFlight, 1);
+    Deliver(healthy, 129);
+    BOOST_CHECK_EQUAL(chainActive.Height(), 0);
+
+    SetClocks(Stats(stalled).nDownloadDeadline + 1);
+    BOOST_REQUIRE(SendMessages(&stalled, false));
+    BOOST_REQUIRE(stalled.fDisconnect);
+    BOOST_CHECK_EQUAL(Stats(stalled).nBlocksInFlight, 0);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
+
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_REQUIRE_EQUAL(Stats(healthy).nBlocksInFlight, 128);
+    for (size_t height = 1; height <= 128; ++height) {
+        Deliver(healthy, height);
+    }
+    BOOST_CHECK_EQUAL(chainActive.Height(), 129);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nBlocksInFlight, 0);
+}
+
 BOOST_AUTO_TEST_CASE(out_of_order_block_does_not_reset_window_stall)
 {
     BlockWindowFixture branch;

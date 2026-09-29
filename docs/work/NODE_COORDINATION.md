@@ -2492,6 +2492,29 @@ storage/startup work. ASan/UBSan remain unrun under the 10 GB disk reserve.
 Recommended next investigation: ordinary block-download scheduling under mixed
 healthy and stalled outbound peers.
 
+## Outbound-to-outbound stalled block recovery
+
+Coverage gap: the existing long-stall recovery proof used inbound peers. It did
+not directly establish that one stalled preferred outbound source releases its
+historical request window to a second healthy preferred outbound source.
+
+Regression proof: two isolated outbound peers are both eligible. A owns 128
+historical requests and makes no body progress; B supplies only its
+out-of-window tip body until A reaches its bounded deadline. A then disconnects
+and releases all ownership, B receives the reassigned 128 bodies, and validated
+chain height reaches 129 without finalizing A's object. The new case passed in
+1.45 s at 154,536 KB maximum RSS. Adjacent disconnect-cleanup and
+out-of-order-stall regressions passed in 1.02 s and 0.96 s; `git diff --check`
+passes after an incremental native rebuild.
+
+Consensus impact: NONE. Deterministic local regression coverage only; chain
+history, validation, serialization, PoW, monetary policy, upgrades,
+cryptography, wallets, and production datadirs are unchanged. Worldstream
+`origin/main` at `c9b7f20bb` remains complementary C23 storage/startup work.
+ASan/UBSan remain unrun under the 10 GB disk reserve. Recommended next
+investigation: bounded peer scheduling after partial header delivery from an
+otherwise healthy outbound source.
+
 ## Alternate bootstrap manifests remain fail-closed
 
 Risk: source diversity must not turn a transport retry into acceptance of a
