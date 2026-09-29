@@ -3058,6 +3058,39 @@ Recommended next investigation: bounded outer loopback resume/install coverage
 or evaluate descriptor-relative directory traversal only if an actual race is
 observed.
 
+## Outer bootstrap restart reuses only verified staging files
+
+Coverage gap: the manifest-bound restart lifecycle was previously proven at a
+filesystem helper boundary and the downloader retry boundary separately, but
+not through the public `BootstrapFromPeer` path that creates the marker, opens
+the socket, downloads, installs, and removes staging.
+
+After-result: a localhost-only synthetic three-file snapshot uses the compiled
+anchor fields and real wire handshake. Its first peer drops immediately after
+file zero has been completely hashed; the second invocation of
+`BootstrapFromPeer` reuses that final file, requests no file-zero chunk from a
+fresh peer, installs the remaining files, and removes `bootstrap-peer-staging`.
+The fixture uses the build lane rather than `/tmp`: measured `/tmp` capacity is
+918,749,184 bytes, below the production 1 GiB staging reserve, so using it
+would test only an intentional disk refusal.
+
+Regression proof: the bounded outer retry/install fixture passes in 0.07 s at
+28,588 KB RSS, under a 20-second process cap. The complete 88-case bootstrap
+protocol group passes in 12.94 s at 170,136 KB maximum RSS; `git diff --check`
+passes. An unrelated old test process was also inspected read-only: it is a
+deleted/superseded binary waiting to join a loopback accept thread, while the
+same reset/retry case on the current binary passes in 0.27 s at 29,004 KB RSS.
+It was not interrupted.
+
+Consensus impact: NONE. This adds deterministic isolated wire coverage only;
+manifest validation, hashes, payload validation, serialization, chain history,
+PoW, monetary policy, upgrades, cryptography, wallets, and production
+datadirs are unchanged. Worldstream remains complementary on startup/storage.
+ASan/UBSan remain unrun because the host has 11 GB free and the 10 GB reserve
+precludes a cold sanitizer build. Recommended next investigation: a similarly
+bounded outer parallel-stream resume proof, provided it can avoid duplicating
+the existing parallel worker coverage.
+
 ## Legacy single-stream bootstrap rejects symlinked staging files
 
 Coverage gap: parallel staging reuse directly proved symlink refusal, while

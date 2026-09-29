@@ -609,6 +609,120 @@ static CService StartManifestLoopbackPeer(const CBootstrapSnapshotManifest& mani
     return service;
 }
 
+// A one-client peer for BootstrapFromPeer integration coverage. It serves every
+// manifest file, optionally drops immediately after the first verified file,
+// and records the requested indices so a second outer invocation can prove it
+// did not re-download a retained final file.
+static CService StartOuterBootstrapLoopbackPeer(const CBootstrapSnapshotManifest& manifest,
+                                                const std::vector<std::string>& files,
+                                                bool dropAfterFirstFile,
+                                                size_t initiallyCompletedFiles,
+                                                boost::thread& server,
+                                                bool& serverOk,
+                                                std::vector<uint32_t>& requestedIndices,
+                                                std::string& serverError)
+{
+    BOOST_REQUIRE_EQUAL(manifest.vFiles.size(), files.size());
+    SOCKET listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    BOOST_REQUIRE(listener != INVALID_SOCKET);
+    struct sockaddr_in address;
+    std::memset(&address, 0, sizeof(address));
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    address.sin_port = 0;
+    BOOST_REQUIRE_EQUAL(bind(listener, (struct sockaddr*)&address, sizeof(address)), 0);
+    BOOST_REQUIRE_EQUAL(listen(listener, 1), 0);
+#ifdef WIN32
+    int addressLength = sizeof(address);
+#else
+    socklen_t addressLength = sizeof(address);
+#endif
+    BOOST_REQUIRE_EQUAL(getsockname(listener, (struct sockaddr*)&address, &addressLength), 0);
+    const CService service("127.0.0.1", ntohs(address.sin_port));
+
+    server = boost::thread([=, &serverOk, &requestedIndices, &serverError]() mutable {
+        SOCKET client = INVALID_SOCKET;
+        serverOk = false;
+        serverError.clear();
+        requestedIndices.clear();
+        try {
+            if (!AcceptTestBootstrapClient(listener, client)) {
+                throw std::runtime_error("missing outer bootstrap connection");
+            }
+            std::string command;
+            if (!ReceiveTestBootstrapMessage(client, command) || command != "version") {
+                throw std::runtime_error("missing outer bootstrap version");
+            }
+            CDataStream version(SER_NETWORK, INIT_PROTO_VERSION);
+            const CAddress remote(service, NODE_BOOTSTRAP);
+            version << PROTOCOL_VERSION << uint64_t(NODE_BOOTSTRAP) << GetTime()
+                    << remote << remote << uint64_t(1) << std::string("/loopback/") << 0 << true;
+            CDataStream empty(SER_NETWORK, PROTOCOL_VERSION);
+            if (!SendTestBootstrapMessage(client, "version", version) ||
+                !ReceiveTestBootstrapMessage(client, command) || command != "verack" ||
+                !SendTestBootstrapMessage(client, "verack", empty) ||
+                !ReceiveTestBootstrapMessage(client, command) || command != NetMsgType::GETBSMAN) {
+                throw std::runtime_error("invalid outer bootstrap handshake");
+            }
+            CDataStream manifestPayload(SER_NETWORK, PROTOCOL_VERSION);
+            manifestPayload << manifest;
+            if (!SendTestBootstrapMessage(client, NetMsgType::BSMAN, manifestPayload)) {
+                throw std::runtime_error("could not send outer bootstrap manifest");
+            }
+
+            std::vector<uint64_t> expectedOffsets(files.size(), 0);
+            size_t completed = initiallyCompletedFiles;
+            while (completed < files.size()) {
+                CDataStream requestPayload(SER_NETWORK, PROTOCOL_VERSION);
+                if (!ReceiveTestBootstrapMessage(client, command, &requestPayload) || command != NetMsgType::GETBSCHK) {
+                    throw std::runtime_error("missing outer bootstrap chunk request");
+                }
+                CBootstrapSnapshotChunkRequest request;
+                requestPayload >> request;
+                if (!requestPayload.empty() || request.nFileIndex >= files.size()) {
+                    throw std::runtime_error("invalid outer bootstrap chunk request");
+                }
+                const size_t index = request.nFileIndex;
+                const uint64_t remaining = files[index].size() - expectedOffsets[index];
+                const uint32_t expectedLength = (uint32_t)std::min<uint64_t>(manifest.nChunkSize, remaining);
+                if (request.nOffset != expectedOffsets[index] || request.nLength != expectedLength) {
+                    throw std::runtime_error("unexpected outer bootstrap chunk range");
+                }
+                requestedIndices.push_back(request.nFileIndex);
+                CBootstrapSnapshotChunk chunk;
+                chunk.nFileIndex = request.nFileIndex;
+                chunk.nOffset = request.nOffset;
+                chunk.vData.assign(files[index].begin() + request.nOffset,
+                                  files[index].begin() + request.nOffset + request.nLength);
+                CDataStream chunkPayload(SER_NETWORK, PROTOCOL_VERSION);
+                chunkPayload << chunk;
+                if (!SendTestBootstrapMessage(client, NetMsgType::BSCHK, chunkPayload)) {
+                    throw std::runtime_error("could not send outer bootstrap chunk");
+                }
+                expectedOffsets[index] += request.nLength;
+                if (expectedOffsets[index] == files[index].size()) {
+                    ++completed;
+                    if (dropAfterFirstFile && index == 0) {
+                        serverOk = true;
+                        CloseSocket(client);
+                        CloseSocket(listener);
+                        return;
+                    }
+                }
+            }
+            serverOk = true;
+        } catch (const std::exception& e) {
+            serverOk = false;
+            serverError = e.what();
+        }
+        if (client != INVALID_SOCKET) {
+            CloseSocket(client);
+        }
+        CloseSocket(listener);
+    });
+    return service;
+}
+
 // A deliberately narrow two-file server for the reconnect retention case. The
 // first connection completes file zero, then drops. The retry must ask only
 // for file one: serving file zero
@@ -3659,6 +3773,71 @@ BOOST_AUTO_TEST_CASE(bootstrap_snapshot_full_transfer_roundtrip)
     fs::remove_all(root);
     fs::remove_all(dest);
     fs::remove_all(staging);
+}
+
+BOOST_AUTO_TEST_CASE(bootstrap_outer_retry_reuses_manifest_bound_staging)
+{
+    namespace fs = boost::filesystem;
+    const bool hadStreams = mapArgs.count("-bootstrapstreams");
+    const std::string oldStreams = hadStreams ? mapArgs["-bootstrapstreams"] : "";
+    mapArgs["-bootstrapstreams"] = "1";
+
+    CBootstrapSnapshotManifest manifest = ValidBootstrapManifest();
+    manifest.nChunkSize = BOOTSTRAP_SNAPSHOT_CHUNK_SIZE;
+    manifest.vFiles.clear();
+    const std::vector<std::string> paths = {
+        "blocks/blk00000.dat", "blocks/index/000001.ldb", "chainstate/000003.ldb"};
+    const std::vector<std::string> files = {
+        DeterministicBytes(37, 241), DeterministicBytes(257, 242), DeterministicBytes(91, 243)};
+    manifest.nSnapshotBytes = 0;
+    for (size_t i = 0; i < files.size(); ++i) {
+        CBootstrapSnapshotFile file;
+        file.strPath = paths[i];
+        file.nSize = files[i].size();
+        file.hashSha256 = Sha256OfBytes(std::vector<unsigned char>(files[i].begin(), files[i].end()));
+        manifest.vFiles.push_back(file);
+        manifest.nSnapshotBytes += file.nSize;
+    }
+    std::string error;
+    BOOST_REQUIRE_MESSAGE(ValidateBootstrapSnapshotManifest(manifest, error), error);
+
+    // /tmp can be a deliberately small tmpfs in CI; use the build lane so the
+    // real 1 GiB staging-reserve gate is exercised without a false fixture
+    // failure before the peer is contacted.
+    const fs::path dataDir = fs::current_path() /
+        fs::unique_path("zclassic-bootstrap-outer-retry-%%%%-%%%%-%%%%");
+    bool firstServerOk = false;
+    std::vector<uint32_t> firstRequests;
+    std::string firstServerError;
+    boost::thread firstServer;
+    const CService firstPeer = StartOuterBootstrapLoopbackPeer(
+        manifest, files, true, 0, firstServer, firstServerOk, firstRequests, firstServerError);
+    BOOST_CHECK_MESSAGE(!BootstrapFromPeer(firstPeer.ToString(), dataDir, error), error);
+    firstServer.join();
+    BOOST_CHECK_MESSAGE(firstServerOk, firstServerError);
+    BOOST_REQUIRE(!firstRequests.empty());
+    BOOST_CHECK_EQUAL(firstRequests.front(), 0U);
+    BOOST_CHECK(fs::exists(dataDir / "bootstrap-peer-staging" / paths[0]));
+
+    bool secondServerOk = false;
+    std::vector<uint32_t> secondRequests;
+    std::string secondServerError;
+    boost::thread secondServer;
+    const CService secondPeer = StartOuterBootstrapLoopbackPeer(
+        manifest, files, false, 1, secondServer, secondServerOk, secondRequests, secondServerError);
+    BOOST_CHECK_MESSAGE(BootstrapFromPeer(secondPeer.ToString(), dataDir, error), error);
+    secondServer.join();
+    BOOST_CHECK_MESSAGE(secondServerOk, secondServerError);
+    BOOST_CHECK(std::find(secondRequests.begin(), secondRequests.end(), 0U) == secondRequests.end());
+    BOOST_CHECK(!fs::exists(dataDir / "bootstrap-peer-staging"));
+    for (size_t i = 0; i < files.size(); ++i) {
+        fs::ifstream input(dataDir / paths[i], std::ios::binary);
+        const std::string got((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+        BOOST_CHECK_EQUAL(got, files[i]);
+    }
+
+    RestoreArg("-bootstrapstreams", hadStreams, oldStreams);
+    fs::remove_all(dataDir);
 }
 
 // --- Auto-serve activation: a node only re-serves a retained snapshot copy when
