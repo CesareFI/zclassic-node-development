@@ -2289,3 +2289,28 @@ Sanitizers remain unrun with 11 GB free and the required 10 GB reserve.
 Recommended next investigation: exercise a bounded multi-stream transport
 failure where one verified worker reconnects while another completes, without
 relaxing manifest equality or per-file hash checks.
+
+## Parallel bootstrap reconnect preserves completed workers
+
+Baseline and risk: the new two-stream fixture proved disjoint assignment, but
+did not cover a reset affecting only one worker while another worker's verified
+file was already complete. A faulty retry path could discard completed staging
+or re-request a completed file, wasting bandwidth and delaying bootstrap.
+
+Fix and regression proof: the same bounded localhost fixture can now drop the
+first response for file one while it continues serving file zero. The affected
+worker reconnects, repeats the exact manifest handshake, and requests file one
+again; file zero is requested exactly once and remains byte-identical in
+staging. The mixed completion/reconnect regression passed in 0.30 s at 28,544
+KB maximum RSS. The two-stream disjoint-assignment regression still passed in
+0.30 s at 28,772 KB. The incremental native `test_bitcoin` target rebuilt and
+`git diff --check` passed.
+
+Consensus impact: NONE. Deterministic localhost test fixture only; no runtime
+bootstrap policy, peer trust, manifest equality, hash verification, block or
+transaction validation, serialization, chain history, PoW, monetary policy,
+upgrades, cryptography, wallets, or production datadirs changed. Worldstream
+remains complementary C23 storage/startup work. Sanitizers remain unrun with
+11 GB free and the required 10 GB reserve. Recommended next investigation:
+measure one bounded scheduler/IBD behavior from the native block-download
+harness rather than expanding bootstrap fixture permutations without evidence.
