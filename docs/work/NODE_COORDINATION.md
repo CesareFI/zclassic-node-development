@@ -3435,3 +3435,36 @@ validation, peer policy, production data, or Worldstream-owned storage path
 changed.  Recommended next investigation: use the scheduler cap's existing
 fixture to measure only a materially different transport condition, or obtain
 representative historical/WAN evidence before an adaptive scheduler change.
+
+## Bounded 100 ms transport comparison confirms the opt-in recovery bound
+
+Baseline: the existing checked 4,609-block fixture was repeated once with
+100 ms pipelined response latency, 1 MiB/s per-peer pacing, TCP_NODELAY, a
+stalled first source, a healthy second source, and the default 4,096-height
+look-ahead.  Normal validation reached height 4,608 in 120.73 s (38.17
+blocks/s), used 150.54 daemon CPU seconds and 97,268 KiB peak RSS, and used no
+swap.  The stalled source was disconnected at 23.70 s and the longest observed
+validated-height gap was 23.85 s.  The harness recorded seven bounded status
+RPC client timeouts, expected 128 duplicate/reassigned requests, zero final
+in-flight counters, the expected staller disconnect, and a graceful exit.
+
+After result: the one matched `-blockdownloadwindow=512` run completed in
+116.80 s (39.45 blocks/s), with 147.78 daemon CPU seconds, 97,192 KiB peak
+RSS, and no swap.  It disconnected the stalled source at 7.76 s and had a
+7.96 s longest progress gap; served-ahead height was exactly 512 instead of
+4,096.  It retained the expected 128 duplicate/reassigned requests, reached
+the same checked tip, ended with zero ownership counters, saw no status-RPC
+timeout samples, and gracefully exited.  In this one controlled 100 ms run,
+that is 3.3% less elapsed time and a 66.6% shorter maximum progress gap.
+
+Interpretation: this transport point does not establish a safe automatic
+policy or prove WAN performance.  It does demonstrate that the opt-in bound
+continues to preserve validation and recovery while reducing the intentional
+buffering delay beyond the zero-added-latency result.  No source change is
+justified from a two-run laboratory comparison; the default remains 4,096.
+
+Consensus impact: NONE.  This is bounded measurement/documentation only;
+consensus, serialization, cryptography, peer wire behavior, wallets, and
+production state are unchanged.  Worldstream remains complementary.  The next
+useful evidence would be a representative historical/WAN fixture with loss and
+peer diversity, not another synthetic window-size permutation.
