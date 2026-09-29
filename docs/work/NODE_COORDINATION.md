@@ -4183,3 +4183,30 @@ content, or Worldstream-owned storage/startup surface changed.  The next
 networking investigation remains a distinct, measured source-diversity or
 block-scheduler condition; do not reinterpret this stale process as a node
 failure.
+
+## Chunk-stream reset rotates to an alternate verified bootstrap source
+
+Coverage gap: existing chunk-reset recovery proved that a reset after one
+valid chunk reconnects and re-verifies the master manifest, while open-time
+reset coverage proved source rotation.  It did not prove the combined path:
+after a verified source has delivered a partial body and then resets, the
+next bounded attempt must use an alternate source rather than retrying the
+same peer exclusively.
+
+Regression proof: a localhost-only primary returns the exact master manifest,
+sends the first 128-byte chunk of a 257-byte file, and closes.  The worker's
+retry uses a second listener, verifies its byte-identical manifest, completes
+the file, and verifies the declared SHA-256.  Both listeners report their
+expected interactions.  The new direct case passes, and the complete
+`bootstrap_snapshot_protocol_tests` group passes 91/91 in 15.3 seconds after
+an incremental native test-binary rebuild.
+
+Consensus impact: NONE.  This is deterministic coverage for the existing
+bounded source-rotation behavior; manifest equality, chunk hashes, staging
+rules, snapshot validation, wire compatibility, chain history, PoW, monetary
+policy, cryptography, wallets, and production data are unchanged.  Worldstream
+was refreshed from its accessible mirror at `d9f5153be`; no storage/startup
+implementation was changed here.  Cold sanitizer and full-suite gates remain
+unrun because root free space is about 10.7 GiB and the required 10 GiB reserve
+precludes a cold build.  Next: investigate a distinct mixed-peer ordinary
+block-download recovery condition, not another bootstrap reset permutation.

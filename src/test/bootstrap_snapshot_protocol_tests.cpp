@@ -495,7 +495,8 @@ static CService StartManifestLoopbackPeer(const CBootstrapSnapshotManifest& mani
                                           const std::string& chunkData,
                                           bool dropAfterFirstChunkResponse,
                                           boost::thread& server,
-                                          bool& serverOk)
+                                          bool& serverOk,
+                                          bool allowNoChunkRetry = false)
 {
     SOCKET listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     BOOST_REQUIRE(listener != INVALID_SOCKET);
@@ -527,6 +528,18 @@ static CService StartManifestLoopbackPeer(const CBootstrapSnapshotManifest& mani
             }
             const int sessions = (dropAfterHandshake || dropAfterFirstChunkResponse) ? 2 : 1;
             for (int session = 0; session < sessions; ++session) {
+                if (dropAfterFirstChunkResponse && session == 1 && allowNoChunkRetry) {
+                    fd_set readable;
+                    FD_ZERO(&readable);
+                    FD_SET(listener, &readable);
+                    struct timeval wait;
+                    wait.tv_sec = 0;
+                    wait.tv_usec = 100000;
+                    if (select((int)listener + 1, &readable, NULL, NULL, &wait) <= 0) {
+                        serverOk = true;
+                        break;
+                    }
+                }
                 if (!AcceptTestBootstrapClient(listener, client)) {
                     throw std::runtime_error("missing bootstrap connection");
                 }
@@ -2119,6 +2132,46 @@ BOOST_AUTO_TEST_CASE(bootstrap_loopback_chunk_reset_retries_verified_manifest_st
     server.join();
     BOOST_CHECK(serverOk);
 
+    boost::filesystem::ifstream staged(staging / file.strPath, std::ios::binary);
+    const std::string got((std::istreambuf_iterator<char>(staged)), std::istreambuf_iterator<char>());
+    BOOST_CHECK_EQUAL(got, bytes);
+    boost::filesystem::remove_all(staging);
+}
+
+BOOST_AUTO_TEST_CASE(bootstrap_chunk_reset_rotates_to_verified_alternate_source)
+{
+    const std::string bytes = DeterministicBytes(257, 92);
+    CBootstrapSnapshotManifest manifest;
+    manifest.nSnapshotBytes = bytes.size();
+    manifest.nChunkSize = 128;
+    CBootstrapSnapshotFile file;
+    file.strPath = "blocks/blk00000.dat";
+    file.nSize = bytes.size();
+    file.hashSha256 = Sha256OfBytes(std::vector<unsigned char>(bytes.begin(), bytes.end()));
+    manifest.vFiles.push_back(file);
+
+    bool resettingOk = false;
+    bool healthyOk = false;
+    boost::thread resettingServer;
+    boost::thread healthyServer;
+    // The first verified source sends one valid chunk and then resets. The
+    // retryable worker must use the alternate source and re-verify its exact
+    // manifest rather than monopolizing the original peer.
+    const CService resetting = StartManifestLoopbackPeer(manifest, false, false, false,
+                                                          bytes, true, resettingServer,
+                                                          resettingOk, true);
+    const CService healthy = StartManifestLoopbackPeer(manifest, false, false, false,
+                                                        bytes, false, healthyServer, healthyOk);
+    const boost::filesystem::path staging = boost::filesystem::current_path() /
+        boost::filesystem::unique_path("zclassic-bootstrap-chunk-rotate-%%%%-%%%%-%%%%");
+    std::string error;
+    BOOST_CHECK_MESSAGE(BootstrapDownloadSnapshotParallelFromPeersForTest(
+                            std::vector<CService>{resetting, healthy}, manifest, staging,
+                            1000, 1, error), error);
+    resettingServer.join();
+    healthyServer.join();
+    BOOST_CHECK(resettingOk);
+    BOOST_CHECK(healthyOk);
     boost::filesystem::ifstream staged(staging / file.strPath, std::ios::binary);
     const std::string got((std::istreambuf_iterator<char>(staged)), std::istreambuf_iterator<char>());
     BOOST_CHECK_EQUAL(got, bytes);
