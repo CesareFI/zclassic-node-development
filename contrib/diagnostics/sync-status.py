@@ -44,6 +44,7 @@ def snapshot(cli):
         "global_validated_blocks_in_flight": peer_counts.get("global_validated_blocks_in_flight", download.get("validated_blocks_in_flight")),
         "preferred_download_peers": download.get("preferred_peers"),
         "header_sync_peers": download.get("header_sync_peers"),
+        "tracked_block_sources": download.get("tracked_block_sources"),
         "max_blocks_per_peer": download.get("max_blocks_per_peer"),
         "peers": [{key: peer[key] for key in FIELDS if key in peer} for peer in peers],
     }
@@ -52,9 +53,12 @@ def snapshot(cli):
 def render(state):
     print("{time} active={active_height} headers={header_height} IBD={ibd} "
           "inbound={inbound} outbound={outbound}".format(**state), flush=True)
-    print("download peers={} global requests={} validated={}".format(
+    download = "download peers={} global requests={} validated={}".format(
         state["download_peers"], state["global_blocks_in_flight"],
-        state["global_validated_blocks_in_flight"]), flush=True)
+        state["global_validated_blocks_in_flight"])
+    if state["tracked_block_sources"] is not None:
+        download += " tracked_sources={}".format(state["tracked_block_sources"])
+    print(download, flush=True)
     for peer in state["peers"]:
         print("peer={} {} services={} preferred={} headers={} header_sync={} header_remaining={}s stopped={} "
               "requests={} oldest_age={}s "

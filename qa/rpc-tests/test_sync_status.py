@@ -17,11 +17,13 @@ SPEC.loader.exec_module(STATUS)
 
 
 class SyncStatusTests(unittest.TestCase):
-    def snapshot(self, peers):
+    def snapshot(self, peers, tracked_sources=None):
+        download = {"blocks_in_flight": 1, "validated_blocks_in_flight": 0}
+        if tracked_sources is not None:
+            download["tracked_block_sources"] = tracked_sources
         responses = [
             {"blocks": 0, "headers": 129, "initialblockdownload": True,
-             "blockdownload": {"blocks_in_flight": 1,
-                               "validated_blocks_in_flight": 0}},
+             "blockdownload": download},
             peers,
         ]
         replies = [types.SimpleNamespace(returncode=0, stdout=json.dumps(value), stderr="")
@@ -78,6 +80,14 @@ class SyncStatusTests(unittest.TestCase):
         state = self.snapshot([])
         self.assertEqual(state["global_blocks_in_flight"], 1)
         self.assertEqual(state["global_validated_blocks_in_flight"], 0)
+
+    def test_tracked_block_sources_are_reported_when_available(self):
+        state = self.snapshot([], tracked_sources=7)
+        self.assertEqual(state["tracked_block_sources"], 7)
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            STATUS.render(state)
+        self.assertIn("tracked_sources=7", output.getvalue())
 
 
 if __name__ == "__main__":

@@ -3652,3 +3652,22 @@ state only; chain history, consensus, cryptography, validation, wallets,
 production data, and Worldstream-owned storage are unchanged.  Remaining
 risk: it does not make a status RPC lock-free; proof-validation lock
 contention still needs representative profiling before any snapshot design.
+
+## Surface tracked source attribution in the read-only sync report
+
+Follow-through: the native RPC field is now rendered by the existing
+read-only `contrib/diagnostics/sync-status.py` report as
+`tracked_sources=<n>` when a daemon supplies it.  Older compatible daemons
+omit the suffix instead of showing a misleading zero or failing the report.
+This makes the already bounded source-attribution counter actionable during a
+real IBD stall without restarting or modifying the node.
+
+Regression proof: the seven-case recorded-RPC diagnostics group passed.  It
+covers the new value's snapshot/render path and the existing older-field path.
+No daemon, wallet, production datadir, public peer, or chain state was used.
+
+Consensus impact: NONE.  This is read-only diagnostics glue over existing RPC
+state; consensus, validation, cryptography, peer policy, wallets, production
+data, and Worldstream-owned storage remain unchanged.  Remaining risk: the
+report's synchronous RPC sampling cannot avoid a node's existing validation
+lock contention; it accurately reports an unavailable sample instead.
