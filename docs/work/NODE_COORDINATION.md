@@ -2247,6 +2247,29 @@ partial, valid header delivery rather than revisiting the resolved ECC cascade.
 uncovered block-source ownership or scheduler invariant using the current
 binary, rather than retrying the obsolete test image.
 
+### Current recheck (2026-09-29)
+
+The named historical `/tmp/zclassic-overnight-diagnostic.log` remains absent,
+so it is not presented as current evidence. The preserved September record
+identifies its first failure as a missing Sapling spend parameter; the current
+default parameter directory contains `sapling-spend.params`,
+`sapling-output.params`, and the required Sprout files. A fresh isolated
+current-binary run of all 21 `rpc_wallet_tests` cases passed in 31.42 s at
+236,164 KB maximum RSS with no `ECC_Start()` assertion. This confirms that the
+historical assertion cascade does not reproduce in the current process.
+
+The long-lived bootstrap test is owned by a different Codex parent process
+(`PPID 1257820`), runs a deleted older `test_bitcoin` executable, has consumed
+only seven CPU ticks while waiting in `futex_do_wait`, and its worker is blocked
+in `inet_csk_accept`. It is unrelated to this current wallet reproduction and
+was not interrupted. Current development-branch CI run 36603867245 is green.
+
+Consensus impact: NONE. Evidence only; no wallet, ECC, validation, consensus,
+parameter, production datadir, or live-process behavior changed. Sanitizers
+remain unrun because 11 GB free preserves the 10 GB reserve. Recommended next
+investigation: controlled valid partial header/body delivery or slow-peer
+throughput measurement, not another ECC cascade permutation.
+
 ## Late duplicate block bodies preserve the accepted source
 
 Baseline and root cause: `AcceptBlock()` deliberately returns success for an
