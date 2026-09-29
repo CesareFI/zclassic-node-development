@@ -3671,3 +3671,26 @@ state; consensus, validation, cryptography, peer policy, wallets, production
 data, and Worldstream-owned storage remain unchanged.  Remaining risk: the
 report's synchronous RPC sampling cannot avoid a node's existing validation
 lock contention; it accurately reports an unavailable sample instead.
+
+## Prior slow-first status-RPC anomaly did not reproduce
+
+Reproduction attempt: reran the exact bounded two-healthy-peer lane that had
+once become unobservable: first peer 256 KiB/s, second peer 1 MiB/s, 100 ms
+pipelined response latency, 100 ms status sampling, TCP_NODELAY, normal
+validation, and the checked 4,609-block fixture.  The fresh isolated current
+binary reached height 4,608 in 111.75 s (41.23 blocks/s), with 147.28 daemon
+CPU seconds, 98,224 KiB peak RSS, no swap, no duplicate or abandoned request,
+and a successful graceful shutdown.
+
+Result: there were zero unavailable status-RPC samples.  Both peers made
+progress (3,630 and 978 requests), final in-flight counts were zero, and the
+new `tracked_block_sources` diagnostic was zero.  The prior 85-second
+unavailability occurred in a harness failure path and is not a reproducible
+native lock or peer-recovery defect on this binary.  No scheduler, RPC-lock,
+or validation change is justified from a non-reproduced signal.
+
+Consensus impact: NONE.  Measurement only; consensus, validation,
+cryptography, wire compatibility, wallets, production data, and
+Worldstream-owned storage remain unchanged.  Remaining risk: a representative
+profile is still required before any lock-free status snapshot could be safely
+evaluated.
