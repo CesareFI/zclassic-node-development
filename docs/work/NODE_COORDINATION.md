@@ -2184,3 +2184,39 @@ would change relay availability and needs an explicit product policy plus an
 end-to-end serving regression, rather than a local cleanup claim. Consensus
 impact: NONE; source unchanged. Recommended next investigation: continue on
 block/header scheduling and peer recovery, not cache policy invention.
+
+## September test cascade and current recovery baseline
+
+Evidence: the September 9 `src/test/test_bitcoin.log` did not begin with an
+ECC lifecycle failure. Its first line is librustzcash's abort because the
+Sapling spend parameter file was absent; the first affected bootstrap fixture
+had already run `BasicTestingSetup::ECC_Start()`, so aborting before normal
+fixture destruction left that process's ECC context initialized. The later
+`ECC_Start()` assertions are cascading failures in that same process, not
+evidence that separate test processes share an ECC global.
+
+Current result: the current native binary ran that exact first bootstrap case
+in an isolated process successfully. The previously-running 41-hour copy of
+the loopback bootstrap regression was not used as current evidence: its
+`/proc/<pid>/exe` target was a deleted older binary (SHA-256
+`14fa1e7350f79e8dd6856f63ecd18b6c9d1044cdc5868d0be33d3dbebdcda463`), while
+the current binary hashes to
+`cd08da355659f96e73a732a4a927ba1c43c03a5741849eafb82846680fc616ef`.
+An independent bounded invocation of that exact current loopback regression
+passed in 0.30 s with 26,820 KB maximum RSS. It used only its native test
+fixture; no production datadir, wallet, or public peer was contacted.
+
+Scheduling/recovery baseline: current focused synthetic-peer cases all passed:
+stall timeout followed by healthy-peer takeover (1.50 s, 152,052 KB), socket
+disconnect cleanup and reassignment (1.10 s, 152,452 KB), negative-response
+immediate takeover (1.50 s, 152,664 KB), and preferred header-role
+reassignment (1.00 s, 151,304 KB). They prove 128-request release, immediate
+takeover, and header-role recovery under deterministic mock clocks; they are
+not a time-to-tip measurement on a live network.
+
+Consensus impact: NONE. This is evidence only; no runtime or validation code
+changed. Worldstream C23 `origin/main` at `af4e1082e` remains complementary
+wallet/storage/startup work. Sanitizers remain unrun: 11 GB free preserves the
+required 10 GB reserve. Recommended next investigation: examine a fresh,
+uncovered block-source ownership or scheduler invariant using the current
+binary, rather than retrying the obsolete test image.
