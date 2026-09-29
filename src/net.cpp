@@ -88,9 +88,6 @@ limitedmap<CInv, int64_t> mapAlreadyAskedFor(MAX_INV_SZ);
 
 static COneShotQueue oneShots;
 
-static set<CNetAddr> setservAddNodeAddresses;
-static CCriticalSection cs_setservAddNodeAddresses;
-
 vector<std::string> vAddedNodes;
 CCriticalSection cs_vAddedNodes;
 
@@ -1508,11 +1505,6 @@ void ThreadOpenAddedConnections()
             if(Lookup(strAddNode.c_str(), vservNode, Params().GetDefaultPort(), fNameLookup, 0))
             {
                 lservAddressesToAdd.push_back(vservNode);
-                {
-                    LOCK(cs_setservAddNodeAddresses);
-                    BOOST_FOREACH(const CService& serv, vservNode)
-                        setservAddNodeAddresses.insert(serv);
-                }
             }
         }
         // Attempt to connect to each IP for each addnode entry until at least one is successful per addnode entry

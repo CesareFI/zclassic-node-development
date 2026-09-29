@@ -2343,3 +2343,27 @@ datadirs are unchanged. Worldstream remains complementary C23 storage/startup
 work. Sanitizers remain unrun with 11 GB free and the required 10 GB reserve.
 Recommended next investigation: inspect bounded failure recovery after a
 malformed discovery `addr` response without repeating candidate-policy work.
+
+## Remove write-only added-node address retention
+
+Baseline and root cause: every two-minute `-addnode` resolution pass inserted
+all returned addresses into `setservAddNodeAddresses`. The set was static,
+never cleared, and had no reader anywhere in the native checkout. A rotating
+or adversarially large DNS answer could therefore grow retained memory forever
+and take an unnecessary lock, without affecting a connection decision.
+
+Fix and proof: remove the dead set, mutex, and insertion path. Address lookup,
+candidate lists, existing-node suppression, connection attempts, and retry
+timing are unchanged because no code consumed that state. A tracked-source
+reference audit confirms no remaining symbol reference. The incremental native
+`test_bitcoin` target rebuilt; the focused socket-disconnect/reassignment
+regression passed in 1.10 s at 154,228 KB maximum RSS; `git diff --check`
+passed. This is a bounded-memory cleanup, not a throughput claim.
+
+Consensus impact: NONE. Local addnode bookkeeping only; peer selection policy,
+P2P wire messages, block/transaction validation, serialization, chain history,
+PoW, monetary policy, upgrades, cryptography, wallets, and production data are
+unchanged. Worldstream remains complementary C23 storage/startup work.
+Sanitizers remain unrun with 11 GB free and the required 10 GB reserve.
+Recommended next investigation: inspect added-node reconnect behavior only if
+an observable scheduling or lifetime defect is demonstrated.
