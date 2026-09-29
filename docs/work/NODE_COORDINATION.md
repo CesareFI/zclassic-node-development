@@ -2768,3 +2768,32 @@ ASan/UBSan remain unrun because the host has 11 GB free and the 10 GB reserve
 precludes a cold sanitizer build. Recommended next investigation: bounded
 peer/header teardown timing under a real framed-message fixture, without
 changing validation or header acceptance policy absent a reproducible defect.
+
+## Queued valid headers cannot survive peer teardown
+
+Baseline and audit: malformed-header coverage proved immediate cleanup, but
+did not cover the socket race where a complete, valid headers frame is already
+queued when another network path marks that peer for disconnect. Processing it
+would let a retired peer update header availability and potentially delay a
+healthy replacement.
+
+After-result: no production change was warranted. The real receive loop checks
+the disconnect flag before selecting the next completed frame, then invokes the
+idempotent teardown cleanup. A new framed-message regression queues a valid
+one-header response, marks its owner disconnected before `ProcessMessages`,
+and proves no header index/availability is added, the role is released, and a
+healthy outbound peer immediately receives `getheaders`.
+
+Regression proof: the focused queued-frame test passes in 0.92 s at 153,364 KB
+maximum RSS; the adjacent truncated-header teardown test passes in 1.02 s at
+154,560 KB. The complete 109-case `block_download_tests` group passes in
+110.70 s at 236,316 KB maximum RSS. `git diff --check` passes.
+
+Consensus impact: NONE. Test-only coverage of volatile peer teardown; header
+acceptance, validation, serialization, chain history, PoW, monetary policy,
+upgrades, cryptography, wallets, and production datadirs are unchanged.
+Worldstream remains complementary on startup/storage. ASan/UBSan remain unrun
+because the host has 11 GB free and the 10 GB reserve precludes a cold sanitizer
+build. Recommended next investigation: measure a bounded healthy-peer takeover
+when the stalled peer has both a full block window and an outstanding header
+sync deadline.

@@ -2224,6 +2224,39 @@ BOOST_AUTO_TEST_CASE(truncated_headers_frame_releases_header_role)
     BOOST_REQUIRE_EQUAL(Stats(healthy).nBlocksInFlight, 128);
 }
 
+BOOST_AUTO_TEST_CASE(queued_valid_headers_after_disconnect_do_not_delay_replacement)
+{
+    CNode disconnecting(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "disconnecting", false);
+    CNode healthy(INVALID_SOCKET, CAddress(CService("127.0.0.2", 2)), "healthy", false);
+    Handshake(disconnecting);
+    BOOST_REQUIRE(SendMessages(&disconnecting, false));
+    BOOST_REQUIRE(Stats(disconnecting).fHeaderSyncStarted);
+
+    CDataStream payload(SER_NETWORK, PROTOCOL_VERSION);
+    WriteCompactSize(payload, 1);
+    payload << blocks[1].GetBlockHeader();
+    WriteCompactSize(payload, 0);
+    const std::vector<char> frame = FramePayload("headers", payload);
+    {
+        LOCK(disconnecting.cs_vRecvMsg);
+        BOOST_REQUIRE(disconnecting.ReceiveMsgBytes(frame.data(), frame.size()));
+    }
+
+    // A socket-teardown signal can arrive after framing completes but before
+    // the message thread takes its next receive-loop iteration. The queued
+    // valid header must not update availability or retain the header role.
+    disconnecting.fDisconnect = true;
+    BOOST_REQUIRE(ProcessMessages(&disconnecting));
+    BOOST_CHECK_EQUAL(mapBlockIndex.count(blocks[1].GetHash()), 0U);
+    BOOST_CHECK(!Stats(disconnecting).fHeaderSyncStarted);
+    BOOST_CHECK(Stats(disconnecting).fBlockDownloadStopped);
+    BOOST_CHECK_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 0);
+
+    Handshake(healthy);
+    BOOST_REQUIRE(SendMessages(&healthy, false));
+    BOOST_CHECK_EQUAL(Sent(healthy, "getheaders"), 1);
+}
+
 BOOST_AUTO_TEST_CASE(truncated_notfound_frame_releases_requests_for_takeover)
 {
     CNode malformed(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "malformed", true);
