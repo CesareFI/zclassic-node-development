@@ -3159,6 +3159,30 @@ BOOST_AUTO_TEST_CASE(socket_disconnect_releases_deferred_addresses)
     BOOST_CHECK(peer.TakeAddressesToSend().empty());
 }
 
+BOOST_AUTO_TEST_CASE(socket_retirement_checks_queue_owners_before_reading)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
+               "retirement", true);
+    BOOST_CHECK(peer.HasNoQueuedMessages());
+
+    {
+        LOCK(peer.cs_vSend);
+        peer.ssSend.write("x", 1);
+        BOOST_CHECK(!peer.HasNoQueuedMessages());
+        peer.ssSend.clear();
+    }
+    BOOST_CHECK(peer.HasNoQueuedMessages());
+
+    {
+        LOCK(peer.cs_vRecvMsg);
+        peer.vRecvMsg.push_back(CNetMessage(Params().MessageStart(), SER_NETWORK,
+                                             PROTOCOL_VERSION));
+        BOOST_CHECK(!peer.HasNoQueuedMessages());
+        peer.vRecvMsg.clear();
+    }
+    BOOST_CHECK(peer.HasNoQueuedMessages());
+}
+
 BOOST_AUTO_TEST_CASE(inventory_send_abort_releases_only_unsent_requests)
 {
     CNode announced(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "inv", true);

@@ -427,6 +427,17 @@ int CNode::ReceiveFromSocket(char* data, size_t size, int flags)
     return recv(hSocket, data, size, flags);
 }
 
+bool CNode::HasNoQueuedMessages()
+{
+    TRY_LOCK(cs_vSend, lockSend);
+    if (!lockSend)
+        return false;
+    TRY_LOCK(cs_vRecvMsg, lockRecv);
+    if (!lockRecv)
+        return false;
+    return vRecvMsg.empty() && nSendSize == 0 && ssSend.empty();
+}
+
 void CNode::CloseSocketDisconnect()
 {
     fDisconnect = true;
@@ -1060,7 +1071,7 @@ void ThreadSocketHandler()
             BOOST_FOREACH(CNode* pnode, vNodesCopy)
             {
                 if (pnode->fDisconnect ||
-                    (pnode->GetRefCount() <= 0 && pnode->vRecvMsg.empty() && pnode->nSendSize == 0 && pnode->ssSend.empty()))
+                    (pnode->GetRefCount() <= 0 && pnode->HasNoQueuedMessages()))
                 {
                     // remove from vNodes
                     vNodes.erase(remove(vNodes.begin(), vNodes.end(), pnode), vNodes.end());

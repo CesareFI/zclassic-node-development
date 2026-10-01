@@ -4518,3 +4518,16 @@ sanitizers remain unrun because 11,291,725,824 bytes free leaves only about
 0.52 GiB above the mandatory 10 GiB reserve, below the measured build margin.
 Recommended next investigation: retain the current address coverage and
 measure a separate bounded peer-lifecycle or availability path.
+
+## Socket retirement reads queue state under its owners
+
+Risk: `ThreadSocketHandler` used raw receive and send container reads while
+deciding whether an unreferenced peer could be retired. Those containers are
+owned by distinct locks and may be changed by the message and socket paths.
+
+Fix and proof: retirement now uses a nonblocking owner-locked predicate, which
+conservatively defers retirement while either queue owner is active. The new
+native regression proves empty queues permit retirement and each held owner
+lock or queued message prevents it; it passed 527 assertions. The complete
+`block_download_tests` group passed 116/116 cases. Consensus impact: NONE.
+Sanitizers remain unrun within the 10 GiB disk reserve.

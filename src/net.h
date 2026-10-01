@@ -258,6 +258,9 @@ public:
     SOCKET GetSocket() const;
     int SendToSocket(const char* data, size_t size, int flags);
     int ReceiveFromSocket(char* data, size_t size, int flags);
+    // Returns false while either queue owner is active, so socket retirement
+    // never reads queue state without its synchronization.
+    bool HasNoQueuedMessages();
     CDataStream ssSend;
     size_t nSendSize; // total size of all vSendMsg entries
     size_t nSendOffset; // offset inside the first vSendMsg already sent
