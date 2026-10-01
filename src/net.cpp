@@ -487,6 +487,15 @@ void CNode::CloseSocketDisconnect()
         std::vector<CAddress>().swap(vAddrToSend);
         addrKnown.reset();
     }
+
+    // mapAlreadyAskedFor is a global retry throttle and intentionally outlives
+    // this peer. The per-peer queues cannot be sent after disconnect, though,
+    // so release them while their dedicated owner is available.
+    TRY_LOCK(cs_askFor, lockAskFor);
+    if (lockAskFor) {
+        setAskFor.clear();
+        mapAskFor.clear();
+    }
 }
 
 void CNode::PushVersion()
@@ -2178,6 +2187,7 @@ CNode::~CNode()
 
 void CNode::AskFor(const CInv& inv)
 {
+    LOCK(cs_askFor);
     if (mapAskFor.size() >= MAPASKFOR_MAX_SZ || setAskFor.size() >= SETASKFOR_MAX_SZ)
         return;
     // a peer may not have multiple non-responded queue positions for a single inv item

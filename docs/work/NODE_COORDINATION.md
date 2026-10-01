@@ -4531,3 +4531,32 @@ native regression proves empty queues permit retirement and each held owner
 lock or queued message prevents it; it passed 527 assertions. The complete
 `block_download_tests` group passed 116/116 cases. Consensus impact: NONE.
 Sanitizers remain unrun within the 10 GiB disk reserve.
+
+## Disconnect cleanup releases deferred non-block requests
+
+Baseline and root cause: a disconnected `CNode` can remain referenced while
+socket and message loops unwind. Its receive, send, inventory, and address
+queues were released opportunistically, but its bounded per-peer `AskFor`
+deduplication set and request-time multimap were retained. An isolated
+regression populated both queues, called the production disconnect path, and
+failed two assertions on the unfixed source because both queues remained.
+
+Fix: these peer-owned queues now have their own mutex. All production mutation
+sites use it, and disconnect uses a nonblocking acquisition to clear them when
+uncontended. The global `mapAlreadyAskedFor` retry throttle is deliberately
+unchanged: it is not peer-owned and continues to preserve ordinary retry
+spacing. A contended owner retains the existing final-reference cleanup path,
+so teardown does not block or change lock ordering.
+
+After result and proof: the direct teardown regression and both existing cap
+tests pass after the incremental native rebuild. The complete registered
+`block_download_tests` group passes 117 cases and 107,521 assertions. The
+before-fix regression exited 201 with exactly the two expected retained-queue
+assertions. Consensus impact: NONE; this changes only in-memory P2P request
+bookkeeping. No block/header selection, wire encoding, validation, PoW,
+monetary, upgrade, wallet, or production state is touched. Worldstream remains
+storage/restart-only, so there is no overlap. Source-matched sanitizers remain
+unrun: 11,283,144,704 bytes free leave insufficient margin over the 10 GiB
+reserve for a cold sanitizer build. Next: inspect a distinct measured
+peer-lifecycle or source-diversity condition rather than extending teardown
+permutations.

@@ -7110,7 +7110,10 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
         bool fMissingInputs = false;
         CValidationState state;
 
-        pfrom->setAskFor.erase(inv.hash);
+        {
+            LOCK(pfrom->cs_askFor);
+            pfrom->setAskFor.erase(inv.hash);
+        }
         mapAlreadyAskedFor.erase(inv);
 
         if (!AlreadyHave(inv) && AcceptToMemoryPool(mempool, state, tx, true, &fMissingInputs))
@@ -8031,24 +8034,27 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         //
         // Message: getdata (non-blocks)
         //
-        while (!pto->fDisconnect && !pto->mapAskFor.empty() && (*pto->mapAskFor.begin()).first <= nNow)
         {
-            const CInv& inv = (*pto->mapAskFor.begin()).second;
-            if (!AlreadyHave(inv))
+            LOCK(pto->cs_askFor);
+            while (!pto->fDisconnect && !pto->mapAskFor.empty() && (*pto->mapAskFor.begin()).first <= nNow)
             {
-                if (fDebug)
-                    LogPrint("net", "Requesting %s peer=%d\n", inv.ToString(), pto->id);
-                vGetData.push_back(inv);
-                if (vGetData.size() >= 1000)
+                const CInv& inv = (*pto->mapAskFor.begin()).second;
+                if (!AlreadyHave(inv))
                 {
-                    pto->PushMessage("getdata", vGetData);
-                    vGetData.clear();
+                    if (fDebug)
+                        LogPrint("net", "Requesting %s peer=%d\n", inv.ToString(), pto->id);
+                    vGetData.push_back(inv);
+                    if (vGetData.size() >= 1000)
+                    {
+                        pto->PushMessage("getdata", vGetData);
+                        vGetData.clear();
+                    }
+                } else {
+                    //If we're not going to ask, don't expect a response.
+                    pto->setAskFor.erase(inv.hash);
                 }
-            } else {
-                //If we're not going to ask, don't expect a response.
-                pto->setAskFor.erase(inv.hash);
+                pto->mapAskFor.erase(pto->mapAskFor.begin());
             }
-            pto->mapAskFor.erase(pto->mapAskFor.begin());
         }
         if (!vGetData.empty())
             pto->PushMessage("getdata", vGetData);

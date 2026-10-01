@@ -339,6 +339,10 @@ public:
     mruset<CInv> setInventoryKnown;
     std::vector<CInv> vInventoryToSend;
     CCriticalSection cs_inventory;
+    // Non-block inventory requests are scheduled under cs_main, but socket
+    // teardown can run without it. Keep this peer-owned queue separately
+    // synchronized so disconnect can promptly release bounded deferred work.
+    CCriticalSection cs_askFor;
     std::set<uint256> setAskFor;
     std::multimap<int64_t, CInv> mapAskFor;
 

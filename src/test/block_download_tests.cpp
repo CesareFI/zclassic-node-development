@@ -3026,18 +3026,48 @@ BOOST_AUTO_TEST_CASE(socket_disconnect_releases_deferred_inventory_relay)
     BOOST_CHECK(peer.setInventoryKnown.empty());
 }
 
+BOOST_AUTO_TEST_CASE(socket_disconnect_releases_deferred_askfor_work)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
+               "pending-askfor", true);
+    PrepareTransport(peer);
+    const CInv first(MSG_TX, uint256S("01"));
+    const CInv second(MSG_BLOCK, uint256S("02"));
+    {
+        LOCK(peer.cs_askFor);
+        peer.setAskFor.insert(first.hash);
+        peer.setAskFor.insert(second.hash);
+        peer.mapAskFor.insert(std::make_pair(1, first));
+        peer.mapAskFor.insert(std::make_pair(2, second));
+    }
+
+    peer.CloseSocketDisconnect();
+    BOOST_CHECK(peer.fDisconnect);
+    {
+        LOCK(peer.cs_askFor);
+        BOOST_CHECK(peer.setAskFor.empty());
+        BOOST_CHECK(peer.mapAskFor.empty());
+    }
+}
+
 BOOST_AUTO_TEST_CASE(askfor_queue_does_not_exceed_declared_cap)
 {
     CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
                "askfor-cap", true);
     PrepareTransport(peer);
     const CInv queued(MSG_TX, uint256S("01"));
-    for (size_t index = 0; index < MAPASKFOR_MAX_SZ; ++index)
-        peer.mapAskFor.insert(std::make_pair((int64_t)index, queued));
-    BOOST_REQUIRE_EQUAL(peer.mapAskFor.size(), MAPASKFOR_MAX_SZ);
+    {
+        LOCK(peer.cs_askFor);
+        for (size_t index = 0; index < MAPASKFOR_MAX_SZ; ++index)
+            peer.mapAskFor.insert(std::make_pair((int64_t)index, queued));
+        BOOST_REQUIRE_EQUAL(peer.mapAskFor.size(), MAPASKFOR_MAX_SZ);
+    }
     peer.AskFor(CInv(MSG_TX, uint256S("02")));
-    BOOST_CHECK_EQUAL(peer.mapAskFor.size(), MAPASKFOR_MAX_SZ);
-    BOOST_CHECK(peer.setAskFor.empty());
+    {
+        LOCK(peer.cs_askFor);
+        BOOST_CHECK_EQUAL(peer.mapAskFor.size(), MAPASKFOR_MAX_SZ);
+        BOOST_CHECK(peer.setAskFor.empty());
+    }
 }
 
 BOOST_AUTO_TEST_CASE(askfor_dedup_set_does_not_exceed_declared_cap)
@@ -3045,15 +3075,21 @@ BOOST_AUTO_TEST_CASE(askfor_dedup_set_does_not_exceed_declared_cap)
     CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
                "askfor-dedup-cap", true);
     PrepareTransport(peer);
-    for (size_t index = 0; index < SETASKFOR_MAX_SZ; ++index) {
-        uint256 hash;
-        hash.SetHex(strprintf("%08x", index + 1));
-        peer.setAskFor.insert(hash);
+    {
+        LOCK(peer.cs_askFor);
+        for (size_t index = 0; index < SETASKFOR_MAX_SZ; ++index) {
+            uint256 hash;
+            hash.SetHex(strprintf("%08x", index + 1));
+            peer.setAskFor.insert(hash);
+        }
+        BOOST_REQUIRE_EQUAL(peer.setAskFor.size(), SETASKFOR_MAX_SZ);
     }
-    BOOST_REQUIRE_EQUAL(peer.setAskFor.size(), SETASKFOR_MAX_SZ);
     peer.AskFor(CInv(MSG_TX, uint256S("ffffffff")));
-    BOOST_CHECK_EQUAL(peer.setAskFor.size(), SETASKFOR_MAX_SZ);
-    BOOST_CHECK(peer.mapAskFor.empty());
+    {
+        LOCK(peer.cs_askFor);
+        BOOST_CHECK_EQUAL(peer.setAskFor.size(), SETASKFOR_MAX_SZ);
+        BOOST_CHECK(peer.mapAskFor.empty());
+    }
 }
 
 BOOST_AUTO_TEST_CASE(repeated_relay_does_not_duplicate_expiration_records)
