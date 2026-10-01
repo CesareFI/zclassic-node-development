@@ -4455,3 +4455,36 @@ artifact and cannot substitute for a cold sanitized rebuild while the 10 GiB
 disk reserve is maintained.  The next distinct investigation should inspect
 bounded address-advertisement churn or bootstrap manifest-source churn, not
 repeat peer teardown or inbound-priority permutations.
+
+## Address relay queue producer/drain serialization
+
+Baseline and root cause: the per-peer `addr` relay queue is capped at 1,000
+entries, but message handlers and local-address broadcast paths appended to it
+while the socket send loop iterated and cleared it. The queue's duplicate
+filter was accessed through the same unsynchronized paths. `cs_vSend` cannot
+protect those producers, and the node-list lock cannot protect the socket
+drain, so concurrent address churn could race vector or bloom-filter state.
+
+Fix: `CNode` now owns the queue and its duplicate filter behind a dedicated
+address-relay mutex. Producers, known-address updates, getaddr reset, periodic
+refresh reset, and the actual send-loop drain all use that one owner. The drain
+swaps the bounded queue before filtering, preserving the existing one-message
+wire cap and best-effort relay behavior.
+
+Regression proof: a native concurrent producer/drain test pushes 4,000
+routable addresses while repeatedly invoking the same production drain. It
+proves every observed batch remains at the 1,000-address wire cap and leaves
+no queued address after the producer completes. The focused case passed 525
+assertions in 1.09 seconds and passed 16 repeated schedules. The complete
+`block_download_tests` group passed 114/114 cases and 105,946 assertions.
+
+Consensus impact: NONE. This is outbound peer-address relay synchronization;
+address message encoding, peer acceptance policy, chain history, PoW, monetary
+policy, block/transaction validity, upgrades, wallet behavior, and production
+state are unchanged. Worldstream's current accessible head remains
+storage/restart-only and is not modified. A source-matched sanitizer build is
+unrun: root had 11,289,604,096 bytes free, only about 0.52 GiB above the
+mandatory 10 GiB reserve, while the supported sanitizer target needs about an
+additional GiB. Recommended next investigation: measure a distinct bounded
+network queue or availability condition rather than extending address-relay
+permutations.

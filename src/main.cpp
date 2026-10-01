@@ -7358,7 +7358,7 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
         }
         pfrom->fSentAddr = true;
 
-        pfrom->vAddrToSend.clear();
+        pfrom->ClearAddressesToSend();
         vector<CAddress> vAddr = addrman.GetAddr();
         BOOST_FOREACH(const CAddress &addr, vAddr)
             pfrom->PushAddress(addr);
@@ -7830,7 +7830,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
             {
                 // Periodically clear addrKnown to allow refresh broadcasts
                 if (nLastRebroadcast)
-                    pnode->addrKnown.reset();
+                    pnode->ResetAddressKnown();
 
                 // Rebroadcast our address
                 AdvertizeLocal(pnode);
@@ -7844,23 +7844,9 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         //
         if (fSendTrickle)
         {
-            vector<CAddress> vAddr;
-            vAddr.reserve(pto->vAddrToSend.size());
-            BOOST_FOREACH(const CAddress& addr, pto->vAddrToSend)
-            {
-                if (!pto->addrKnown.contains(addr.GetKey()))
-                {
-                    pto->addrKnown.insert(addr.GetKey());
-                    vAddr.push_back(addr);
-                    // receiver rejects addr messages larger than 1000
-                    if (vAddr.size() >= 1000)
-                    {
-                        pto->PushMessage("addr", vAddr);
-                        vAddr.clear();
-                    }
-                }
-            }
-            pto->vAddrToSend.clear();
+            vector<CAddress> vAddr = pto->TakeAddressesToSend();
+            // PushAddress bounds the deferred queue to MAX_ADDR_TO_SEND, the
+            // same protocol-sized limit accepted by peers.
             if (!vAddr.empty())
                 pto->PushMessage("addr", vAddr);
         }

@@ -323,6 +323,11 @@ public:
     int nStartingHeight;
 
     // flood relay
+    // Address relay producers run in message-processing and peer-broadcast
+    // contexts, while SendMessages drains this queue from the socket loop.
+    // Keep the queue and its duplicate filter under one lock: a send lock does
+    // not protect producers, and a node-list lock does not protect draining.
+    CCriticalSection cs_addrToSend;
     std::vector<CAddress> vAddrToSend;
     CRollingBloomFilter addrKnown;
     bool fGetAddr;
@@ -446,11 +451,13 @@ public:
 
     void AddAddressKnown(const CAddress& addr)
     {
+        LOCK(cs_addrToSend);
         addrKnown.insert(addr.GetKey());
     }
 
     void PushAddress(const CAddress& addr)
     {
+        LOCK(cs_addrToSend);
         // Known checking here is only to save space from duplicates.
         // SendMessages will filter it again for knowns that were added
         // after addresses were pushed.
@@ -461,6 +468,34 @@ public:
                 vAddrToSend.push_back(addr);
             }
         }
+    }
+
+    void ClearAddressesToSend()
+    {
+        LOCK(cs_addrToSend);
+        vAddrToSend.clear();
+    }
+
+    void ResetAddressKnown()
+    {
+        LOCK(cs_addrToSend);
+        addrKnown.reset();
+    }
+
+    std::vector<CAddress> TakeAddressesToSend()
+    {
+        LOCK(cs_addrToSend);
+        std::vector<CAddress> queued;
+        queued.swap(vAddrToSend);
+        std::vector<CAddress> addresses;
+        addresses.reserve(queued.size());
+        BOOST_FOREACH(const CAddress& addr, queued) {
+            if (!addrKnown.contains(addr.GetKey())) {
+                addrKnown.insert(addr.GetKey());
+                addresses.push_back(addr);
+            }
+        }
+        return addresses;
     }
 
 

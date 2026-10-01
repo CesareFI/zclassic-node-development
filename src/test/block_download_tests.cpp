@@ -22,9 +22,11 @@
 #include <fstream>
 #include <memory>
 #include <array>
+#include <atomic>
 #include <map>
 #include <random>
 #include <limits>
+#include <thread>
 #include <chrono>
 
 extern bool ProcessMessage(CNode*, std::string, CDataStream&, int64_t);
@@ -3102,6 +3104,45 @@ BOOST_AUTO_TEST_CASE(address_oversized_count_is_rejected_before_deserialization)
     BOOST_CHECK_NO_THROW(BOOST_CHECK(!ProcessMessage(&peer, "addr", oversized, GetTime())));
     BOOST_CHECK_EQUAL(addrman.size(), before);
     BOOST_CHECK_GE(Stats(peer).nMisbehavior, 20);
+}
+
+BOOST_AUTO_TEST_CASE(address_relay_queue_serializes_producers_and_drain)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
+               "addr-concurrent", true);
+    constexpr unsigned int kAddressCount = MAX_ADDR_TO_SEND * 4;
+    std::atomic<bool> producerDone(false);
+    std::atomic<bool> oversizedDrain(false);
+    std::atomic<size_t> drained(0);
+
+    std::thread producer([&peer, &producerDone] {
+        for (unsigned int index = 0; index < kAddressCount; ++index) {
+            const unsigned int third = (index / 250) % 250;
+            const unsigned int fourth = (index % 250) + 1;
+            peer.PushAddress(CAddress(CService(
+                strprintf("8.8.%u.%u", third, fourth), Params().GetDefaultPort())));
+        }
+        producerDone.store(true);
+    });
+    std::thread consumer([&peer, &producerDone, &oversizedDrain, &drained] {
+        do {
+            const std::vector<CAddress> addresses = peer.TakeAddressesToSend();
+            if (addresses.size() > MAX_ADDR_TO_SEND)
+                oversizedDrain.store(true);
+            drained.fetch_add(addresses.size());
+        } while (!producerDone.load());
+        const std::vector<CAddress> addresses = peer.TakeAddressesToSend();
+        if (addresses.size() > MAX_ADDR_TO_SEND)
+            oversizedDrain.store(true);
+        drained.fetch_add(addresses.size());
+    });
+    producer.join();
+    consumer.join();
+
+    const std::vector<CAddress> remaining = peer.TakeAddressesToSend();
+    BOOST_CHECK(remaining.empty());
+    BOOST_CHECK(!oversizedDrain.load());
+    BOOST_CHECK_LE(drained.load(), static_cast<size_t>(kAddressCount));
 }
 
 BOOST_AUTO_TEST_CASE(inventory_send_abort_releases_only_unsent_requests)
