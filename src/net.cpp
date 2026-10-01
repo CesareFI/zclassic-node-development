@@ -2109,8 +2109,24 @@ bool CAddrDB::Read(CAddrMan& addr)
     return true;
 }
 
-unsigned int ReceiveFloodSize() { return 1000*GetArg("-maxreceivebuffer", 5*1000); }
-unsigned int SendBufferSize() { return 1000*GetArg("-maxsendbuffer", 1*1000); }
+static unsigned int BufferSizeFromArgument(const char* argument, int64_t defaultUnits)
+{
+    const int64_t units = GetArg(argument, defaultUnits);
+    const int64_t maxUnits = std::numeric_limits<unsigned int>::max() / 1000;
+    if (units < 0 || units > maxUnits)
+        return static_cast<unsigned int>(defaultUnits * 1000);
+    return static_cast<unsigned int>(units * 1000);
+}
+
+unsigned int ReceiveFloodSize()
+{
+    return BufferSizeFromArgument("-maxreceivebuffer", 5 * 1000);
+}
+
+unsigned int SendBufferSize()
+{
+    return BufferSizeFromArgument("-maxsendbuffer", 1 * 1000);
+}
 // Bounds how many bootstrap chunk requests a peer may have queued at once.
 // This caps the client's in-flight pipeline window; each queued request can
 // cost up to BOOTSTRAP_SNAPSHOT_CHUNK_SIZE (1 MiB) of buffered send data.

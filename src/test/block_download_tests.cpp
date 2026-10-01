@@ -115,6 +115,26 @@ public:
     }
 };
 
+class ScopedBufferArgument {
+    const std::string name;
+    const bool existed;
+    const std::string value;
+
+public:
+    ScopedBufferArgument(const std::string& argument, const std::string& replacement)
+        : name(argument), existed(mapArgs.count(argument) != 0),
+          value(existed ? mapArgs[argument] : "")
+    {
+        mapArgs[name] = replacement;
+    }
+
+    ~ScopedBufferArgument()
+    {
+        if (existed) mapArgs[name] = value;
+        else mapArgs.erase(name);
+    }
+};
+
 class ScopedLocalBloomService {
     uint64_t previous;
 
@@ -3217,6 +3237,33 @@ BOOST_AUTO_TEST_CASE(socket_retirement_checks_queue_owners_before_reading)
         peer.vRecvMsg.clear();
     }
     BOOST_CHECK(peer.HasNoQueuedMessages());
+}
+
+BOOST_AUTO_TEST_CASE(buffer_limits_reject_wrapped_unit_arguments)
+{
+    {
+        ScopedBufferArgument send("-maxsendbuffer", "-1");
+        BOOST_CHECK_EQUAL(SendBufferSize(), 1000000U);
+    }
+    {
+        // This would overflow a 32-bit byte count after multiplying by 1,000.
+        ScopedBufferArgument send("-maxsendbuffer", "4294968");
+        BOOST_CHECK_EQUAL(SendBufferSize(), 1000000U);
+    }
+    {
+        ScopedBufferArgument receive("-maxreceivebuffer", "-1");
+        BOOST_CHECK_EQUAL(ReceiveFloodSize(), 5000000U);
+    }
+    {
+        ScopedBufferArgument receive("-maxreceivebuffer", "4294968");
+        BOOST_CHECK_EQUAL(ReceiveFloodSize(), 5000000U);
+    }
+    {
+        ScopedBufferArgument send("-maxsendbuffer", "1");
+        ScopedBufferArgument receive("-maxreceivebuffer", "1");
+        BOOST_CHECK_EQUAL(SendBufferSize(), 1000U);
+        BOOST_CHECK_EQUAL(ReceiveFloodSize(), 1000U);
+    }
 }
 
 BOOST_AUTO_TEST_CASE(inventory_send_abort_releases_only_unsent_requests)

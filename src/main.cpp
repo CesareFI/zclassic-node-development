@@ -6923,7 +6923,9 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
             // Track requests for our stuff
             GetMainSignals().Inventory(inv.hash);
 
-            if (pfrom->nSendSize > (SendBufferSize() * 2)) {
+            const size_t sendBufferSize = SendBufferSize();
+            if (pfrom->nSendSize > sendBufferSize &&
+                pfrom->nSendSize - sendBufferSize > sendBufferSize) {
                 // This batch's getdata was never queued. Release only its
                 // reservations; cancellation is not progress on older work.
                 CNodeState* state = State(pfrom->GetId());

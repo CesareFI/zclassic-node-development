@@ -4640,3 +4640,27 @@ wire encoding, PoW, monetary rules, upgrades, wallet, or production data was
 changed. Worldstream remains storage/restart-only. Source-matched sanitizers
 remain unrun within the 10 GiB reserve. Next: inspect a different client-side
 bootstrap source-diversity/reconnect condition rather than queue duplicates.
+
+## Buffer-limit arithmetic remains bounded for invalid unit arguments
+
+Baseline and root cause: per-peer send and receive limits multiply an
+operator-supplied unit count by 1,000 and return an unsigned byte count. A
+negative `-maxsendbuffer` or `-maxreceivebuffer` wrapped to roughly 4 GiB; a
+too-large positive value wrapped to a tiny value (the direct regression
+observed 704 bytes). The inventory relay's doubled send-limit comparison also
+used unsigned multiplication.
+
+Fix: invalid negative or nonrepresentable unit counts now use the existing
+safe defaults (1 MiB send, 5 MiB receive); ordinary representable values keep
+their exact byte semantics. The inventory backpressure predicate compares the
+two limit intervals without multiplying, so it cannot overflow.
+
+After result and proof: the focused regression covers negative, overflow, and
+ordinary one-unit settings; it passes. The established inventory-send abort
+test passes, and the complete registered `block_download_tests` group passes
+118 cases and 108,049 assertions after the incremental native rebuild.
+Consensus impact: NONE. This changes operational resource accounting only; no
+peer protocol, block/header scheduling, validation, PoW, monetary policy,
+upgrades, wallet, or production data changed. Worldstream remains
+storage/restart-only. Source-matched sanitizers remain unrun within the 10 GiB
+reserve. Next: inspect a different measured IBD source or recovery condition.
