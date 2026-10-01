@@ -7,6 +7,7 @@
 #include "sync.h"
 
 #include <deque>
+#include <set>
 #include <string>
 
 /** Pending seed connections, sharing the ordinary outbound permit budget. */
@@ -15,12 +16,14 @@ class COneShotQueue
 private:
     CCriticalSection mutex;
     std::deque<std::string> destinations;
+    std::set<std::string> pending;
 
 public:
     void Add(const std::string& destination)
     {
         LOCK(mutex);
-        destinations.push_back(destination);
+        if (pending.insert(destination).second)
+            destinations.push_back(destination);
     }
 
     /** Try one connection outside the queue lock. The connector may transfer
@@ -40,8 +43,17 @@ public:
             destination = destinations.front();
             destinations.pop_front();
         }
-        if (!connect(destination, grant))
-            Add(destination);
+        // Keep the selected destination in pending while the connector runs.
+        // A concurrent Add() then cannot create a duplicate retry turn. A
+        // failed attempt is explicitly moved to the tail; a success retires
+        // the pending key and lets a later explicit request try again.
+        if (!connect(destination, grant)) {
+            LOCK(mutex);
+            destinations.push_back(destination);
+        } else {
+            LOCK(mutex);
+            pending.erase(destination);
+        }
     }
 };
 

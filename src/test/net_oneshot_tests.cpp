@@ -68,4 +68,44 @@ BOOST_AUTO_TEST_CASE(failed_attempt_retries_after_connected_peer_releases_permit
     BOOST_CHECK(static_cast<bool>(available));
 }
 
+BOOST_AUTO_TEST_CASE(duplicate_seed_does_not_delay_distinct_source_retry)
+{
+    COneShotQueue queue;
+    CSemaphore slots(1);
+    queue.Add("stalled-seed.invalid");
+    queue.Add("stalled-seed.invalid");
+    queue.Add("healthy-seed.invalid");
+    std::vector<std::string> attempts;
+    auto connect = [&](const std::string& destination, CSemaphoreGrant&) {
+        attempts.push_back(destination);
+        return destination == "healthy-seed.invalid";
+    };
+
+    queue.Process(slots, connect);
+    queue.Process(slots, connect);
+    const std::vector<std::string> expected{
+        "stalled-seed.invalid", "healthy-seed.invalid"};
+    BOOST_CHECK_EQUAL_COLLECTIONS(attempts.begin(), attempts.end(),
+                                  expected.begin(), expected.end());
+}
+
+BOOST_AUTO_TEST_CASE(inflight_seed_deduplication_survives_concurrent_add)
+{
+    COneShotQueue queue;
+    CSemaphore slots(1);
+    queue.Add("seed.invalid");
+    unsigned attempts = 0;
+    auto connect = [&](const std::string& destination, CSemaphoreGrant&) {
+        ++attempts;
+        // Process() invokes connectors without the queue lock, matching an
+        // AddOneShot call arriving while name resolution/connect is active.
+        queue.Add(destination);
+        return true;
+    };
+
+    queue.Process(slots, connect);
+    queue.Process(slots, connect);
+    BOOST_CHECK_EQUAL(attempts, 1U);
+}
+
 BOOST_AUTO_TEST_SUITE_END()

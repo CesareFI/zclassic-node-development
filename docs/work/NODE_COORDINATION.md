@@ -4560,3 +4560,29 @@ unrun: 11,283,144,704 bytes free leave insufficient margin over the 10 GiB
 reserve for a cold sanitizer build. Next: inspect a distinct measured
 peer-lifecycle or source-diversity condition rather than extending teardown
 permutations.
+
+## One-shot seed retries preserve distinct-source fairness
+
+Baseline and root cause: the one-shot peer-discovery queue accepted every
+duplicate destination. A failed duplicate seed therefore consumed another
+outbound retry turn before a separately queued healthy source. The deterministic
+baseline queued one stalled endpoint twice plus one healthy endpoint; its second
+attempt was the duplicate stalled endpoint rather than the healthy source.
+
+Fix: the queue now tracks a destination from admission through its active
+connect attempt. Duplicate additions are ignored while pending; failures move
+the one retained entry to the tail and successful connects retire it. This
+preserves ordinary failed-attempt retry and the shared outbound-permit budget,
+while avoiding redundant seed work and improving the opportunity for an
+independent source.
+
+After result and proof: the former ordering regression passes, and an
+in-flight-add regression proves a duplicate arrival during connection does not
+schedule a post-success retry. The complete `net_oneshot_tests` group passes
+4 cases and 15 assertions; `net_selection_tests` passes 6 cases and 33
+assertions after the incremental native rebuild. Consensus impact: NONE. No
+block/header scheduling, peer acceptance, wire format, validation, PoW,
+monetary, upgrade, wallet, or production state changed. Worldstream remains
+storage/restart-only. Source-matched sanitizers are unrun because the 10 GiB
+reserve leaves inadequate cold-build margin. Next: measure a distinct actual
+block-source or header-source condition rather than add seed-queue variants.
