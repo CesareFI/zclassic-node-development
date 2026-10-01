@@ -466,6 +466,16 @@ void CNode::CloseSocketDisconnect()
         vInventoryToSend.clear();
         setInventoryKnown.clear();
     }
+
+    // Deferred address relay is peer-owned work just like inventory relay.
+    // Do not wait for a retained CNode reference to disappear when its queue
+    // is uncontended; retain the established try-lock teardown behavior when
+    // a producer or sender is still using the queue.
+    TRY_LOCK(cs_addrToSend, lockAddress);
+    if (lockAddress) {
+        std::vector<CAddress>().swap(vAddrToSend);
+        addrKnown.reset();
+    }
 }
 
 void CNode::PushVersion()

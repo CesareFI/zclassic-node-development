@@ -3145,6 +3145,20 @@ BOOST_AUTO_TEST_CASE(address_relay_queue_serializes_producers_and_drain)
     BOOST_CHECK_LE(drained.load(), static_cast<size_t>(kAddressCount));
 }
 
+BOOST_AUTO_TEST_CASE(socket_disconnect_releases_deferred_addresses)
+{
+    CNode peer(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)),
+               "addr-disconnect", true);
+    for (unsigned int index = 0; index < MAX_ADDR_TO_SEND; ++index) {
+        peer.PushAddress(CAddress(CService(
+            strprintf("9.9.%u.%u", index / 250, (index % 250) + 1),
+            Params().GetDefaultPort())));
+    }
+
+    peer.CloseSocketDisconnect();
+    BOOST_CHECK(peer.TakeAddressesToSend().empty());
+}
+
 BOOST_AUTO_TEST_CASE(inventory_send_abort_releases_only_unsent_requests)
 {
     CNode announced(INVALID_SOCKET, CAddress(CService("127.0.0.1", 1)), "inv", true);

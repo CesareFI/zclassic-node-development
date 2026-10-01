@@ -4488,3 +4488,33 @@ mandatory 10 GiB reserve, while the supported sanitizer target needs about an
 additional GiB. Recommended next investigation: measure a distinct bounded
 network queue or availability condition rather than extending address-relay
 permutations.
+
+## Disconnect cleanup releases deferred address relay
+
+Baseline and root cause: after the address queue gained a dedicated owner, an
+uncontended `CloseSocketDisconnect()` still cleared receive, send, and inventory
+work but not the peer's deferred address relay. A disconnected peer held up to
+1,000 queued addresses and its duplicate filter until final `CNode` destruction
+whenever another reference remained.
+
+Fix: the existing nonblocking teardown performs an address-owner try-lock. If
+uncontended, it swaps out the deferred address vector and resets the duplicate
+filter. If a producer or sender owns the lock, teardown retains the existing
+deferred-to-final-reference behavior instead of risking a lock-order or
+lifetime violation.
+
+Regression proof: before the fix, an isolated peer with exactly 1,000 queued
+addresses failed `socket_disconnect_releases_deferred_addresses` (exit 201,
+one failed assertion). After the fix the focused case passed 523 assertions;
+the prior concurrent producer/drain regression still passed 525 assertions.
+The complete `block_download_tests` group passed 115/115 cases and 106,469
+assertions.
+
+Consensus impact: NONE. This frees disconnected peer relay state only; no
+address wire encoding, peer policy, validation, serialization, chain history,
+PoW, monetary policy, upgrades, wallet behavior, or production state changed.
+Worldstream remains storage/restart-only and is unmodified. Source-matched
+sanitizers remain unrun because 11,291,725,824 bytes free leaves only about
+0.52 GiB above the mandatory 10 GiB reserve, below the measured build margin.
+Recommended next investigation: retain the current address coverage and
+measure a separate bounded peer-lifecycle or availability path.
