@@ -616,17 +616,17 @@ BOOST_AUTO_TEST_CASE(repeated_full_header_batch_does_not_extend_response_deadlin
     BOOST_CHECK_EQUAL(deadline, start + 1400 * 1000000LL);
     SetClocks(start + 1300 * 1000000LL);
     HeaderBatch(first, headers, 1, MAX_HEADERS_RESULTS);
-    BOOST_CHECK_EQUAL(Stats(first).nHeaderSyncDeadline, deadline);
-    // Both replies are valid. Repeating the same range is not progress and
-    // must not postpone the deadline for the requested continuation.
+    // Both replies are valid, but repeating the same range is not progress.
+    // Release discovery immediately so a distinct source need not wait for
+    // the expired response deadline.
+    BOOST_CHECK_EQUAL(Stats(first).nHeaderSyncDeadline, 0);
     BOOST_CHECK_EQUAL(Stats(first).nMisbehavior, 0);
     BOOST_CHECK_EQUAL(Stats(first).nBlocksInFlight, 0);
-    SetClocks(start + 1401 * 1000000LL);
-    BOOST_REQUIRE(SendMessages(&first, false));
-    BOOST_CHECK(first.fDisconnect);
     BOOST_CHECK_EQUAL(GetBlockDownloadStats().nHeaderSyncPeers, 0);
+    BOOST_CHECK(!first.fDisconnect);
     BOOST_REQUIRE(SendMessages(&healthy, false));
     BOOST_REQUIRE_EQUAL(Sent(healthy, "getheaders"), 1);
+    BOOST_CHECK_EQUAL(Sent(first, "getheaders"), 2);
 }
 
 BOOST_AUTO_TEST_CASE(unsolicited_full_headers_do_not_restart_completed_sync)

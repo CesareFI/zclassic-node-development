@@ -7291,12 +7291,20 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t
             UpdateBlockAvailability(pfrom->GetId(), pindexLast->GetBlockHash());
 
         if (nodeState->fSyncStarted && nCount == MAX_HEADERS_RESULTS && pindexLast) {
-            UpdateHeaderSyncProgress(*nodeState, pindexLast->nChainWork);
-            // Headers message had its maximum size; the peer may have more headers.
-            // TODO: optimize: if pindexLast is an ancestor of chainActive.Tip or pindexBestHeader, continue
-            // from there instead.
-            LogPrint("net", "more getheaders (%d) to end to peer=%d (startheight:%d)\n", pindexLast->nHeight, pfrom->id, pfrom->nStartingHeight);
-            pfrom->PushMessage("getheaders", chainActive.GetLocator(pindexLast), uint256());
+            if (pindexLast->nChainWork > nodeState->nHeaderSyncWork) {
+                UpdateHeaderSyncProgress(*nodeState, pindexLast->nChainWork);
+                // Headers message had its maximum size; the peer may have more headers.
+                // TODO: optimize: if pindexLast is an ancestor of chainActive.Tip or pindexBestHeader, continue
+                // from there instead.
+                LogPrint("net", "more getheaders (%d) to end to peer=%d (startheight:%d)\n", pindexLast->nHeight, pfrom->id, pfrom->nStartingHeight);
+                pfrom->PushMessage("getheaders", chainActive.GetLocator(pindexLast), uint256());
+            } else {
+                // A maximum-size replay is valid wire data, but it cannot
+                // advance this source's discovery. Do not let it reserve the
+                // sole header role until its timeout; another peer can supply
+                // the requested continuation immediately.
+                CompleteHeaderSync(*nodeState);
+            }
         } else {
             CompleteHeaderSync(*nodeState);
         }

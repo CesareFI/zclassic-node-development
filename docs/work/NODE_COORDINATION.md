@@ -4586,3 +4586,31 @@ monetary, upgrade, wallet, or production state changed. Worldstream remains
 storage/restart-only. Source-matched sanitizers are unrun because the 10 GiB
 reserve leaves inadequate cold-build margin. Next: measure a distinct actual
 block-source or header-source condition rather than add seed-queue variants.
+
+## Replayed full header batches release the discovery role
+
+Baseline and root cause: a peer could return the same valid maximum-size
+header batch after the node requested its continuation. The existing code did
+not extend the monotonic deadline for unchanged work, but it still sent another
+`getheaders` and held the sole header-discovery role until the 15-minute
+timeout. The deterministic two-peer regression failed before the correction:
+the replaying peer retained one header role and the healthy peer sent no
+`getheaders` request.
+
+Fix: a maximum-size reply now continues the exchange only when its validated
+last-header chain work is strictly greater than that source's recorded work.
+An unchanged replay remains valid and unpenalized, but completes its discovery
+role immediately so another eligible source can proceed. Increasing-work
+batches keep the existing continuation and deadline-refresh behavior.
+
+After result and proof: the replay regression passes with the first peer still
+connected, no third request to it, and immediate healthy-peer discovery. The
+existing advancing multi-batch regression passes. The complete registered
+`block_download_tests` group passes 117 cases and 107,521 assertions after the
+incremental native rebuild. Consensus impact: NONE. Header acceptance,
+validation, chain selection, checkpoint behavior, wire encoding, PoW,
+monetary policy, upgrades, wallet behavior, and production data are unchanged.
+Worldstream remains storage/restart-only. Source-matched sanitizers are unrun
+because the mandatory 10 GiB reserve leaves insufficient cold-build margin.
+Next: use a distinct measured block-source/reconnect condition rather than
+duplicate header replay coverage.
