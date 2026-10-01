@@ -4388,3 +4388,29 @@ defect.  Consensus impact: NONE; no source changed.  Remaining risk: these are
 deterministic local fixtures, so an evidence-backed future investigation should
 target a different resource boundary (for example, bounded peer-advertisement
 churn) rather than duplicate teardown coverage.
+
+## Current sanitizer and inbound-priority checks
+
+Validation: the reusable September ASan/UBSan `test_bitcoin` artifact has
+source-parity evidence for the current networking translation units.  Its
+hard-coded disposable fixture path had become a broken `/tmp` symlink; a fresh
+temporary directory linked that path to the unchanged tracked
+`src/test/data/zclassic-download-130.dat` fixture.  This restored the artifact
+without copying implementation or changing source.  With address and undefined
+behavior sanitizers active (leak detection is unavailable under this host's
+ptrace wrapper), `teardown_releases_all_accounting` passed 586 assertions and
+`headers_do_not_hide_stall_and_healthy_peer_advances_chain` passed 848.
+
+The current native binary also passed the two distinct inbound-pressure
+regressions: `preferred_peer_discovers_chain_while_inbound_holds_requests`
+(748 assertions) and `preferred_source_after_many_inbounds_retains_priority`
+(1,181 assertions).  Those results confirm that retained inbound work did not
+block an eligible preferred source in the tested deterministic fixtures.
+
+Consensus impact: NONE.  No source, wire policy, validation, wallet, or
+production state changed.  The registered full suite remains unrun; the
+targeted sanitizer lane is limited to the two cases built into the reusable
+artifact and cannot substitute for a cold sanitized rebuild while the 10 GiB
+disk reserve is maintained.  The next distinct investigation should inspect
+bounded address-advertisement churn or bootstrap manifest-source churn, not
+repeat peer teardown or inbound-priority permutations.
