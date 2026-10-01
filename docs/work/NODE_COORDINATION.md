@@ -4389,6 +4389,22 @@ deterministic local fixtures, so an evidence-backed future investigation should
 target a different resource boundary (for example, bounded peer-advertisement
 churn) rather than duplicate teardown coverage.
 
+## Bootstrap manifest-source churn checks
+
+Validation: four isolated loopback bootstrap cases ran against the current
+native binary.  They cover open-reset rotation to a separately verified source
+(12 assertions), divergent-manifest refusal before a third source is contacted
+(12), one reconnecting parallel worker preserving its peer worker (11), and
+parallel streams using distinct verified sources (14).  All passed.  These
+tests use small temporary staging trees and do not download, trust, or install
+a snapshot outside the existing manifest and per-file verification path.
+
+Conclusion: no reconnect-churn defect was reproduced in current bootstrap
+source assignment.  Consensus impact: NONE; no source changed.  Remaining
+risk: loopback fixtures do not measure real WAN latency or availability.  A
+future change needs a new measurable condition, not another source-diversity
+permutation.
+
 ## Current sanitizer and inbound-priority checks
 
 Validation: the reusable September ASan/UBSan `test_bitcoin` artifact has
