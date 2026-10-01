@@ -2220,9 +2220,30 @@ void CNode::AskFor(const CInv& inv)
     mapAskFor.insert(std::make_pair(nRequestTime, inv));
 }
 
+static bool IsSameBootstrapChunkRequest(const CNode::BootstrapChunkQueueItem& item,
+                                        CNode::BootstrapChunkKind kind,
+                                        const CBootstrapSnapshotChunkRequest& request)
+{
+    return item.kind == kind &&
+        item.request.nFileIndex == request.nFileIndex &&
+        item.request.nOffset == request.nOffset &&
+        item.request.nLength == request.nLength;
+}
+
 bool CNode::QueueBootstrapChunkRequest(BootstrapChunkKind kind, const CBootstrapSnapshotChunkRequest& request)
 {
     LOCK(cs_bootstrap_requests);
+    const auto duplicate = std::find_if(vBootstrapChunkRequests.begin(),
+                                        vBootstrapChunkRequests.end(),
+                                        [&kind, &request](const BootstrapChunkQueueItem& item) {
+        return IsSameBootstrapChunkRequest(item, kind, request);
+    });
+    if (duplicate != vBootstrapChunkRequests.end()) {
+        // TCP request retries need no separate serve entry while the exact
+        // work is already pending. Report success so callers do not reject a
+        // valid duplicate, but preserve the bounded queue for distinct data.
+        return true;
+    }
     // Keep one slot for a request that SendQueuedBootstrapSnapshotChunk popped
     // and must requeue after a throttle decision. That preserves FIFO progress
     // if the message thread enqueues another request before the serving thread
@@ -2245,6 +2266,16 @@ void CNode::RequeueBootstrapChunkRequest(BootstrapChunkKind kind, const CBootstr
     // this older request to be dropped. The resulting queue remains at the
     // established per-peer cap.
     LOCK(cs_bootstrap_requests);
+    const auto duplicate = std::find_if(vBootstrapChunkRequests.begin(),
+                                        vBootstrapChunkRequests.end(),
+                                        [&kind, &request](const BootstrapChunkQueueItem& item) {
+        return IsSameBootstrapChunkRequest(item, kind, request);
+    });
+    if (duplicate != vBootstrapChunkRequests.end()) {
+        // The deferred request predates a retry that arrived after pop. Keep
+        // the original at the front without spending another bounded slot.
+        vBootstrapChunkRequests.erase(duplicate);
+    }
     if (vBootstrapChunkRequests.size() >= MAX_BOOTSTRAP_CHUNK_REQUESTS_PER_PEER) {
         return;
     }

@@ -4614,3 +4614,29 @@ Worldstream remains storage/restart-only. Source-matched sanitizers are unrun
 because the mandatory 10 GiB reserve leaves insufficient cold-build margin.
 Next: use a distinct measured block-source/reconnect condition rather than
 duplicate header replay coverage.
+
+## Bootstrap serving drops duplicate pending chunk work
+
+Baseline and root cause: the bounded per-peer bootstrap queue accepted every
+identical request. A peer could fill its 31 admitted slots with repetitions of
+one snapshot chunk, delaying distinct snapshot or parameter chunks and causing
+repeated disk reads/send allocations. The direct queue regression failed on the
+old behavior: after an exact duplicate snapshot request, the second pop was
+again that snapshot instead of the independent parameter request.
+
+Fix: queue admission now treats an identical kind/file/offset/length request
+as already accepted without adding another work item. Snapshot and parameter
+requests with the same coordinates remain distinct. Requeue also absorbs a
+duplicate that arrives after serving pops a request but before quota throttling
+returns that original request to the front, preserving FIFO priority and the
+existing hard cap.
+
+After result and proof: the queued-duplicate and late-duplicate/requeue
+regressions pass, along with the established concurrent-refill case. The full
+registered `bootstrap_snapshot_protocol_tests` group passes 94 cases and
+1,538 assertions after the incremental native rebuild. Consensus impact: NONE.
+No manifest/chunk verification, snapshot installation, block/header validity,
+wire encoding, PoW, monetary rules, upgrades, wallet, or production data was
+changed. Worldstream remains storage/restart-only. Source-matched sanitizers
+remain unrun within the 10 GiB reserve. Next: inspect a different client-side
+bootstrap source-diversity/reconnect condition rather than queue duplicates.

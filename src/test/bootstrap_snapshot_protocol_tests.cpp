@@ -1382,6 +1382,59 @@ BOOST_AUTO_TEST_CASE(bootstrap_snapshot_chunk_request_queue)
     BOOST_CHECK(!node.PopBootstrapChunkRequest(emptyKind, popped));
 }
 
+BOOST_AUTO_TEST_CASE(bootstrap_chunk_queue_deduplicates_exact_pending_requests)
+{
+    CNode node(INVALID_SOCKET, CAddress(CService("127.0.0.1", 0)), "", true);
+    CBootstrapSnapshotChunkRequest first;
+    first.nFileIndex = 1;
+    first.nOffset = 0;
+    first.nLength = 512 * 1024;
+    CBootstrapSnapshotChunkRequest second = first;
+    second.nOffset = first.nLength;
+
+    BOOST_REQUIRE(node.QueueBootstrapChunkRequest(CNode::BOOTSTRAP_CHUNK_SNAPSHOT, first));
+    BOOST_REQUIRE(node.QueueBootstrapChunkRequest(CNode::BOOTSTRAP_CHUNK_SNAPSHOT, first));
+    // The same offset in the independent parameter corpus is distinct work.
+    BOOST_REQUIRE(node.QueueBootstrapChunkRequest(CNode::BOOTSTRAP_CHUNK_PARAMS, first));
+    BOOST_REQUIRE(node.QueueBootstrapChunkRequest(CNode::BOOTSTRAP_CHUNK_SNAPSHOT, second));
+
+    CNode::BootstrapChunkKind kind = CNode::BOOTSTRAP_CHUNK_PARAMS;
+    CBootstrapSnapshotChunkRequest popped;
+    BOOST_REQUIRE(node.PopBootstrapChunkRequest(kind, popped));
+    BOOST_CHECK_EQUAL((int)kind, (int)CNode::BOOTSTRAP_CHUNK_SNAPSHOT);
+    BOOST_CHECK_EQUAL(popped.nOffset, first.nOffset);
+    BOOST_REQUIRE(node.PopBootstrapChunkRequest(kind, popped));
+    BOOST_CHECK_EQUAL((int)kind, (int)CNode::BOOTSTRAP_CHUNK_PARAMS);
+    BOOST_CHECK_EQUAL(popped.nOffset, first.nOffset);
+    BOOST_REQUIRE(node.PopBootstrapChunkRequest(kind, popped));
+    BOOST_CHECK_EQUAL((int)kind, (int)CNode::BOOTSTRAP_CHUNK_SNAPSHOT);
+    BOOST_CHECK_EQUAL(popped.nOffset, second.nOffset);
+    BOOST_CHECK(!node.PopBootstrapChunkRequest(kind, popped));
+}
+
+BOOST_AUTO_TEST_CASE(bootstrap_deferred_chunk_requeue_absorbs_late_duplicate)
+{
+    CNode node(INVALID_SOCKET, CAddress(CService("127.0.0.1", 0)), "", true);
+    CBootstrapSnapshotChunkRequest request;
+    request.nFileIndex = 1;
+    request.nOffset = 0;
+    request.nLength = 512 * 1024;
+    BOOST_REQUIRE(node.QueueBootstrapChunkRequest(CNode::BOOTSTRAP_CHUNK_SNAPSHOT, request));
+
+    CNode::BootstrapChunkKind kind = CNode::BOOTSTRAP_CHUNK_PARAMS;
+    CBootstrapSnapshotChunkRequest popped;
+    BOOST_REQUIRE(node.PopBootstrapChunkRequest(kind, popped));
+    // A duplicate can arrive while serving has popped the request but before
+    // a quota decision requeues it.
+    BOOST_REQUIRE(node.QueueBootstrapChunkRequest(CNode::BOOTSTRAP_CHUNK_SNAPSHOT, request));
+    node.RequeueBootstrapChunkRequest(kind, popped);
+
+    BOOST_REQUIRE(node.PopBootstrapChunkRequest(kind, popped));
+    BOOST_CHECK_EQUAL((int)kind, (int)CNode::BOOTSTRAP_CHUNK_SNAPSHOT);
+    BOOST_CHECK_EQUAL(popped.nOffset, request.nOffset);
+    BOOST_CHECK(!node.PopBootstrapChunkRequest(kind, popped));
+}
+
 BOOST_AUTO_TEST_CASE(disconnected_peer_keeps_bootstrap_chunk_queue_for_teardown)
 {
     CNode node(INVALID_SOCKET, CAddress(CService("127.0.0.1", 0)), "", true);
