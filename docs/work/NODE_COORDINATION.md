@@ -4329,3 +4329,26 @@ by that receipt.  Consensus impact: NONE; this is measurement/documentation
 only.  The next networking investigation should use the new per-peer delivery
 counters to compare useful delivery share under a controlled diverse-speed
 fixture, not re-run this identical lane.
+
+## Controlled diverse-speed lane shows no healthy-peer monopoly
+
+Measurement: the same isolated, checksum-verified 4,609-block localhost lane
+ran once with two healthy peers, normal validation, a 128-request cap, 100 ms
+response latency, configured A payload bandwidth 128 KiB/s, configured B
+payload bandwidth 10 MiB/s, and a 180-second bound.  This is a controlled
+fixture measurement, not an Internet throughput claim.
+
+Result: the node completed height 4,608 in 106.20 seconds (43.39 blocks/s),
+using 142.36 daemon CPU seconds, 98,036 KiB peak RSS, and zero swap.  A
+delivered 2,432 bodies and B delivered 2,176; there were zero duplicate or
+abandoned requests, no disconnects, no RPC-unavailable samples, and zero final
+in-flight or tracked-source counters.  The longest observed no-progress window
+was 2.50 seconds.  Thus neither healthy source was starved or monopolized in
+this bounded diverse-speed condition.
+
+Consensus impact: NONE.  No scheduler, validation, wire, wallet, or production
+state changed; the run used a disposable `/tmp` datadir and localhost peers.
+Remaining risk: the fixture's synthetic payload mix and CPU-bound validation do
+not establish behavior across real peer latency or historical body sizes.  The
+next evidence-backed investigation should vary header availability or
+reconnect timing, not repeat this completed lane.
