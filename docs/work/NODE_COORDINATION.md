@@ -4352,3 +4352,23 @@ Remaining risk: the fixture's synthetic payload mix and CPU-bound validation do
 not establish behavior across real peer latency or historical body sizes.  The
 next evidence-backed investigation should vary header availability or
 reconnect timing, not repeat this completed lane.
+
+## Delayed replacement peer resumes the ordinary block swarm
+
+Measurement: an isolated 4,609-block localhost lane started serving A alone;
+A delivered one body then intentionally closed, and B was not started until a
+configured three-second delay after that close.  The run used normal
+validation, a 128-request cap, a disposable datadir, and a 180-second bound.
+
+Result: A's drop was observed at 0.31 seconds and B joined at 3.34 seconds.
+B delivered the remaining 4,607 bodies; the node reached height 4,608 in
+107.77 seconds (42.76 blocks/s), using 139.82 daemon CPU seconds, 97,756 KiB
+peak RSS, and zero swap.  The receipt records 127 duplicate requests, exactly
+the reassigned remainder of A's original 128-request range after its one valid
+delivery.  Final in-flight and tracked-source counters were zero, no RPC
+sample failed, no stall disconnect was needed, and shutdown was graceful.
+
+Consensus impact: NONE.  This is an isolated measurement only; no C++ source,
+wire policy, validation, wallet, or production state changed.  Remaining risk:
+the controlled reconnect delay does not replace real-peer header availability
+evidence, so a future source change still requires a distinct reproducer.
