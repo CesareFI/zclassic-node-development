@@ -4372,3 +4372,19 @@ Consensus impact: NONE.  This is an isolated measurement only; no C++ source,
 wire policy, validation, wallet, or production state changed.  Remaining risk:
 the controlled reconnect delay does not replace real-peer header availability
 evidence, so a future source change still requires a distinct reproducer.
+
+## Current native adversarial teardown and header replacement checks
+
+Validation: the existing incrementally built `src/test/test_bitcoin` binary
+ran two distinct focused `block_download_tests` cases without a rebuild.  The
+fragmented malformed-message teardown case passed 6,291 assertions, proving
+that malformed wire input tears down download ownership safely.  The queued
+valid-headers-after-disconnect replacement case passed 539 assertions, proving
+that headers queued from a retired peer do not delay the replacement source.
+
+Conclusion: together with the current isolated lanes, these checks found no
+reproduced ordinary block-swarm, malformed-peer, or header-role recovery
+defect.  Consensus impact: NONE; no source changed.  Remaining risk: these are
+deterministic local fixtures, so an evidence-backed future investigation should
+target a different resource boundary (for example, bounded peer-advertisement
+churn) rather than duplicate teardown coverage.
