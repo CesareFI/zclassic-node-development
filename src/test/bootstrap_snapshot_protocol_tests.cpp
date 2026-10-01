@@ -2717,7 +2717,12 @@ BOOST_AUTO_TEST_CASE(bootstrap_parallel_rejects_zero_streams_before_worker_alloc
     BOOST_CHECK(!BootstrapDownloadSnapshotParallelForTest(
         CService("127.0.0.1", Params().GetDefaultPort()), manifest,
         boost::filesystem::path(), 1000, 0, error));
-    BOOST_CHECK_EQUAL(error, "bootstrap parallel download requires at least one stream");
+    BOOST_CHECK_EQUAL(error, "bootstrap parallel download requires 1 to 16 streams");
+    error.clear();
+    BOOST_CHECK(!BootstrapDownloadSnapshotParallelForTest(
+        CService("127.0.0.1", Params().GetDefaultPort()), manifest,
+        boost::filesystem::path(), 1000, 17, error));
+    BOOST_CHECK_EQUAL(error, "bootstrap parallel download requires 1 to 16 streams");
 }
 
 BOOST_AUTO_TEST_CASE(bootstrap_parallel_streams_use_distinct_verified_sources)

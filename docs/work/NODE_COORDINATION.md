@@ -4413,12 +4413,13 @@ Zero could therefore reach the worker-bin allocation path, leaving an empty
 vector that the file-assignment loop indexed at zero.  The normal CLI did not
 exercise that input, but the helper boundary was not independently safe.
 
-Fix: the helper now refuses counts below one before staging work or worker-bin
-allocation.  The focused native regression invokes the actual helper through
-the existing loopback seam with zero streams and proves a bounded refusal.
+Fix: the helper now enforces the existing one-to-sixteen stream contract before
+staging work or worker-bin allocation.  The focused native regression invokes
+the actual helper through the existing loopback seam with zero and seventeen
+streams and proves bounded refusal on both sides.
 The complete `bootstrap_snapshot_protocol_tests` group passes 92 cases and
-1,515 assertions after the incremental native rebuild.  The focused regression
-passes 2 assertions.  This legacy checkout has no cyclomatic-complexity target.
+1,517 assertions after the incremental native rebuild.  The focused regression
+passes 4 assertions.  This legacy checkout has no cyclomatic-complexity target.
 The reusable sanitizer artifact predates this source change, so sanitizer
 coverage is explicitly unrun rather than misrepresented; a cold rebuild would
 violate the 10 GiB disk reserve.
