@@ -4305,3 +4305,27 @@ data, and is retained for a future harness-owner repair.  Do not change the
 scheduler based on this telemetry failure.  Remaining risk: a retry-capable,
 maintained isolated peer harness is required to measure current time-to-tip
 and the new per-peer outcomes under this historical corpus.
+
+## Current canonical IBD harness tolerates bounded RPC sampling gaps
+
+Reproduction: the maintained `qa/rpc-tests/og-download-bench.py` was run once
+against the current `src/zclassicd` and the checksum-verified 4,609-block
+`mission/og-first4609.dat` fixture, using an isolated `/tmp` datadir,
+localhost-only peers, a 128-request window, withholding A, 10 MiB/s B,
+normal validation, and a 180-second bound.  No production datadir, wallet, or
+public peer was used.
+
+Result: the benchmark passed in 111.93 seconds (41.17 blocks/s), at height
+4,608, with 143.22 daemon CPU seconds, 96,828 KiB peak RSS, and zero swap.
+Nine `getblockchaininfo` samples hit the existing bounded local RPC timeout
+during validation; the maintained harness recorded them and continued rather
+than mistaking them for a scheduler failure.  It observed the required 128
+abandoned/reassigned requests, zero final in-flight and tracked-source counts,
+no RPC outage, and graceful daemon shutdown.
+
+Conclusion and next: the September stale one-shot sampler copy is not a
+current scheduler regression, so no C++ scheduling policy change is justified
+by that receipt.  Consensus impact: NONE; this is measurement/documentation
+only.  The next networking investigation should use the new per-peer delivery
+counters to compare useful delivery share under a controlled diverse-speed
+fixture, not re-run this identical lane.
