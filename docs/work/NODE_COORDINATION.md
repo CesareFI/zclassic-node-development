@@ -4405,6 +4405,30 @@ risk: loopback fixtures do not measure real WAN latency or availability.  A
 future change needs a new measurable condition, not another source-diversity
 permutation.
 
+## Parallel bootstrap worker count is bounded at its owning allocation boundary
+
+Risk: `BootstrapFromPeer` clamps `-bootstrapstreams`, but the parallel-download
+helper and its localhost test seam previously trusted their `nStreams` caller.
+Zero could therefore reach the worker-bin allocation path, leaving an empty
+vector that the file-assignment loop indexed at zero.  The normal CLI did not
+exercise that input, but the helper boundary was not independently safe.
+
+Fix: the helper now refuses counts below one before staging work or worker-bin
+allocation.  The focused native regression invokes the actual helper through
+the existing loopback seam with zero streams and proves a bounded refusal.
+The complete `bootstrap_snapshot_protocol_tests` group passes 92 cases and
+1,515 assertions after the incremental native rebuild.  The focused regression
+passes 2 assertions.  This legacy checkout has no cyclomatic-complexity target.
+The reusable sanitizer artifact predates this source change, so sanitizer
+coverage is explicitly unrun rather than misrepresented; a cold rebuild would
+violate the 10 GiB disk reserve.
+
+Consensus impact: NONE.  No snapshot acceptance, manifest verification, chain,
+PoW, wallet, or production-datadir behavior changed.  Worldstream's current
+accessible branch remains storage/restart-only and is not modified.  Next:
+measure a new peer/network bottleneck rather than extend bootstrap argument
+permutations.
+
 ## Current sanitizer and inbound-priority checks
 
 Validation: the reusable September ASan/UBSan `test_bitcoin` artifact has

@@ -2302,6 +2302,14 @@ static bool DownloadBootstrapSnapshotParallel(const std::vector<CService>& peerA
         error = "bootstrap parallel download has no peer address";
         return false;
     }
+    // BootstrapFromPeer clamps the command-line setting, but retain this
+    // boundary here as well: this helper owns the worker-bin allocation and
+    // must not turn a future caller or test seam's zero stream count into an
+    // empty vector followed by an out-of-bounds assignment.
+    if (nStreams < 1) {
+        error = "bootstrap parallel download requires at least one stream";
+        return false;
+    }
     LogPrintf("Bootstrap: downloading snapshot from peer %s over %d parallel streams: %u files, %llu bytes (height %d)\n",
         peer, nStreams,
         (unsigned int)manifest.vFiles.size(),
