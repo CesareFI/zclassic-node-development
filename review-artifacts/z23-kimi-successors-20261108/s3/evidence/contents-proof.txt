@@ -1,0 +1,29 @@
+Source reasoning at upstream base e73d3ec9c4e4b842afa9eae9f78d2de7408bf389.
+This is not a runtime verdict.
+
+package_recipe.c: copy_size is strlen(entry)+1, used for both allocation
+and memcpy, so every byte including the original terminator is copied.
+The allocation error path, insertion index, memmove and ordering are unchanged.
+
+zlru test_visit_order: the exact keys a,b,c are visited in a,c,b order twice.
+The unchanged expected accumulator is "a c b ", six bytes plus NUL in 64.
+The sink carries its actual capacity; append checks remaining space and the
+snprintf result. A capacity/truncation failure increments CHECK failures and
+stops the visit rather than silently accepting a shorter fixture.
+
+ztemplate test_differential: rng seed, 3000 iterations, fragment array and
+one RNG draw per selected fragment are unchanged. parts is rng_next()%8.
+The longest literal fragment is eleven bytes ("{{! note }}"); at most seven
+fragments need 78 bytes including NUL in the existing 256-byte buffer.
+Every snprintf result is checked against remaining capacity; the existing
+parse/reference-render/output equality checks remain.
+
+ztoml depth fixture: default ZTOML_MAX_DEPTH is 8. The unchanged input is
+"k = " followed by ten '[' bytes, requiring 15 bytes including NUL in 64.
+The new static assertion rejects a configuration whose fixture would not
+fit. Each one-byte append and the final exact length are checked before the
+unchanged ZTOML_ERR_RANGE expectation, so truncation cannot weaken this input.
+
+No zxml edit: preserve upstream's validated memcpy and retired baseline row.
+No package pin or registry hash is copied from archived e29792bdf7.
+Only repository-supported generators may refresh metadata and ratchets.

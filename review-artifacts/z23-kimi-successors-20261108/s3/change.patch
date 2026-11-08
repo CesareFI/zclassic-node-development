@@ -1,0 +1,142 @@
+diff --git a/contexts/commons/modules/vcs/src/package_recipe.c b/contexts/commons/modules/vcs/src/package_recipe.c
+index c8974a2dc3..3bc87a154b 100644
+--- a/contexts/commons/modules/vcs/src/package_recipe.c
++++ b/contexts/commons/modules/vcs/src/package_recipe.c
+@@ -227,13 +227,14 @@ static bool recipe_strings_insert(struct vcs_package_recipe_strings *list,
+         list->items = nitems;
+         list->cap = ncap;
+     }
+-    char *copy = zcl_malloc(strlen(entry) + 1, "vcs_recipe_entry");
++    size_t copy_size = strlen(entry) + 1;
++    char *copy = zcl_malloc(copy_size, "vcs_recipe_entry");
+     if (!copy) {
+         if (err_out)
+             *err_out = VCS_PACKAGE_RECIPE_ERR_ALLOC;
+         return false;
+     }
+-    strcpy(copy, entry);
++    memcpy(copy, entry, copy_size);
+     memmove(list->items + lo + 1, list->items + lo,
+             (list->count - lo) * sizeof(*list->items));
+     list->items[lo] = copy;
+diff --git a/contexts/commons/packages/zlru/tests/test_zlru.c b/contexts/commons/packages/zlru/tests/test_zlru.c
+index c674b50369..73c0a197fd 100644
+--- a/contexts/commons/packages/zlru/tests/test_zlru.c
++++ b/contexts/commons/packages/zlru/tests/test_zlru.c
+@@ -141,11 +141,21 @@ static void test_capacity_one(void) {
+   zlru_destroy(c);
+ }
+ 
++struct zlru_key_sink {
++  char *text;
++  size_t cap;
++};
++
+ static bool collect_key(void *ctx, const char *key, void *value) {
+   (void)value;
+-  strcat(ctx, key);
+-  strcat(ctx, " ");
+-  return true;
++  struct zlru_key_sink *sink = ctx;
++  size_t used = strlen(sink->text);
++  CHECK(used < sink->cap);
++  if (used >= sink->cap) return false;
++  /* Three one-byte keys and spaces need seven bytes including the NUL. */
++  int n = snprintf(sink->text + used, sink->cap - used, "%s ", key);
++  CHECK(n >= 0 && (size_t)n < sink->cap - used);
++  return n >= 0 && (size_t)n < sink->cap - used;
+ }
+ 
+ static void test_visit_order(void) {
+@@ -157,11 +167,12 @@ static void test_visit_order(void) {
+   zlru_get(c, "a"); /* promote a: order b? no: c? order is b? recompute */
+   /* MRU order now: a c b */
+   char acc[64] = "";
+-  zlru_visit_mru_first(c, collect_key, acc);
++  struct zlru_key_sink sink = {acc, sizeof(acc)};
++  zlru_visit_mru_first(c, collect_key, &sink);
+   CHECK(!strcmp(acc, "a c b "));
+   /* The visit must not promote: same order again. */
+   memset(acc, 0, sizeof(acc));
+-  zlru_visit_mru_first(c, collect_key, acc);
++  zlru_visit_mru_first(c, collect_key, &sink);
+   CHECK(!strcmp(acc, "a c b "));
+   zlru_destroy(c);
+ }
+diff --git a/contexts/commons/packages/ztemplate/tests/test_ztemplate.c b/contexts/commons/packages/ztemplate/tests/test_ztemplate.c
+index 0f41319c2c..bcc18a5c39 100644
+--- a/contexts/commons/packages/ztemplate/tests/test_ztemplate.c
++++ b/contexts/commons/packages/ztemplate/tests/test_ztemplate.c
+@@ -239,8 +239,13 @@ static void test_differential(void)
+         char t[256];
+         t[0] = '\0';
+         size_t parts = rng_next() % 8;
+-        for (size_t i = 0; i < parts; i++)
+-            strcat(t, frags[rng_next() % 10]);
++        /* At most seven fragments of eleven bytes: 78 including the NUL. */
++        for (size_t i = 0; i < parts; i++) {
++            size_t used = strlen(t);
++            int n = snprintf(t + used, sizeof(t) - used,
++                             "%s", frags[rng_next() % 10]);
++            CHECK(n >= 0 && (size_t)n < sizeof(t) - used);
++        }
+         ztemplate *tp = ztemplate_parse(t, strlen(t), NULL);
+         CHECK(tp != NULL);
+         char got[1024], want[1024];
+diff --git a/contexts/commons/packages/ztoml/tests/test_ztoml.c b/contexts/commons/packages/ztoml/tests/test_ztoml.c
+index b19969c5bd..b5d7f146bf 100644
+--- a/contexts/commons/packages/ztoml/tests/test_ztoml.c
++++ b/contexts/commons/packages/ztoml/tests/test_ztoml.c
+@@ -255,8 +255,14 @@ static void test_err(void) {
+   /* Depth bound. */
+   {
+     char doc[64] = "k = ";
++    static_assert(ZTOML_MAX_DEPTH + 2 <= sizeof(doc) - sizeof("k = "),
++                  "depth fixture must fit without truncation");
+     size_t i;
+-    for (i = 0; i < ZTOML_MAX_DEPTH + 2; i++) strcat(doc, "[");
++    for (i = 0; i < ZTOML_MAX_DEPTH + 2; i++) {
++      size_t used = strlen(doc);
++      CHECK(snprintf(doc + used, sizeof(doc) - used, "[") == 1);
++    }
++    CHECK(strlen(doc) == 4 + ZTOML_MAX_DEPTH + 2);
+     evlog log;
+     CHECK(parse_all(doc, &log) == ZTOML_ERR_RANGE);
+   }
+diff --git a/engine/composition/zcode_package_registry.def b/engine/composition/zcode_package_registry.def
+index 3701f3e2cc..98900eb0e7 100644
+--- a/engine/composition/zcode_package_registry.def
++++ b/engine/composition/zcode_package_registry.def
+@@ -67,13 +67,13 @@ ZCODE_PACKAGE("zclassic23/crypto-sha3", "core/modules/crypto", 8,
+     "021492bc6a132ac91cb8b9f57d2b809dd2bdb8e1a294d3edbb6c6f7fc03bf11cac",
+     "15505f8330741c065eae7413aab561a80140850ddca23ab8aa0b9bdab6ce5b3244f55a08e7b82132a5f5c70532edefd1d6eda18ba639dfc8cfbda6442251f570")
+ ZCODE_PACKAGE("zclassic23/package", "contexts/commons/modules/vcs", 9,
+-    "738ef0afb77118a097f1af4b227cf364ec52769f681defe56f910fab72b1d231",
+-    "cb882dc6c953bcb9d27b1f65c8dbab2818ed89b57a5341985ca449743defbe2f",
++    "459b8e5df12e90eb3a06a7097254a1c88ad71406736c0a1a78ee2557a9bf4a67",
++    "0b39231ae710411885c2fcd2b01840b8efdc419d2f00a0ccf01de714058e9d5e",
+     "ed665d9d616abfef496c31a87dd18f2e884469bf9782704dac6c1fd1ce027d04",
+-    "86ede0c212d652cbe72e775a9000f1cc634465068609bf6f4270bf37e61b45e2",
++    "4fa54f4ae94a769ec21865387975d9acb1cd77008d357bc49789b2719927fe84",
+     "4cf5f2ad2e03e840afbec8d3ce3e0b33b1ffee12ae7becf35ecf620052ff255e",
+     "021492bc6a132ac91cb8b9f57d2b809dd2bdb8e1a294d3edbb6c6f7fc03bf11cac",
+-    "8468f07abc33a98ea82a7978fc99beb5b7f59703be22696b375dd463d67ee62e5bd105600ef9d398068a24f9ec1224a8a392aa04789ff9ceb2730f247ff37488")
++    "7348a55a9433b0d0d6fa41ae17d5a84ccfb013c04e8b3b874c53c758aeab4e4a59ee1a87d3c21f4250b2bae82362482b8e44e13e466fba94bf81bfcab53c9598")
+ ZCODE_PACKAGE("zclassic23/rvemu", "platform/modules/rvemu", 11,
+     "cbc6238ef0e9e950e5d19eed075fa740819aa5da6d290c8e9cbd42c64a0154e8",
+     "b1beb93af1c8de76ef80a530651725d7660e00751aea121b9287decbffb4d596",
+diff --git a/tools/lint/hardening_ratchet_baseline.txt b/tools/lint/hardening_ratchet_baseline.txt
+index 2390043b27..01ba9132dc 100644
+--- a/tools/lint/hardening_ratchet_baseline.txt
++++ b/tools/lint/hardening_ratchet_baseline.txt
+@@ -8,10 +8,6 @@
+ #        local-reader (struct *_reader, *_cursor, *_rd definitions).
+ # core/ rows are counted and frozen like the rest of core/.
+ # Regenerate: z23-lint check-hardening-ratchet --write-baseline
+-banned-str contexts/commons/modules/vcs/src/package_recipe.c 1
+-banned-str contexts/commons/packages/zlru/tests/test_zlru.c 2
+-banned-str contexts/commons/packages/ztemplate/tests/test_ztemplate.c 1
+-banned-str contexts/commons/packages/ztoml/tests/test_ztoml.c 1
+ local-reader cognition/modules/codeindex/src/codeindex_merkle.c 1
+ local-reader cognition/modules/codeindex/src/codeindex_merkle_decode.c 1
+ local-reader cognition/modules/session/src/fleet_board_proto.c 2

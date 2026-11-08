@@ -1,0 +1,22 @@
+Reviewer: collaboration task /root/s3_review, not the patch author.
+Requested model: gpt-6.1-terra, reasoning low, as prescribed by lane AGENTS.md.
+Effective model: not observable to reviewer; independently unconfirmed.
+Tokens, elapsed-time model metrics: not provided; no savings claim.
+
+Reviewed commit c14011ede09dd22b1b5561ed03b207f30cc55f94,
+tree c2b1029681caa9a6d52af8f84a731fb7562aaf9a,
+sole parent e73d3ec9c4e4b842afa9eae9f78d2de7408bf389.
+Verdict: NO FINDINGS in independent source review.
+
+package_recipe.c:230 copies allocated strlen+1 bytes including NUL,
+preserving insertion; zlru/tests/test_zlru.c:149 checks capacity and reports
+truncation; ztemplate/tests/test_ztemplate.c:242 preserves RNG draws and
+fits worst-case 78 bytes with checked snprintf; ztoml/tests/test_ztoml.c:258
+statically bounds and checks the original fixture. Diff is exactly the six
+authorized paths, preserves zxml and changes only the package registry
+declaration and four corresponding ratchet rows. Generator evidence records
+exit0 for supported hardening and package registry generators, with one
+package re-derived.
+
+Independent runtime checks: NOT RUN. This source verdict does not establish
+maintainer qualification, acceptance or landing.

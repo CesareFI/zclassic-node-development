@@ -1,0 +1,6 @@
+contexts/commons/modules/vcs/src/package_recipe.c
+contexts/commons/packages/zlru/tests/test_zlru.c
+contexts/commons/packages/ztemplate/tests/test_ztemplate.c
+contexts/commons/packages/ztoml/tests/test_ztoml.c
+engine/composition/zcode_package_registry.def
+tools/lint/hardening_ratchet_baseline.txt

@@ -1,0 +1,173 @@
+{
+  "schema": "z23.review_successor_manifest.v1",
+  "contribution": "S3 remaining bounded string operations",
+  "authority": "Owner-relayed Rhett request in this session; no new native maintainer receipt is asserted",
+  "source": {
+    "base": "e73d3ec9c4e4b842afa9eae9f78d2de7408bf389",
+    "candidate": "c14011ede09dd22b1b5561ed03b207f30cc55f94",
+    "tree": "c2b1029681caa9a6d52af8f84a731fb7562aaf9a",
+    "worktree": "/home/kimi/z23-upcur/.cache/z23-successors-20261108/s3",
+    "dependency_on_receipt_candidate": false,
+    "signature": "UNSIGNED review snapshot (git %G? = N); no signing policy was disabled"
+  },
+  "latest_upstream_before_submission": "0152ccd7d78f6a555398591796a14efa18a2580a",
+  "upstream_drift": "None of the four owned C files changed between recorded base and latest pre-submission main. Candidate was not silently rebased.",
+  "changes": [
+    {
+      "path": "contexts/commons/modules/vcs/src/package_recipe.c",
+      "purpose": "Allocate strlen(entry)+1 and memcpy exactly that many bytes, preserving terminator, ordering and allocation failure behavior"
+    },
+    {
+      "path": "contexts/commons/packages/zlru/tests/test_zlru.c",
+      "purpose": "Carry accumulator capacity; bounded key-and-space append checks its result; unchanged a c b space sequence"
+    },
+    {
+      "path": "contexts/commons/packages/ztemplate/tests/test_ztemplate.c",
+      "purpose": "Checked bounded appends preserve RNG draws and fragments; worst-case 78 bytes including NUL in 256"
+    },
+    {
+      "path": "contexts/commons/packages/ztoml/tests/test_ztoml.c",
+      "purpose": "Checked bounded appends, compile-time capacity and final-length assertions preserve the depth rejection input"
+    },
+    {
+      "path": "tools/lint/hardening_ratchet_baseline.txt",
+      "purpose": "Supported generator removed exactly four matching banned-str rows, five calls total"
+    },
+    {
+      "path": "engine/composition/zcode_package_registry.def",
+      "purpose": "Supported fixpoint generator refreshed one zclassic23/package declaration; zero dependency pins changed; all 97 manifests covered"
+    }
+  ],
+  "preservation": "Upstream zxml fix untouched; archived originals unchanged; no CLI/ZPD, consensus, sealed core, custody or deployment changes.",
+  "checks": [
+    {
+      "command": "make -j4 t-fast-exact ONLY=commons_package_tests,vcs_core,zcode_recipe,zcode_package_registry,zcode_swarm_net,zcode_score_receipt T_FAST_EXACT_ARGS='--jobs=1 --no-cache'",
+      "exit": 2,
+      "result": "Five of six cold groups PASS, zero cached/skipped; commons 80/80. zcode_swarm_net FAIL: two TCP setup sub-suites failed zwn_tcp_init; exact failed syscall was not recorded.",
+      "candidate": "c14011ede09dd22b1b5561ed03b207f30cc55f94",
+      "wall": "6:14.81",
+      "max_rss_kib": 1408596
+    },
+    {
+      "command": "make -j4 t-fast-exact ONLY=zcode_swarm_net T_FAST_EXACT_ARGS='--jobs=1 --no-cache'",
+      "execution": "Narrowly authorized execution outside the socket-restricted sandbox; same candidate, private TMPDIR, four CPUs, one test worker",
+      "exit": 0,
+      "result": "One cold group PASS; all 26/26 sub-suites passed, zero cached/skipped. Initial FAIL retained; this does not isolate the initial failed syscall."
+    },
+    {
+      "command": "make -j4 lint-fast ZCL_LINT_JOBS=4",
+      "exit": 2,
+      "result": "Initial sandboxed run: 47/54 gates PASS, seven scratch selftests FAIL; preserved"
+    },
+    {
+      "command": "make -j4 lint-fast ZCL_LINT_JOBS=4",
+      "execution": "Authorized scratch access, private TMPDIR",
+      "exit": 0,
+      "result": "54/54 gates PASS; lint-fast OK. Base-relative precheck SKIPPED because merge-base HEAD origin/main failed; not represented as PASS."
+    },
+    {
+      "command": "make -j4 lint-preflight ZCL_LINT_JOBS=4",
+      "exit": 0,
+      "result": "6/6 required area gates PASS"
+    },
+    {
+      "command": "make -j4 check-hardening-ratchet check-zcode-package-registry",
+      "exit": 0,
+      "result": "PASS, including generator coverage/selftests and CLEAN 97 manifests"
+    },
+    {
+      "command": "build/bin/z23-lint check-hardening-ratchet --write-baseline",
+      "exit": 0,
+      "result": "Generated on new source; only four targeted rows removed"
+    },
+    {
+      "command": "make -j4 docs-zcode-package-registry",
+      "exit": 0,
+      "result": "One fixpoint round; one affected package declaration, zero dependent pins"
+    }
+  ],
+  "prerequisites": "Initial generator-tools build and worktree-prime failed before final checks: missing vendor inputs, sandbox DNS failure, then Linux Tor configure could not locate system libevent. Supported worktree-prime copied existing vendor files. Supported make tor-full with explicit vendored CPPFLAGS/LDFLAGS and ZCL_TOR_JOBS=4 passed and wrote current provenance. Generator tools then built successfully. These are prerequisite results, not substitutes for focused results.",
+  "resource_policy": "One build/check pipeline; taskset CPUs 0,1,2,3; make -j4; lint jobs4; registered test worker1; per-command timeout1800. Exact commands/timings retained in evidence/checks.txt.",
+  "review": {
+    "non_author_source": "NO FINDINGS on exact candidate, collaboration /root/s3_review",
+    "reviewer_requested_model": "gpt-6.1-terra low",
+    "effective_model": "not independently observable",
+    "reviewer_runtime": "NOT RUN",
+    "maintainer_review": "PENDING",
+    "acceptance": "NOT PROVEN",
+    "landing": "NOT PROVEN"
+  },
+  "not_run": [
+    "make all full build",
+    "make lint full lint",
+    "full registered suite",
+    "ASan/UBSan on this S3 successor",
+    "base-relative lint precheck (merge-base unavailable)",
+    "signed landing qualification"
+  ],
+  "native_delivery": "UNCONFIRMED: local native client reports no_default_instance, instances=[], alive_count0; no new native post/readback or receiver acknowledgment",
+  "publication": "Separate GitHub review branch; permanent publication commit recorded in external readback proof. GitHub publication is not native delivery, review acceptance or landing.",
+  "evidence": "Allowlisted historical verdict excerpts and exact command arguments/results for this new candidate; full logs remain local. Pre-commit generator runs have their actual base HEAD plus uncommitted diff SHA-256 recorded, and are not mislabeled as committed-candidate tests.",
+  "artifacts": [
+    {
+      "path": "LICENSE",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "git_blob": "d645695673349e3947e8e5ae42332d0ac3164cd7"
+    },
+    {
+      "path": "candidate.bundle",
+      "bytes": 3245,
+      "sha256": "7ade62f0eae145281fb5e265968b97e343838d119656bfd75921e751395bdfe3",
+      "git_blob": "c279c0255a22c1060911043209a31249a0e99f87"
+    },
+    {
+      "path": "candidate.mbox",
+      "bytes": 8439,
+      "sha256": "52e1232a92def174ab3074251d8dc0bb3edf54520c7295e02c50940937de0af5",
+      "git_blob": "216a4575ee3f0493c9e95b5086d3600071063d13"
+    },
+    {
+      "path": "change.patch",
+      "bytes": 7064,
+      "sha256": "953aa883d10cf691e6b11204bd187f961c38bf88ecc65069a6d14088148f6d60",
+      "git_blob": "61e88552ad8fe5d330822e11b79e6b2525fba6b3"
+    },
+    {
+      "path": "files-changed.txt",
+      "bytes": 297,
+      "sha256": "baf84488ea861cb8981e38664ad4b36666f51ad9cfe3fbf30a2bc5b1a8ac3343",
+      "git_blob": "4717ba2bbcd86282ef51098014e9e3cef30b4227"
+    },
+    {
+      "path": "git-identity.txt",
+      "bytes": 188,
+      "sha256": "e28088c669dd4db4d1c33a7368995a7db75eb3b837a5bc9abe88906709ddf6a1",
+      "git_blob": "cbb0cae60ea5f2ecb8f597c7e36c63dc21fdf319"
+    },
+    {
+      "path": "sources.tar.gz",
+      "bytes": 31982,
+      "sha256": "06079eb749dcf7e44abf623a1536246f8061254c0778e453d7a792ae9a5c433e",
+      "git_blob": "666b409a993e5bf35a4131a8b68d575a1d418fcd"
+    },
+    {
+      "path": "evidence/checks.txt",
+      "bytes": 26840,
+      "sha256": "0c8b220966a44533f9b925d9dd5f1682ffd2c7a32af8452468e1413f9d40ac7f",
+      "git_blob": "6f46e36ce930c9d600618d0b9bb4387c0eeaf139"
+    },
+    {
+      "path": "evidence/contents-proof.txt",
+      "bytes": 1723,
+      "sha256": "427decbea852fad241e77aee9a308e70e14b03eb91d2722dd807e06ad7c89075",
+      "git_blob": "13695584ba5b22076e3c0c0372b06cdc987bbc87"
+    },
+    {
+      "path": "evidence/independent-source-review.txt",
+      "bytes": 1235,
+      "sha256": "3038369dbca261daa1efb49a5b9efa09502d660d0d5bb9b12dba0a4edde91ecc",
+      "git_blob": "de57ede3c06fd52e5cb8932b35c86e0b78b8b742"
+    }
+  ]
+}

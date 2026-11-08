@@ -1,0 +1,469 @@
+Exact commands are listed one argument per line; no shell reconstruction is implied.
+Resource wrapper: taskset -c 0,1,2,3 timeout 1800; /usr/bin/time -v.
+TMPDIR for final checks: private scratch under the recorded successors directory.
+Verdicts are allowlisted excerpts, not full runtime logs. Original complete logs remain local.
+
+CHECK focused-tcp-authorized
+HEAD TREE at command start:
+c14011ede09dd22b1b5561ed03b207f30cc55f94
+c2b1029681caa9a6d52af8f84a731fb7562aaf9a
+Uncommitted diff SHA-256 at command start:
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+ARGV:
+make
+-j4
+t-fast-exact
+ONLY=zcode_swarm_net
+T_FAST_EXACT_ARGS=--jobs=1 --no-cache
+EXIT 0
+START 2026-11-08T12:35:34Z
+FINISH 2026-11-08T12:36:31Z
+	User time (seconds): 20.38
+	System time (seconds): 5.74
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:56.24
+	Maximum resident set size (kbytes): 73276
+VERDICT EXCERPTS:
+==================== test_zcode_swarm_net (PASS, 51s) ====================
+[component-tcp] deadline_control=expired classified=1 cancelled=1 owned_teardown_returned=1 failures=0
+[component-tcp] release_control=grant-false result=PASS
+[component-tcp] release_control=persist-directory-refusal cleaned=1 acceptance=accepted stored=0 result=PASS reason=public release store refused: io-failure; acceptance: accepted
+[component-tcp] phase=inert-admission public_root=b07de45072d3fb70a6a2a90206b69ecb06f9f0ba0564ef22d563baac7f9edacc selected_release_blob=0353af78d08e571cf115de4acd60104155bb32c9e684b84207ab5fe608aa0456 release_id=3c013e5e7fd5d253c78d2028e4b0ebd41d04cc05461db6b27f5811829a9ca727 admission_attempted=1 release_stored=1 acceptance=accepted
+[component-tcp] phase=cold action=6584f08751aa8f414f5e9d2ebe9a4a171108b72ed8952011d05a9b8c49cd1318 artifact=4eb551cde955facfbbd48481390d3c86fd7af0a4fd73d7ad90eca962687ba6b5 local_carrier_root=67280cc14cad583faa08cef2d94b4e53c680e8381ef2a1a162d3f840231e3a7d image=4cea0fb171a6c5036ee4e6c62d863a7d43d8c5396e52cff8fbc7c812c24986f7 tcp_received_bytes=30355 provider_sent=28158 receiver_sent=2197 fetch_ms=2055 manifest_read=275 cas_read=25707 assembly=13592 sealed_copy=13592 runner_seal_us=52 story_us=0 admitted=1 candidate_executed=1 green=1 reason=
+[component-tcp] phase=cold public_root=b07de45072d3fb70a6a2a90206b69ecb06f9f0ba0564ef22d563baac7f9edacc selected_release_blob=0353af78d08e571cf115de4acd60104155bb32c9e684b84207ab5fe608aa0456 release_id=3c013e5e7fd5d253c78d2028e4b0ebd41d04cc05461db6b27f5811829a9ca727 admission_attempted=1 release_stored=1 acceptance=duplicate-release
+[component-tcp] phase=warm action=6584f08751aa8f414f5e9d2ebe9a4a171108b72ed8952011d05a9b8c49cd1318 artifact=4eb551cde955facfbbd48481390d3c86fd7af0a4fd73d7ad90eca962687ba6b5 local_carrier_root=67280cc14cad583faa08cef2d94b4e53c680e8381ef2a1a162d3f840231e3a7d image=4cea0fb171a6c5036ee4e6c62d863a7d43d8c5396e52cff8fbc7c812c24986f7 tcp_received_bytes=30355 provider_sent=28158 receiver_sent=2197 fetch_ms=2055 manifest_read=275 cas_read=25707 assembly=13592 sealed_copy=13592 runner_seal_us=50 story_us=3 admitted=1 candidate_executed=1 green=1 reason=
+[component-tcp] phase=warm public_root=b07de45072d3fb70a6a2a90206b69ecb06f9f0ba0564ef22d563baac7f9edacc selected_release_blob=0353af78d08e571cf115de4acd60104155bb32c9e684b84207ab5fe608aa0456 release_id=3c013e5e7fd5d253c78d2028e4b0ebd41d04cc05461db6b27f5811829a9ca727 admission_attempted=1 release_stored=1 acceptance=duplicate-release
+[component-tcp] warm_serviced_tcp_bytes=0 roots_checked=2 content_DATA_unchanged=1
+[component-tcp] phase=wrong-local-policy action=6584f08751aa8f414f5e9d2ebe9a4a171108b72ed8952011d05a9b8c49cd1318 artifact=4eb551cde955facfbbd48481390d3c86fd7af0a4fd73d7ad90eca962687ba6b5 local_carrier_root=67280cc14cad583faa08cef2d94b4e53c680e8381ef2a1a162d3f840231e3a7d image=4cea0fb171a6c5036ee4e6c62d863a7d43d8c5396e52cff8fbc7c812c24986f7 tcp_received_bytes=30355 provider_sent=28158 receiver_sent=2197 fetch_ms=2055 manifest_read=275 cas_read=12029 assembly=0 sealed_copy=0 runner_seal_us=0 story_us=0 admitted=0 candidate_executed=0 green=0 reason=action root, target, stage, ABI or local policy mismatch
+[component-tcp] phase=wrong-local-object action=6584f08751aa8f414f5e9d2ebe9a4a171108b72ed8952011d05a9b8c49cd1318 artifact=4eb551cde955facfbbd48481390d3c86fd7af0a4fd73d7ad90eca962687ba6b5 local_carrier_root=67280cc14cad583faa08cef2d94b4e53c680e8381ef2a1a162d3f840231e3a7d image=4cea0fb171a6c5036ee4e6c62d863a7d43d8c5396e52cff8fbc7c812c24986f7 tcp_received_bytes=30355 provider_sent=28158 receiver_sent=2197 fetch_ms=2055 manifest_read=275 cas_read=25707 assembly=13592 sealed_copy=13592 runner_seal_us=51 story_us=0 admitted=1 candidate_executed=0 green=0 reason=component story did not pass: avail=1 complete=1 timeout=0 cancel=0 seals=1 fresh=1 exit=0 sig=0 exec=0 wx=0 sandboxed=1 hash=1 env=0 fds=0 reason=HOT_FORK descriptor binding mismatch
+[component-tcp] release_control=invalid-signature delivered=1 attempted=0 result=PASS reason=canonical signed release or selected package binding mismatch
+[component-tcp] release_control=different-package-root delivered=1 attempted=0 result=PASS reason=canonical signed release or selected package binding mismatch
+[component-tcp] release_control=license-text-mismatch delivered=1 attempted=0 result=PASS reason=release license and committed text mismatch
+[component-tcp] release_control=noncanonical-trailing-byte delivered=1 result=PASS reason=canonical signed release or selected package binding mismatch
+[component-tcp] release_control=oversized-release-blob delivered=1 result=PASS reason=selected release blob unavailable or oversized
+[component-tcp] release_control=absent-selected-blob result=PASS
+[component-tcp] public_shape=unknown-extra delivered=1 result=PASS reason=package root or exact carrier shape mismatch
+[component-tcp] public_shape=wrong-image-name delivered=1 result=PASS reason=package root or exact carrier shape mismatch
+[component-tcp] public_shape=missing-license provider_refused=1 rule=license-text-missing
+[component-tcp] public_shape=duplicate-member codec_refused=1
+[component-tcp] release_control=wrong-chain delivered=1 acceptance=wrong-chain-id stored=0 executed=0 result=PASS reason=public release store refused: release-acceptance-failed; acceptance: wrong-chain-id
+[component-tcp] release_control=cursor-after-chain delivered=1 acceptance=duplicate-release stored=1 executed=0 result=PASS reason=
+[component-tcp] release_control=wrong-reward delivered=1 acceptance=invalid-reward-address stored=0 executed=0 result=PASS reason=public release store refused: release-acceptance-failed; acceptance: invalid-reward-address
+[component-tcp] release_control=cursor-after-reward delivered=1 acceptance=duplicate-release stored=1 executed=0 result=PASS reason=
+[component-tcp] release_control=namespace delivered=1 acceptance=publisher-namespace-conflict stored=0 executed=0 result=PASS reason=public release store refused: release-acceptance-failed; acceptance: publisher-namespace-conflict
+[component-tcp] release_control=cursor-after-namespace delivered=1 acceptance=duplicate-release stored=1 executed=0 result=PASS reason=
+[component-tcp] release_control=advance-sequence delivered=1 acceptance=accepted stored=1 executed=0 result=PASS reason=
+[component-tcp] release_control=equivocation delivered=1 acceptance=publisher-equivocation stored=0 executed=0 result=PASS reason=public release store refused: release-acceptance-failed; acceptance: publisher-equivocation
+[component-tcp] release_control=cursor-after-equivocation delivered=1 acceptance=duplicate-release stored=1 executed=0 result=PASS reason=
+[component-tcp] release_control=stale-original delivered=1 acceptance=stale-publisher-sequence stored=0 executed=0 result=PASS reason=public release store refused: release-acceptance-failed; acceptance: stale-publisher-sequence
+[component-tcp] release_control=stale-execution acceptance=stale-publisher-sequence result=PASS
+[component-tcp] release_control=cursor-after-stale delivered=1 acceptance=duplicate-release stored=1 executed=0 result=PASS reason=
+[component-tcp] phase=corrupt-TCP-chunk action=6584f08751aa8f414f5e9d2ebe9a4a171108b72ed8952011d05a9b8c49cd1318 artifact=4eb551cde955facfbbd48481390d3c86fd7af0a4fd73d7ad90eca962687ba6b5 local_carrier_root=67280cc14cad583faa08cef2d94b4e53c680e8381ef2a1a162d3f840231e3a7d image=4cea0fb171a6c5036ee4e6c62d863a7d43d8c5396e52cff8fbc7c812c24986f7 tcp_received_bytes=16437 provider_sent=28158 receiver_sent=2197 fetch_ms=916 manifest_read=0 cas_read=0 assembly=0 sealed_copy=0 runner_seal_us=0 story_us=0 admitted=0 candidate_executed=0 green=0 reason=public component package incomplete
+[component-tcp] corrupt_status=2 chunks=0 present_bytes=0 transferred_objects=1 transferred_bytes=275 manifest_bytes=275 admitted=0 assembly=0 sealed=0 executed=0 reason=public component package incomplete
+[component-tcp] invalid_chunk_events=2 offence_before=0 offence_after=2 no_credit_before=0 no_credit_after=12029 verified_before=345 verified_after=620 manifest_bytes=275 localhost_score=0
+zcode_swarm_net: ran 26 of 26 sub-suites (umbrella), 0 failed
+SUITE VERDICT mode=cold groups_total=1537 groups_ran=1 groups_cached=0 groups_gated=1536 groups_failed=0 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=ee6eeab152a4
+ALL TESTS PASSED — 0/1 groups failed, 0 skipped (50.2s wall, 1 workers) [--exact filtered]
+
+CHECK focused
+HEAD TREE at command start:
+c14011ede09dd22b1b5561ed03b207f30cc55f94
+c2b1029681caa9a6d52af8f84a731fb7562aaf9a
+Uncommitted diff SHA-256 at command start:
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+ARGV:
+env
+TMPDIR=/home/kimi/z23-upcur/.cache/z23-successors-20261108/tmp-s3
+make
+-j4
+t-fast-exact
+ONLY=commons_package_tests,vcs_core,zcode_recipe,zcode_package_registry,zcode_swarm_net,zcode_score_receipt
+T_FAST_EXACT_ARGS=--jobs=1 --no-cache
+EXIT 2
+START 2026-11-08T12:00:51Z
+FINISH 2026-11-08T12:07:05Z
+	User time (seconds): 986.64
+	System time (seconds): 193.42
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 6:14.81
+	Maximum resident set size (kbytes): 1408596
+VERDICT EXCERPTS:
+==================== test_zcode_score_receipt (PASS, 0s) ====================
+==================== test_zcode_package_registry (PASS, 32s) ====================
+==================== test_vcs_core (PASS, 1s) ====================
+==================== test_commons_package_tests (PASS, 13s) ====================
+commons_package_tests: 80 of 80 package(s) passed, 0 failure(s)
+==================== test_zcode_recipe (PASS, 0s) ====================
+==================== test_zcode_swarm_net (FAIL, 21s) ====================
+FAIL at tests/harness/src/test_zcode_swarm_net.c:8899 (zwn_tcp_init(&tcp, params))
+[component-tcp] deadline_control=expired classified=0 cancelled=0 owned_teardown_returned=1 failures=1
+FAIL at tests/harness/src/test_zcode_swarm_net.c:8993 (zwn_tcp_deadline_control(params, &tcp) == 0)
+FAIL at tests/harness/src/test_zcode_swarm_net.c:9014 (zwn_tcp_init(&tcp, params))
+zcode_swarm_net: ran 26 of 26 sub-suites (umbrella), 2 failed
+SUITE VERDICT mode=cold groups_total=1537 groups_ran=6 groups_cached=0 groups_gated=1531 groups_failed=1 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=ee6eeab152a4
+SOME TESTS FAILED — 1/6 groups failed, 0 skipped (87.2s wall, 1 workers) [--exact filtered]
+make[1]: *** [Makefile:5419: t-fast-exact-locked] Error 1
+make: *** [Makefile:5410: t-fast-exact] Error 2
+
+CHECK generator-tools-primed
+HEAD TREE at command start:
+e73d3ec9c4e4b842afa9eae9f78d2de7408bf389
+342d05af981eb1901d1fe3bf5cadb3056573e0c9
+Uncommitted diff SHA-256 at command start:
+fcc4f81da1612cbbbe5d7e038ddb5d480aaa87c6f4a5f671d846a7a17f2553b1
+ARGV:
+make
+-j4
+build/bin/z23-lint
+build/bin/zcode-package-registry-check
+EXIT 0
+START 2026-11-08T11:56:23Z
+FINISH 2026-11-08T11:56:41Z
+	User time (seconds): 56.43
+	System time (seconds): 8.89
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:18.05
+	Maximum resident set size (kbytes): 87296
+VERDICT EXCERPTS:
+
+CHECK generator-tools
+HEAD TREE at command start:
+e73d3ec9c4e4b842afa9eae9f78d2de7408bf389
+342d05af981eb1901d1fe3bf5cadb3056573e0c9
+Uncommitted diff SHA-256 at command start:
+fcc4f81da1612cbbbe5d7e038ddb5d480aaa87c6f4a5f671d846a7a17f2553b1
+ARGV:
+make
+-j4
+build/bin/z23-lint
+build/bin/zcode-package-registry-check
+EXIT 2
+START 2026-11-08T11:52:40Z
+FINISH 2026-11-08T11:52:49Z
+	User time (seconds): 6.54
+	System time (seconds): 1.67
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:09.43
+	Maximum resident set size (kbytes): 55808
+VERDICT EXCERPTS:
+curl: (6) Could not resolve host: www.sqlite.org
+curl: (6) Could not resolve host: www.sqlite.org
+curl: (6) Could not resolve host: www.sqlite.org
+configure: error: Missing libraries; unable to proceed.
+make: *** [Makefile:2254: tor-ready] Error 1
+curl: (6) Could not resolve host: www.sqlite.org
+
+CHECK lint-fast-authorized
+HEAD TREE at command start:
+c14011ede09dd22b1b5561ed03b207f30cc55f94
+c2b1029681caa9a6d52af8f84a731fb7562aaf9a
+Uncommitted diff SHA-256 at command start:
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+ARGV:
+make
+-j4
+lint-fast
+ZCL_LINT_JOBS=4
+EXIT 0
+START 2026-11-08T12:34:37Z
+FINISH 2026-11-08T12:35:05Z
+	User time (seconds): 74.51
+	System time (seconds): 9.62
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:27.99
+	Maximum resident set size (kbytes): 761444
+VERDICT EXCERPTS:
+PASS check-toolgen                                   71 ms
+PASS check-no-stray-root-files                        8 ms
+PASS check-architecture-tree                         24 ms
+PASS check-no-stray-untracked-source                190 ms
+PASS check-no-bare-tmp-fixture                      230 ms
+PASS check-controller-private-headers               408 ms
+PASS check-raw-sqlite                               733 ms
+PASS check-no-live-lab-history                      996 ms
+PASS check-file-size-ceiling                         55 ms
+PASS check-cyclomatic-complexity                    805 ms
+PASS check-catalog-rooms                              2 ms
+PASS check-outparam-init-before-return             2517 ms
+PASS check-flag-registry                           1146 ms
+PASS check-json-value-init                          158 ms
+PASS check-no-raw-sqlite-in-controllers             176 ms
+PASS check-model-validation                           6 ms
+PASS check-model-ar-lifecycle                        76 ms
+PASS check-one-write-path                           509 ms
+PASS check-before-save-hooks                          1 ms
+PASS check-pthread-create                           238 ms
+PASS check-raw-malloc                              2126 ms
+PASS check-log-macro-return-type                    586 ms
+PASS check-wallet-raw-prepare-log                     5 ms
+PASS check-wallet-log-privacy                        16 ms
+PASS check-hidden-return-under-lock                 380 ms
+PASS check-malloc                                  6139 ms
+PASS check-dev-proof-native-fast-path                 3 ms
+PASS check-equihash-params                          463 ms
+PASS check-framework-shape                           11 ms
+PASS check-supervisor-registration                  513 ms
+PASS check-vendor-provenance                        303 ms
+PASS check-fortify-masked-decls                    2940 ms
+PASS check-windows-acceptance-guard                  12 ms
+PASS check-windows-platform-seam                     88 ms
+PASS check-pipefail-status-pipe                      65 ms
+PASS check-doc-counts                               200 ms
+PASS check-kpi-floor                                286 ms
+PASS check-describe-budget                         9745 ms
+PASS check-orient-facts                              15 ms
+PASS check-arena-view-stub                          932 ms
+PASS check-hotfork-stories                         1438 ms
+PASS check-silent-errors-services                    19 ms
+PASS check-silent-errors-controllers                 11 ms
+PASS check-silent-errors-jobs                         6 ms
+PASS check-silent-errors-conditions                   3 ms
+PASS check-silent-errors-bool                        31 ms
+PASS check-no-raw-clock-outside-platform           1053 ms
+PASS check-hex-codec-single                        1479 ms
+PASS check-sqlite-step-row                          800 ms
+PASS check-zcc-cache                              13883 ms
+PASS check-byte-order-codec-single                 1849 ms
+PASS check-no-operator-paths                        699 ms
+PASS check-zcode-package-registry                 10985 ms
+PASS check-capability-inventory-generated         11475 ms
+lint-fast: precheck skipped: git merge-base HEAD origin/main failed
+lint-fast: OK
+
+CHECK lint-fast
+HEAD TREE at command start:
+c14011ede09dd22b1b5561ed03b207f30cc55f94
+c2b1029681caa9a6d52af8f84a731fb7562aaf9a
+Uncommitted diff SHA-256 at command start:
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+ARGV:
+make
+-j4
+lint-fast
+ZCL_LINT_JOBS=4
+EXIT 2
+START 2026-11-08T12:07:42Z
+FINISH 2026-11-08T12:08:07Z
+	User time (seconds): 54.52
+	System time (seconds): 9.29
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:24.79
+	Maximum resident set size (kbytes): 761280
+VERDICT EXCERPTS:
+PASS check-toolgen                                   62 ms
+PASS check-no-stray-root-files                        7 ms
+PASS check-architecture-tree                         28 ms
+PASS check-no-stray-untracked-source                173 ms
+FAIL check-no-live-lab-history                        1 ms (rc=2)
+FAIL check-raw-sqlite                                 0 ms (rc=2)
+PASS check-no-bare-tmp-fixture                      243 ms
+PASS check-controller-private-headers               367 ms
+PASS check-file-size-ceiling                         79 ms
+PASS check-cyclomatic-complexity                    822 ms
+PASS check-catalog-rooms                              2 ms
+PASS check-flag-registry                           1179 ms
+PASS check-outparam-init-before-return             2577 ms
+PASS check-json-value-init                          173 ms
+PASS check-no-raw-sqlite-in-controllers             191 ms
+PASS check-model-validation                           6 ms
+PASS check-model-ar-lifecycle                        93 ms
+PASS check-one-write-path                           535 ms
+PASS check-before-save-hooks                          1 ms
+PASS check-pthread-create                           273 ms
+PASS check-log-macro-return-type                    621 ms
+FAIL check-hidden-return-under-lock                   0 ms (rc=2)
+PASS check-wallet-raw-prepare-log                     6 ms
+PASS check-wallet-log-privacy                        18 ms
+PASS check-raw-malloc                              2267 ms
+PASS check-malloc                                  5146 ms
+PASS check-dev-proof-native-fast-path                 3 ms
+PASS check-equihash-params                          414 ms
+PASS check-framework-shape                           18 ms
+PASS check-supervisor-registration                  517 ms
+PASS check-vendor-provenance                        307 ms
+FAIL check-windows-platform-seam                      0 ms (rc=2)
+FAIL check-windows-acceptance-guard                   1 ms (rc=2)
+PASS check-pipefail-status-pipe                      61 ms
+PASS check-doc-counts                               231 ms
+FAIL check-capability-inventory-generated             2 ms (rc=2)
+PASS check-kpi-floor                                312 ms
+PASS check-fortify-masked-decls                    2825 ms
+PASS check-orient-facts                              15 ms
+PASS check-arena-view-stub                          817 ms
+PASS check-describe-budget                         8961 ms
+PASS check-silent-errors-services                    20 ms
+PASS check-silent-errors-controllers                 10 ms
+PASS check-silent-errors-jobs                         6 ms
+PASS check-silent-errors-conditions                   3 ms
+PASS check-hotfork-stories                         1386 ms
+PASS check-silent-errors-bool                        43 ms
+PASS check-no-raw-clock-outside-platform            952 ms
+PASS check-sqlite-step-row                          634 ms
+FAIL check-byte-order-codec-single                    0 ms (rc=2)
+PASS check-hex-codec-single                        1558 ms
+PASS check-no-operator-paths                        949 ms
+PASS check-zcode-package-registry                  8321 ms
+PASS check-zcc-cache                              11632 ms
+══ LINT: 7 of 54 gates FAILED ══
+z23-lint: mkdtemp failed for selftest scratch
+z23-lint: mkdtemp failed for selftest scratch
+z23-lint: mkdtemp failed for selftest scratch
+z23-lint: mkdtemp failed for selftest scratch
+z23-lint: mkdir failed: /home/kimi/.local/state/zclassic23/scratch/windows-acceptance-guard-selftest.q8Gq0O
+z23-lint: mkdtemp failed for gate scratch
+z23-lint: mkdir failed: /home/kimi/.local/state/zclassic23/scratch
+lint-fast: precheck skipped after fast subset failure
+make: *** [Makefile:6969: lint-fast] Error 1
+
+CHECK lint-preflight
+HEAD TREE at command start:
+c14011ede09dd22b1b5561ed03b207f30cc55f94
+c2b1029681caa9a6d52af8f84a731fb7562aaf9a
+Uncommitted diff SHA-256 at command start:
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+ARGV:
+make
+-j4
+lint-preflight
+ZCL_LINT_JOBS=4
+EXIT 0
+START 2026-11-08T12:35:05Z
+FINISH 2026-11-08T12:35:25Z
+	User time (seconds): 23.60
+	System time (seconds): 3.59
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:19.82
+	Maximum resident set size (kbytes): 761308
+VERDICT EXCERPTS:
+PASS check-toolgen                                   52 ms
+PASS check-api-reference-generated                  640 ms
+PASS check-posix-ere-only                           257 ms
+PASS check-no-wallclock-assertion                  1070 ms
+PASS check-capability-closure                      4837 ms
+PASS check-capability-inventory-generated          7826 ms
+lint-preflight: OK
+
+CHECK metadata-hardening
+HEAD TREE at command start:
+c14011ede09dd22b1b5561ed03b207f30cc55f94
+c2b1029681caa9a6d52af8f84a731fb7562aaf9a
+Uncommitted diff SHA-256 at command start:
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+ARGV:
+make
+-j4
+check-hardening-ratchet
+check-zcode-package-registry
+EXIT 0
+START 2026-11-08T12:35:25Z
+FINISH 2026-11-08T12:35:34Z
+	User time (seconds): 7.11
+	System time (seconds): 2.92
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:09.12
+	Maximum resident set size (kbytes): 56368
+VERDICT EXCERPTS:
+hardening-ratchet selftest ok: new strcpy in a new file fails
+hardening-ratchet selftest ok: strcat sprintf vsprintf gets all match
+hardening-ratchet selftest ok: snprintf strncpy my_strcpy_x strcpy_s do not match
+hardening-ratchet selftest ok: strcpy in a line comment, block comment, string ignored
+hardening-ratchet selftest ok: hardening-ok with reason exempts
+hardening-ratchet selftest ok: hardening-ok block form with reason exempts
+hardening-ratchet selftest ok: hardening-ok with empty reason does not
+hardening-ratchet selftest ok: hardening-ok with blank block reason does not
+hardening-ratchet selftest ok: count equal to baseline passes
+hardening-ratchet selftest ok: count above baseline fails
+hardening-ratchet selftest ok: count below baseline passes with tighten note
+hardening-ratchet selftest ok: fully cleaned file notes tighten to 0
+hardening-ratchet selftest ok: new struct x_reader definition fails
+hardening-ratchet selftest ok: struct x_cursor and x_rd definitions fail
+hardening-ratchet selftest ok: typedef closing } x_reader; fails
+hardening-ratchet selftest ok: uses of struct x_reader do not count
+hardening-ratchet selftest ok: non-reader struct and comment mention do not count
+hardening-ratchet selftest ok: reader baseline tracks per rule
+hardening-ratchet selftest ok: line of 8192+ bytes is a hard FAIL
+hardening-ratchet selftest ok: baseline row appended fails
+hardening-ratchet selftest ok: baseline count raised fails (regenerated upward)
+hardening-ratchet selftest ok: baseline unchanged or lowered passes
+[check_hardening_ratchet] PASS (31 finding(s), 0 row(s) can tighten)
+registry: CLEAN -- no drift, nothing to do; 97 package manifests covered
+
+CHECK prime-dependencies
+HEAD TREE at command start:
+e73d3ec9c4e4b842afa9eae9f78d2de7408bf389
+342d05af981eb1901d1fe3bf5cadb3056573e0c9
+Uncommitted diff SHA-256 at command start:
+fcc4f81da1612cbbbe5d7e038ddb5d480aaa87c6f4a5f671d846a7a17f2553b1
+ARGV:
+make
+-j4
+worktree-prime
+SRC=/home/kimi/z23-test-engine-contrib-20261102
+EXIT 2
+START 2026-11-08T11:54:09Z
+FINISH 2026-11-08T11:54:14Z
+	User time (seconds): 3.72
+	System time (seconds): 1.11
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:04.75
+	Maximum resident set size (kbytes): 55552
+VERDICT EXCERPTS:
+configure: error: Missing libraries; unable to proceed.
+make: *** [Makefile:3187: worktree-prime] Error 1
+
+CHECK regenerate-hardening
+HEAD TREE at command start:
+e73d3ec9c4e4b842afa9eae9f78d2de7408bf389
+342d05af981eb1901d1fe3bf5cadb3056573e0c9
+Uncommitted diff SHA-256 at command start:
+fcc4f81da1612cbbbe5d7e038ddb5d480aaa87c6f4a5f671d846a7a17f2553b1
+ARGV:
+build/bin/z23-lint
+check-hardening-ratchet
+--write-baseline
+EXIT 0
+START 2026-11-08T11:57:05Z
+FINISH 2026-11-08T11:57:06Z
+	User time (seconds): 0.53
+	System time (seconds): 0.04
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:00.57
+	Maximum resident set size (kbytes): 3840
+VERDICT EXCERPTS:
+[check_hardening_ratchet] baseline written: tools/lint/hardening_ratchet_baseline.txt (29 rows)
+
+CHECK regenerate-packages
+HEAD TREE at command start:
+e73d3ec9c4e4b842afa9eae9f78d2de7408bf389
+342d05af981eb1901d1fe3bf5cadb3056573e0c9
+Uncommitted diff SHA-256 at command start:
+0e2730dbda18c003f59b49e3669688bb65d9a08f74dea9dafbd1b79def8c8572
+ARGV:
+make
+-j4
+docs-zcode-package-registry
+EXIT 0
+START 2026-11-08T11:57:13Z
+FINISH 2026-11-08T11:57:22Z
+	User time (seconds): 6.30
+	System time (seconds): 2.26
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:08.27
+	Maximum resident set size (kbytes): 43148
+VERDICT EXCERPTS:
+  [1] re-derived zclassic23/package (738ef0afb771… -> 459b8e5df12e…), 0 dependent pin(s) updated
+registry: CLEAN after 1 fixpoint round(s); 97 package manifests covered
+registry: a row MOVED -- rebuild before trusting the suite:
+
+CHECK tor-vendored-deps
+HEAD TREE at command start:
+e73d3ec9c4e4b842afa9eae9f78d2de7408bf389
+342d05af981eb1901d1fe3bf5cadb3056573e0c9
+Uncommitted diff SHA-256 at command start:
+fcc4f81da1612cbbbe5d7e038ddb5d480aaa87c6f4a5f671d846a7a17f2553b1
+ARGV:
+env
+ZCL_TOR_JOBS=4
+make
+-j4
+tor-full
+CPPFLAGS=-I/home/kimi/z23-upcur/.cache/z23-successors-20261108/s3/vendor/include
+LDFLAGS=-L/home/kimi/z23-upcur/.cache/z23-successors-20261108/s3/vendor/lib
+EXIT 0
+START 2026-11-08T11:55:45Z
+FINISH 2026-11-08T11:56:11Z
+	User time (seconds): 62.54
+	System time (seconds): 8.91
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:25.77
+	Maximum resident set size (kbytes): 117700
+VERDICT EXCERPTS:
+tor-full: ready commit=f4e28103c0eb archives=4 embedded_profile=self_contained target=host host=Linux dir=vendor/tor
