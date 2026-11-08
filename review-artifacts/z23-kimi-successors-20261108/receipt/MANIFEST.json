@@ -1,0 +1,182 @@
+{
+  "schema": "z23.review_successor_manifest.v1",
+  "contribution": "Receipt fixture elapsed boundary correction",
+  "authority": "Owner-relayed Rhett request; no new native maintainer receipt is asserted",
+  "source": {
+    "base": "7fee7ed5aabe5cfe83c526c9bd622b6e2b13f592",
+    "candidate": "527fbe7d30741844d8aaaceca461bdf6df7c127d",
+    "tree": "fdd00eabed746e384a94c6ae7dbfa9f34f8cf4ef",
+    "worktree": "/home/kimi/z23-upcur/.cache/z23-successors-20261108/receipt",
+    "signature": "UNSIGNED review snapshot (git %G?=N); no policy or hooks disabled",
+    "repository": "https://github.com/z23c/z23"
+  },
+  "dependency": {
+    "on_s3_source_candidate": false,
+    "explanation": "Independent freshly fetched upstream base. Common vendor build artifacts were copied via supported worktree-prime from the primed S3 lane; no S3 source changes are included or required."
+  },
+  "changes": [
+    {
+      "path": "tests/harness/src/test_engine.c",
+      "purpose": "Negative fixture ordinals return unknown elapsed before multiplication; positive overflow still saturates INT64_MAX; add direct boundary cases and immediate capacity assertion before overwrite",
+      "insertions": 40,
+      "deletions": 3
+    }
+  ],
+  "contract": {
+    "production": "No production receipt validation or serialization changes",
+    "evidence": [
+      "engine_receipt.h:149: one-based dispatch order",
+      "tools/engine_unit.c:1047: actual dispatch ordinal count+1",
+      "tools/engine_unit.c:2697: deliberate INT64_MAX capacity input",
+      "engine_receipt.c:405-408: raw ordinal/elapsed serialized",
+      "engine_receipt.c:458-462,544-545: negative elapsed makes aggregate unknown, emitted -1"
+    ],
+    "nuance": "Header macro ENGINE_RECEIPT_UNREPORTED is primarily documented for tokens. Elapsed -1 here is an explicitly documented fixture convention supported by duration aggregation, not a new general raw-duration API guarantee.",
+    "policy": "ordinal<0 => -1 without multiplication; ordinal==0 => existing 0 arithmetic control, not a valid dispatch ordinal; ordinal>INT64_MAX/10 => INT64_MAX; otherwise exact ordinal*10. Supplied ordinal unchanged.",
+    "limits": "L=INT64_MIN/10; U=INT64_MAX/10",
+    "boundaries": [
+      "L-1",
+      "L",
+      "L+1",
+      "U-1",
+      "U",
+      "U+1",
+      "INT64_MIN",
+      "INT64_MAX",
+      "-1",
+      "0",
+      "7"
+    ],
+    "expectations": "L and neighbors, INT64_MIN and -1 are invalid negative fixture inputs and yield unknown duration. U-1/U exact, U+1/MAX saturate, 0 stays0,7->70. Expected multiplications only use U-1/U and cannot overflow.",
+    "assertions": "Elapsed checked immediately after helper construction, and separately in maximum_calls before its elapsed_ms override."
+  },
+  "checks": [
+    {
+      "command": "make -j4 t-fast-exact ONLY=engine T_FAST_EXACT_ARGS='--jobs=1 --no-cache'",
+      "phase": "RED test-only working diff at base; exact patch included in evidence/regression-red-test-only.patch",
+      "exit": 2,
+      "result": "One cold group ran and failed: five intended negative-input expectation failures, plus six Grok fixture failures following failed detached-worktree ownership. Positive, saturation and zero controls already passed. No sanitizer RED run claimed."
+    },
+    {
+      "command": "make -j4 t-fast-exact ONLY=engine T_FAST_EXACT_ARGS='--jobs=1 --no-cache'",
+      "phase": "Final exact committed candidate, authorized isolated execution",
+      "exit": 0,
+      "result": "One cold group PASS, zero cached/skipped, engine0 failures; requested boundaries and immediate capacity assertion passed"
+    },
+    {
+      "command": "make -j4 lint-fast ZCL_LINT_JOBS=4",
+      "exit": 0,
+      "result": "54/54 gates PASS. Base-relative precheck SKIPPED: merge-base HEAD origin/main unavailable, not a PASS."
+    },
+    {
+      "command": "make -j4 t-asan ONLY=test_engine",
+      "status": "PASS",
+      "result": "Five cold groups PASS: engine, engine_gate_capture, engine_rules, engine_escalate, engine_claude. Zero failed/cached/skipped; four test workers. No ASan/UBSan runtime finding reported.",
+      "profile": "-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize=alignment; fatal UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1; existing alignment exception unchanged",
+      "exit": 0,
+      "wall": "9:45.69",
+      "max_rss_kib": 2470680
+    }
+  ],
+  "resource_policy": "One pipeline, taskset CPUs0,1,2,3, make-j4, lint jobs4, per-command timeout1800, private TMPDIR. time-reported max RSS is not an aggregate process-tree peak measurement.",
+  "review": {
+    "non_author_source": "NO FINDINGS on exact commit, collaboration /root/s3_review",
+    "requested_model": "gpt-6.1-terra low",
+    "effective_model": "not independently observable",
+    "reviewer_runtime": "NOT RUN",
+    "maintainer_review": "PENDING",
+    "acceptance": "NOT PROVEN",
+    "landing": "NOT PROVEN"
+  },
+  "not_run": [
+    "make all full build",
+    "make lint full lint",
+    "full registered suite",
+    "base-relative lint precheck (no merge-base)",
+    "signed landing qualification"
+  ],
+  "native_delivery": "UNCONFIRMED: existing local native client no_default_instance; no new native post/readback, receiver acknowledgement, acceptance or landing",
+  "preservation": "Original archive unchanged. CLI/ZPD historical, S1/S2 withdrawn. No case refactors, sealed core, consensus, custody, deployment or service changes.",
+  "evidence": "Allowlisted verdict excerpts and exact argv/exits/source identities in evidence/checks.txt, complete logs retained locally. RED working diff and final committed source are distinct.",
+  "artifacts": [
+    {
+      "path": "LICENSE",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "git_blob": "d645695673349e3947e8e5ae42332d0ac3164cd7"
+    },
+    {
+      "path": "candidate.bundle",
+      "bytes": 1860,
+      "sha256": "5f8393a87bfcc2fe330d63b98c52029ae651bc8aeba1f3223728f7ce4e5a6a7c",
+      "git_blob": "af2bde609896abf3ddeb7210e0f3c02d445b187c"
+    },
+    {
+      "path": "candidate.mbox",
+      "bytes": 4960,
+      "sha256": "773a2b833ebaa7a018e8142a3aa2f6be8e6ff24ebb61210f904be1b28a90a8b6",
+      "git_blob": "10b9d5963368d1ca631dc6d6697b22983708138b"
+    },
+    {
+      "path": "change.patch",
+      "bytes": 3805,
+      "sha256": "cb5210b6f29fab1fa12c5031401e72a7912be36be861f585928fdf6932fe575c",
+      "git_blob": "a282adcf5ec8c9649e86eb0da9e21ee2bd90b59b"
+    },
+    {
+      "path": "files-changed.txt",
+      "bytes": 32,
+      "sha256": "bb2cbcc8db18f9ed5a4f174ab4d12337a03c789b28c12bd725e4642b860f6e15",
+      "git_blob": "9e2c3ffa79a1f5e94a2cecc9f523d91b20532a82"
+    },
+    {
+      "path": "git-identity.txt",
+      "bytes": 193,
+      "sha256": "b6f711502b7c16afe7aef091f42766226123d2f50e284304f8f530ab71d0d642",
+      "git_blob": "a4a68700ae5c868fd371c1c54a5917ae4165c059"
+    },
+    {
+      "path": "sources.tar.gz",
+      "bytes": 70281,
+      "sha256": "f9c03745baa5877e903dd1ec94e0f79d2e72c212ae26bc8f9fe62bbe422da528",
+      "git_blob": "3321d7a5b1452c36435c08a5c0e73d0f1c0ae410"
+    },
+    {
+      "path": "evidence/checks.txt",
+      "bytes": 16358,
+      "sha256": "ec68e227c90bc140f77d984137e6d41eebe1a8b177101b1b26454d9b1b44bbd3",
+      "git_blob": "6920d90b0feedcd210f22dc5cf70f9cea45805be"
+    },
+    {
+      "path": "evidence/contents-proof.txt",
+      "bytes": 2177,
+      "sha256": "a6660890a5f6a68839eca70c1b209520426ef87453d2171680ae7e81736f4a4f",
+      "git_blob": "c4b2ff6b1d7cb3f5d617b399e559f7a5a0496ec3"
+    },
+    {
+      "path": "evidence/independent-source-review.txt",
+      "bytes": 1056,
+      "sha256": "a4590e67cbd99a90d8b74b9915dd3d38ff34858929083e43d613d1304f4a4170",
+      "git_blob": "90cec607ae53b4e3277bc6a0a0f472091b9ef288"
+    },
+    {
+      "path": "evidence/regression-red-test-only.patch",
+      "bytes": 2818,
+      "sha256": "f4b84664629ed9ff7f27a630514b8ac012b3d4d3ce0eaa8b38239733370b7577",
+      "git_blob": "2548259275af1b973ec57155f2d2f25a5871426b"
+    },
+    {
+      "path": "evidence/sanitizer-profile.txt",
+      "bytes": 750,
+      "sha256": "306e7f7adeb0fc99172181f2cdc7e244e6e861881ff7977e8c3f31d406aa9efc",
+      "git_blob": "a85d25f654c0ba5acb125658f6185fe5043459de"
+    }
+  ],
+  "limitations": [
+    "Sanitizer build emitted -Wnonnull in untouched tests/harness/src/test_fleet_board_bridge.c:88 and -Warray-bounds in untouched tests/harness/src/test_projection_replay_invariant.c:329-331 via event_log_payloads.h. These source files are unchanged in this candidate; no conclusion about their runtime behavior is inferred.",
+    "Base-relative lint precheck skipped because this shared checkout's origin/main does not share a merge-base. No remote configuration or history was changed to force it.",
+    "Source snapshot is unsigned and not qualified for landing; main/master/upstream were not modified."
+  ],
+  "latest_upstream_before_submission": "ccfad95503b6924726b6954d6576443e92d79107",
+  "upstream_drift": "tests/harness/src/test_engine.c is unchanged between source base and latest pre-submission upstream main. No rebase or substitution."
+}

@@ -1,0 +1,19 @@
+Reviewer: collaboration task /root/s3_review, not the patch author.
+Requested model: gpt-6.1-terra low per applicable AGENTS.md.
+Effective model: not observable to reviewer; independently unconfirmed.
+Tokens/model elapsed metrics: not provided; no savings claim.
+
+Exact reviewed commit527fbe7d30741844d8aaaceca461bdf6df7c127d,
+treefdd00eabed746e384a94c6ae7dbfa9f34f8cf4ef,
+sole parent7fee7ed5aabe5cfe83c526c9bd622b6e2b13f592 verified.
+Verdict: NO FINDINGS in independent source review.
+
+Only tests/harness/src/test_engine.c changes. Lines4433-4442 preserve ordinal,
+branch negatives to unknown before multiplication, preserve zero, and
+saturate positives above INT64_MAX/10. Lines4452-4478 directly check all
+requested boundaries and ordinal preservation; expected arithmetic is
+representable. Lines5234-5239 check INT64_MAX saturation before overwrite;
+the test is registered at7015. No production validation or CLI/ZPD changes.
+
+Independent runtime checks: NOT RUN. This source verdict does not establish
+maintainer qualification, acceptance or landing.

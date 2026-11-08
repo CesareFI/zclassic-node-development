@@ -1,0 +1,36 @@
+Receipt fixture input/elapsed convention at base
+7fee7ed5aabe5cfe83c526c9bd622b6e2b13f592.
+This is source reasoning, not a runtime verdict.
+
+engine/modules/engine/include/engine/engine_receipt.h:149 defines ordinal
+as one-based dispatch order. tools/engine_unit.c:1047 assigns count+1 for
+real dispatch observations; its capacity preflight also deliberately uses
+INT64_MAX at:2697. The test fixture has the same deliberate capacity input.
+
+engine/modules/engine/src/engine_receipt.c:405-408 serializes supplied
+ordinal/elapsed unchanged. At:458-462, any negative elapsed makes the total
+unknown; at:544-545 the unknown total is emitted as -1. The header's
+ENGINE_RECEIPT_UNREPORTED macro at:135 is primarily described as a token
+sentinel. Using -1 for invalid negative fixture ordinals therefore follows
+the implementation's unknown-duration convention; it is not asserted as
+a general raw-duration API guarantee or new production validation rule.
+List validation at:80-85 and:716-724 does not validate ordinal values; this
+does not make zero/negative values valid one-based dispatch ordinals.
+
+Proposed fixture-only rule: negative ordinal -> unknown elapsed(-1) before
+any multiplication. Zero retains existing arithmetic-control elapsed0;
+that does not declare zero a valid dispatch ordinal. Positive ordinal>U
+retains INT64_MAX saturation, otherwise returns exact ordinal*10. The
+supplied ordinal is always preserved. No production source is changed.
+
+For L=INT64_MIN/10 and U=INT64_MAX/10, all L-1/L/L+1 inputs are invalid
+negative ordinals, irrespective of whether their product could fit. This
+distinguishes invalid fixture input from positive arithmetic saturation.
+Expected products are evaluated only for U-1 and U; neither overflows.
+Other table expectations are literals or INT64_MAX/the -1 sentinel.
+The boundary result is asserted immediately after construction, and the
+capacity fixture separately asserts saturation before its later override.
+
+The non-author read-only contract investigation /root/s3_review concurred
+with this policy and the raw-duration documentation nuance. Independent
+final-commit source review and runtime results are recorded separately.

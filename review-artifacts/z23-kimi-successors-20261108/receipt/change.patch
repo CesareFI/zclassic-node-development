@@ -1,0 +1,75 @@
+diff --git a/tests/harness/src/test_engine.c b/tests/harness/src/test_engine.c
+index b1e18389a6..639306b183 100644
+--- a/tests/harness/src/test_engine.c
++++ b/tests/harness/src/test_engine.c
+@@ -4433,9 +4433,12 @@ receipt_invocation(int64_t ordinal, const char *phase, const char *result,
+         .ordinal = ordinal,
+         .phase = phase,
+         .result = result,
+-        /* The worst-case receipt passes INT64_MAX: saturate, since the product
+-         * would overflow and wrap to a shorter value than the case means. */
+-        .elapsed_ms = ordinal > INT64_MAX / 10 ? INT64_MAX : ordinal * 10,
++        /* Real ordinals are one-based. Invalid negative fixture inputs have
++         * no duration: -1 follows the receipt total's unknown convention.
++         * Keep zero's arithmetic control and positive capacity saturation;
++         * this helper does not add production ordinal validation. */
++        .elapsed_ms = ordinal < 0 ? ENGINE_RECEIPT_UNREPORTED
++            : ordinal > INT64_MAX / 10 ? INT64_MAX : ordinal * 10,
+         .http_status = strcmp(result, "ok") == 0 ? 200 : 503,
+         .prompt_tokens = prompt,
+         .completion_tokens = completion,
+@@ -4446,6 +4449,37 @@ receipt_invocation(int64_t ordinal, const char *phase, const char *result,
+     };
+ }
+ 
++static int case_receipt_invocation_boundaries(void)
++{
++    int failures = 0;
++    const int64_t lower = INT64_MIN / 10;
++    const int64_t upper = INT64_MAX / 10;
++    const struct {
++        const char *name;
++        int64_t ordinal;
++        int64_t elapsed_ms;
++    } cases[] = {
++        {"L-1 is an invalid negative ordinal", lower - 1, ENGINE_RECEIPT_UNREPORTED},
++        {"L is an invalid negative ordinal", lower, ENGINE_RECEIPT_UNREPORTED},
++        {"L+1 is an invalid negative ordinal", lower + 1, ENGINE_RECEIPT_UNREPORTED},
++        {"U-1 has an exact duration", upper - 1, (upper - 1) * 10},
++        {"U has an exact duration", upper, upper * 10},
++        {"U+1 saturates its positive duration", upper + 1, INT64_MAX},
++        {"INT64_MIN has no valid fixture duration", INT64_MIN, ENGINE_RECEIPT_UNREPORTED},
++        {"INT64_MAX saturates its positive duration", INT64_MAX, INT64_MAX},
++        {"-1 has no valid fixture duration", -1, ENGINE_RECEIPT_UNREPORTED},
++        {"zero retains its zero-duration control", 0, 0},
++        {"ordinary positive ordinal has an exact duration", 7, 70},
++    };
++    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
++        struct engine_receipt_invocation call = receipt_invocation(
++            cases[i].ordinal, "turn", "ok", 0, 0, 0, 0, 0, 0);
++        EN_CHECK(cases[i].name, call.elapsed_ms == cases[i].elapsed_ms);
++        EN_CHECK("fixture preserves the supplied ordinal", call.ordinal == cases[i].ordinal);
++    }
++    return failures;
++}
++
+ static void receipt_head_path(const char *path, char *out, size_t cap)
+ {
+     (void)snprintf(out, cap, "%s%s", path, ENGINE_RECEIPT_HEAD_SUFFIX);
+@@ -5200,6 +5234,8 @@ static int case_receipt_chain(void)
+             INT64_MAX, "compaction", "receipt_capacity_worst_case",
+             INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX, INT64_MAX,
+             INT64_MAX);
++        EN_CHECK("maximum invocation saturates before fixture overrides",
++                 maximum_calls[i].elapsed_ms == INT64_MAX);
+         maximum_calls[i].elapsed_ms = INT64_MAX;
+         maximum_calls[i].http_status = INT64_MAX;
+         maximum_calls[i].resolved_model = maximum_model;
+@@ -6976,6 +7012,7 @@ int test_engine(void)
+     failures += case_default_engine();
+     failures += case_engine_tiers();
+     failures += case_receipt_attempt_binding();
++    failures += case_receipt_invocation_boundaries();
+     failures += case_receipt_chain();
+     failures += case_receipt_text();
+ #if !defined(_WIN32)

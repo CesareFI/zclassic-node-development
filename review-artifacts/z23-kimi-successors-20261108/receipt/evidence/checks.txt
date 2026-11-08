@@ -1,0 +1,326 @@
+Exact commands are listed one argument per line; no shell reconstruction is implied.
+Resource wrapper: taskset -c 0,1,2,3 timeout 1800; /usr/bin/time -v.
+TMPDIR for final checks: private scratch under the recorded successors directory.
+Verdicts are allowlisted excerpts, not full runtime logs. Original complete logs remain local.
+
+CHECK focused
+HEAD TREE at command start:
+527fbe7d30741844d8aaaceca461bdf6df7c127d
+fdd00eabed746e384a94c6ae7dbfa9f34f8cf4ef
+Uncommitted diff SHA-256 at command start:
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+ARGV:
+make
+-j4
+t-fast-exact
+ONLY=engine
+T_FAST_EXACT_ARGS=--jobs=1 --no-cache
+EXIT 0
+START 2026-11-08T15:25:04Z
+FINISH 2026-11-08T15:25:16Z
+	User time (seconds): 10.42
+	System time (seconds): 2.44
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:11.63
+	Maximum resident set size (kbytes): 1416088
+VERDICT EXCERPTS:
+==================== test_engine (PASS, 2s) ====================
+engine: L-1 is an invalid negative ordinal... OK
+engine: fixture preserves the supplied ordinal... OK
+engine: L is an invalid negative ordinal... OK
+engine: fixture preserves the supplied ordinal... OK
+engine: L+1 is an invalid negative ordinal... OK
+engine: fixture preserves the supplied ordinal... OK
+engine: U-1 has an exact duration... OK
+engine: fixture preserves the supplied ordinal... OK
+engine: U has an exact duration... OK
+engine: fixture preserves the supplied ordinal... OK
+engine: U+1 saturates its positive duration... OK
+engine: fixture preserves the supplied ordinal... OK
+engine: INT64_MIN has no valid fixture duration... OK
+engine: fixture preserves the supplied ordinal... OK
+engine: INT64_MAX saturates its positive duration... OK
+engine: fixture preserves the supplied ordinal... OK
+engine: -1 has no valid fixture duration... OK
+engine: fixture preserves the supplied ordinal... OK
+engine: zero retains its zero-duration control... OK
+engine: fixture preserves the supplied ordinal... OK
+engine: ordinary positive ordinal has an exact duration... OK
+engine: fixture preserves the supplied ordinal... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: 0 failure(s)
+engine: LEGACY dry-run is as before plus the untyped line... OK
+engine: 0 failure(s)
+SUITE VERDICT mode=cold groups_total=1537 groups_ran=1 groups_cached=0 groups_gated=1536 groups_failed=0 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=ee6eeab152a4
+ALL TESTS PASSED — 0/1 groups failed, 0 skipped (2.0s wall, 1 workers) [--exact filtered]
+
+CHECK lint-fast
+HEAD TREE at command start:
+527fbe7d30741844d8aaaceca461bdf6df7c127d
+fdd00eabed746e384a94c6ae7dbfa9f34f8cf4ef
+Uncommitted diff SHA-256 at command start:
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+ARGV:
+make
+-j4
+lint-fast
+ZCL_LINT_JOBS=4
+EXIT 0
+START 2026-11-08T15:25:16Z
+FINISH 2026-11-08T15:25:43Z
+	User time (seconds): 73.27
+	System time (seconds): 10.21
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:27.43
+	Maximum resident set size (kbytes): 761992
+VERDICT EXCERPTS:
+PASS check-toolgen                                   59 ms
+PASS check-no-stray-root-files                        7 ms
+PASS check-architecture-tree                         21 ms
+PASS check-no-stray-untracked-source                159 ms
+PASS check-no-bare-tmp-fixture                      230 ms
+PASS check-controller-private-headers               344 ms
+PASS check-raw-sqlite                               619 ms
+PASS check-no-live-lab-history                      969 ms
+PASS check-file-size-ceiling                         47 ms
+PASS check-cyclomatic-complexity                    794 ms
+PASS check-catalog-rooms                              1 ms
+PASS check-outparam-init-before-return             2568 ms
+PASS check-flag-registry                           1147 ms
+PASS check-json-value-init                          157 ms
+PASS check-no-raw-sqlite-in-controllers             173 ms
+PASS check-model-validation                           6 ms
+PASS check-model-ar-lifecycle                        75 ms
+PASS check-one-write-path                           508 ms
+PASS check-before-save-hooks                          1 ms
+PASS check-pthread-create                           236 ms
+PASS check-log-macro-return-type                    582 ms
+PASS check-raw-malloc                              2165 ms
+PASS check-wallet-raw-prepare-log                     5 ms
+PASS check-wallet-log-privacy                        16 ms
+PASS check-hidden-return-under-lock                 410 ms
+PASS check-malloc                                  5012 ms
+PASS check-dev-proof-native-fast-path                 3 ms
+PASS check-equihash-params                          387 ms
+PASS check-framework-shape                            9 ms
+PASS check-supervisor-registration                  486 ms
+PASS check-fortify-masked-decls                    2758 ms
+PASS check-windows-platform-seam                     97 ms
+PASS check-windows-acceptance-guard                  10 ms
+PASS check-pipefail-status-pipe                      56 ms
+PASS check-doc-counts                               209 ms
+PASS check-describe-budget                         8798 ms
+PASS check-kpi-floor                                279 ms
+PASS check-vendor-provenance                       5259 ms
+PASS check-orient-facts                              13 ms
+PASS check-arena-view-stub                          869 ms
+PASS check-hotfork-stories                         1345 ms
+PASS check-silent-errors-services                    18 ms
+PASS check-silent-errors-controllers                 10 ms
+PASS check-silent-errors-jobs                         7 ms
+PASS check-silent-errors-conditions                   2 ms
+PASS check-silent-errors-bool                        32 ms
+PASS check-no-raw-clock-outside-platform           1059 ms
+PASS check-hex-codec-single                        1475 ms
+PASS check-sqlite-step-row                          612 ms
+PASS check-capability-inventory-generated          9700 ms
+PASS check-zcc-cache                              13125 ms
+PASS check-no-operator-paths                        722 ms
+PASS check-zcode-package-registry                  8295 ms
+PASS check-byte-order-codec-single                 1611 ms
+lint-fast: precheck skipped: git merge-base HEAD origin/main failed
+lint-fast: OK
+
+CHECK prime-dependencies
+HEAD TREE at command start:
+7fee7ed5aabe5cfe83c526c9bd622b6e2b13f592
+b2a9ec2ccba52240538569d03e58d633130e161f
+Uncommitted diff SHA-256 at command start:
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+ARGV:
+make
+-j4
+worktree-prime
+SRC=/home/kimi/z23-upcur/.cache/z23-successors-20261108/s3
+EXIT 0
+START 2026-11-08T15:04:39Z
+FINISH 2026-11-08T15:04:41Z
+	User time (seconds): 1.26
+	System time (seconds): 0.37
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:01.60
+	Maximum resident set size (kbytes): 44800
+VERDICT EXCERPTS:
+
+CHECK regression-red
+HEAD TREE at command start:
+7fee7ed5aabe5cfe83c526c9bd622b6e2b13f592
+b2a9ec2ccba52240538569d03e58d633130e161f
+Uncommitted diff SHA-256 at command start:
+f4b84664629ed9ff7f27a630514b8ac012b3d4d3ce0eaa8b38239733370b7577
+ARGV:
+env
+TMPDIR=/home/kimi/z23-upcur/.cache/z23-successors-20261108/tmp-receipt
+make
+-j4
+t-fast-exact
+ONLY=engine
+T_FAST_EXACT_ARGS=--jobs=1 --no-cache
+EXIT 2
+START 2026-11-08T15:05:39Z
+FINISH 2026-11-08T15:09:30Z
+	User time (seconds): 748.00
+	System time (seconds): 128.68
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 3:51.37
+	Maximum resident set size (kbytes): 1404880
+VERDICT EXCERPTS:
+==================== test_engine (FAIL, 1s) ====================
+engine: L-1 is an invalid negative ordinal... FAIL
+engine: fixture preserves the supplied ordinal... OK
+engine: L is an invalid negative ordinal... FAIL
+engine: fixture preserves the supplied ordinal... OK
+engine: L+1 is an invalid negative ordinal... FAIL
+engine: fixture preserves the supplied ordinal... OK
+engine: U-1 has an exact duration... OK
+engine: fixture preserves the supplied ordinal... OK
+engine: U has an exact duration... OK
+engine: fixture preserves the supplied ordinal... OK
+engine: U+1 saturates its positive duration... OK
+engine: fixture preserves the supplied ordinal... OK
+engine: INT64_MIN has no valid fixture duration... FAIL
+engine: fixture preserves the supplied ordinal... OK
+engine: INT64_MAX saturates its positive duration... OK
+engine: fixture preserves the supplied ordinal... OK
+engine: -1 has no valid fixture duration... FAIL
+engine: fixture preserves the supplied ordinal... OK
+engine: zero retains its zero-duration control... OK
+engine: fixture preserves the supplied ordinal... OK
+engine: ordinary positive ordinal has an exact duration... OK
+engine: fixture preserves the supplied ordinal... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: 0 failure(s)
+engine: LEGACY dry-run is as before plus the untyped line... OK
+engine: 11 failure(s)
+SUITE VERDICT mode=cold groups_total=1537 groups_ran=1 groups_cached=0 groups_gated=1536 groups_failed=1 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=ee6eeab152a4
+SOME TESTS FAILED — 1/1 groups failed, 0 skipped (2.2s wall, 1 workers) [--exact filtered]
+make[1]: *** [Makefile:5419: t-fast-exact-locked] Error 1
+make: *** [Makefile:5410: t-fast-exact] Error 2
+
+CHECK sanitizer
+HEAD TREE at command start:
+527fbe7d30741844d8aaaceca461bdf6df7c127d
+fdd00eabed746e384a94c6ae7dbfa9f34f8cf4ef
+Uncommitted diff SHA-256 at command start:
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+ARGV:
+make
+-j4
+t-asan
+ONLY=test_engine
+EXIT 0
+START 2026-11-08T15:25:43Z
+FINISH 2026-11-08T15:35:29Z
+	User time (seconds): 1874.22
+	System time (seconds): 409.21
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 9:45.69
+	Maximum resident set size (kbytes): 2470680
+VERDICT EXCERPTS:
+==================== test_engine (PASS, 3s) ====================
+engine: L-1 is an invalid negative ordinal... OK
+engine: fixture preserves the supplied ordinal... OK
+engine: L is an invalid negative ordinal... OK
+engine: fixture preserves the supplied ordinal... OK
+engine: L+1 is an invalid negative ordinal... OK
+engine: fixture preserves the supplied ordinal... OK
+engine: U-1 has an exact duration... OK
+engine: fixture preserves the supplied ordinal... OK
+engine: U has an exact duration... OK
+engine: fixture preserves the supplied ordinal... OK
+engine: U+1 saturates its positive duration... OK
+engine: fixture preserves the supplied ordinal... OK
+engine: INT64_MIN has no valid fixture duration... OK
+engine: fixture preserves the supplied ordinal... OK
+engine: INT64_MAX saturates its positive duration... OK
+engine: fixture preserves the supplied ordinal... OK
+engine: -1 has no valid fixture duration... OK
+engine: fixture preserves the supplied ordinal... OK
+engine: zero retains its zero-duration control... OK
+engine: fixture preserves the supplied ordinal... OK
+engine: ordinary positive ordinal has an exact duration... OK
+engine: fixture preserves the supplied ordinal... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: maximum invocation saturates before fixture overrides... OK
+engine: 0 failure(s)
+engine: LEGACY dry-run is as before plus the untyped line... OK
+engine: 0 failure(s)
+==================== test_engine_gate_capture (PASS, 1s) ====================
+==================== test_engine_rules (PASS, 0s) ====================
+==================== test_engine_escalate (PASS, 0s) ====================
+==================== test_engine_claude (PASS, 0s) ====================
+SUITE VERDICT mode=cold groups_total=1537 groups_ran=5 groups_cached=0 groups_gated=1532 groups_failed=0 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=ef8ba8b8b50b
+ALL TESTS PASSED — 0/5 groups failed, 0 skipped (2.6s wall, 4 workers) [--only filtered]
