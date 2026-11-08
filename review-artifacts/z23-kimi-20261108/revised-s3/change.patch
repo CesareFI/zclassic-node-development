@@ -1,0 +1,154 @@
+diff --git a/contexts/commons/modules/vcs/src/package_recipe.c b/contexts/commons/modules/vcs/src/package_recipe.c
+index c8974a2dc3..06ad8a2b23 100644
+--- a/contexts/commons/modules/vcs/src/package_recipe.c
++++ b/contexts/commons/modules/vcs/src/package_recipe.c
+@@ -227,13 +227,14 @@ static bool recipe_strings_insert(struct vcs_package_recipe_strings *list,
+         list->items = nitems;
+         list->cap = ncap;
+     }
+-    char *copy = zcl_malloc(strlen(entry) + 1, "vcs_recipe_entry");
++    size_t copy_capacity = strlen(entry) + 1;
++    char *copy = zcl_malloc(copy_capacity, "vcs_recipe_entry");
+     if (!copy) {
+         if (err_out)
+             *err_out = VCS_PACKAGE_RECIPE_ERR_ALLOC;
+         return false;
+     }
+-    strcpy(copy, entry);
++    (void)snprintf(copy, copy_capacity, "%s", entry);
+     memmove(list->items + lo + 1, list->items + lo,
+             (list->count - lo) * sizeof(*list->items));
+     list->items[lo] = copy;
+diff --git a/contexts/commons/packages/zlru/tests/test_zlru.c b/contexts/commons/packages/zlru/tests/test_zlru.c
+index c674b50369..3f03b47b70 100644
+--- a/contexts/commons/packages/zlru/tests/test_zlru.c
++++ b/contexts/commons/packages/zlru/tests/test_zlru.c
+@@ -141,10 +141,17 @@ static void test_capacity_one(void) {
+   zlru_destroy(c);
+ }
+ 
++struct zlru_key_sink {
++  char *text;
++  size_t cap;
++};
++
+ static bool collect_key(void *ctx, const char *key, void *value) {
+   (void)value;
+-  strcat(ctx, key);
+-  strcat(ctx, " ");
++  struct zlru_key_sink *sink = ctx;
++  size_t used = strlen(sink->text);
++  /* Three one-byte keys and spaces need seven bytes including the NUL. */
++  (void)snprintf(sink->text + used, sink->cap - used, "%s ", key);
+   return true;
+ }
+ 
+@@ -157,11 +164,12 @@ static void test_visit_order(void) {
+   zlru_get(c, "a"); /* promote a: order b? no: c? order is b? recompute */
+   /* MRU order now: a c b */
+   char acc[64] = "";
+-  zlru_visit_mru_first(c, collect_key, acc);
++  struct zlru_key_sink sink = {acc, sizeof(acc)};
++  zlru_visit_mru_first(c, collect_key, &sink);
+   CHECK(!strcmp(acc, "a c b "));
+   /* The visit must not promote: same order again. */
+   memset(acc, 0, sizeof(acc));
+-  zlru_visit_mru_first(c, collect_key, acc);
++  zlru_visit_mru_first(c, collect_key, &sink);
+   CHECK(!strcmp(acc, "a c b "));
+   zlru_destroy(c);
+ }
+diff --git a/contexts/commons/packages/ztemplate/tests/test_ztemplate.c b/contexts/commons/packages/ztemplate/tests/test_ztemplate.c
+index 0f41319c2c..08d0d73e3c 100644
+--- a/contexts/commons/packages/ztemplate/tests/test_ztemplate.c
++++ b/contexts/commons/packages/ztemplate/tests/test_ztemplate.c
+@@ -239,8 +239,11 @@ static void test_differential(void)
+         char t[256];
+         t[0] = '\0';
+         size_t parts = rng_next() % 8;
+-        for (size_t i = 0; i < parts; i++)
+-            strcat(t, frags[rng_next() % 10]);
++        for (size_t i = 0; i < parts; i++) {
++            size_t used = strlen(t);
++            (void)snprintf(t + used, sizeof(t) - used,
++                           "%s", frags[rng_next() % 10]);
++        }
+         ztemplate *tp = ztemplate_parse(t, strlen(t), NULL);
+         CHECK(tp != NULL);
+         char got[1024], want[1024];
+diff --git a/contexts/commons/packages/ztoml/tests/test_ztoml.c b/contexts/commons/packages/ztoml/tests/test_ztoml.c
+index b19969c5bd..004f1cd8ea 100644
+--- a/contexts/commons/packages/ztoml/tests/test_ztoml.c
++++ b/contexts/commons/packages/ztoml/tests/test_ztoml.c
+@@ -256,7 +256,10 @@ static void test_err(void) {
+   {
+     char doc[64] = "k = ";
+     size_t i;
+-    for (i = 0; i < ZTOML_MAX_DEPTH + 2; i++) strcat(doc, "[");
++    for (i = 0; i < ZTOML_MAX_DEPTH + 2; i++) {
++      size_t used = strlen(doc);
++      (void)snprintf(doc + used, sizeof(doc) - used, "[");
++    }
+     evlog log;
+     CHECK(parse_all(doc, &log) == ZTOML_ERR_RANGE);
+   }
+diff --git a/contexts/commons/packages/zxml/src/zxml.c b/contexts/commons/packages/zxml/src/zxml.c
+index c42fe42a6d..1939b8139b 100644
+--- a/contexts/commons/packages/zxml/src/zxml.c
++++ b/contexts/commons/packages/zxml/src/zxml.c
+@@ -5,6 +5,7 @@
+ 
+ #include "zutf8/zutf8.h"
+ 
++#include <stdio.h>
+ #include <string.h>
+ 
+ static zxml_status emit(zxml *x, const char *data, size_t len) {
+@@ -197,7 +198,8 @@ zxml_status zxml_elem_open(zxml *x, const char *name) {
+     x->kids[x->depth - 1] = true;
+   x->kids[x->depth] = false;
+   x->last_elem[x->depth] = false;
+-  strcpy(x->names[x->depth], name); /* bounded by name_valid() */
++  (void)snprintf(x->names[x->depth], sizeof(x->names[x->depth]),
++                 "%s", name); /* bounded by name_valid() */
+   x->depth++;
+   x->in_tag = true;
+   if (x->depth == 1)
+diff --git a/engine/composition/zcode_package_registry.def b/engine/composition/zcode_package_registry.def
+index 1c78a51ed9..457b1953de 100644
+--- a/engine/composition/zcode_package_registry.def
++++ b/engine/composition/zcode_package_registry.def
+@@ -67,13 +67,13 @@ ZCODE_PACKAGE("zclassic23/crypto-sha3", "core/modules/crypto", 8,
+     "021492bc6a132ac91cb8b9f57d2b809dd2bdb8e1a294d3edbb6c6f7fc03bf11cac",
+     "ad134df16ad8e139ac337bbd322d1986f029c1a9b2da48729d5a5f5690af717935d2e2b66a89447f746001c01b32fdda9ffb735f2bb06ff646c503e4908403a9")
+ ZCODE_PACKAGE("zclassic23/package", "contexts/commons/modules/vcs", 9,
+-    "2c8c159ad5acfea726744a219efeb2689afd8c5400aff1673000acf653f783b9",
+-    "b7ff3eb767b77a500d821d179120da6f9983e437470b2f3da59fe25b9cee5003",
++    "729282765d0b74fe5a05ba8238e4df66e4b25894ccbf10d8ca9e3adea3e475c2",
++    "f7aefbafa01ac93a3eb302f23cb083b9875c86ec23199880b0030b2727aa45f1",
+     "ed665d9d616abfef496c31a87dd18f2e884469bf9782704dac6c1fd1ce027d04",
+-    "12d9b5dbcc71c722f2cfe64248a7be68a80330901fa47261d894e2d3964ce8a5",
++    "d556fefe1aa4d78e83a2ded22b1134e4a50177330a48f019153856805f1355fa",
+     "4cf5f2ad2e03e840afbec8d3ce3e0b33b1ffee12ae7becf35ecf620052ff255e",
+     "021492bc6a132ac91cb8b9f57d2b809dd2bdb8e1a294d3edbb6c6f7fc03bf11cac",
+-    "6dc98ac6022064540038aa00b16a53850ca635f24951c24c98507a96d88884df51f9e4893eb1c0f562c662c84ef35e89523e97d94b573375e935616c92ccd2fa")
++    "1f4657196f626ce92abdd891b29057bf8e3008f50de5d7e6afd266593a98b5074ad43d379be8fdf07367b98115531108249005b50da0975fef6e868dd6150880")
+ ZCODE_PACKAGE("zclassic23/rvemu", "platform/modules/rvemu", 11,
+     "10f058cf346b27e752a124d08a27791467e84659e266337a8a4081d7d0eea617",
+     "575f9e86bf598b000658679d143abb473a10b1fd02eede9223747ed6874b4036",
+diff --git a/tools/lint/hardening_ratchet_baseline.txt b/tools/lint/hardening_ratchet_baseline.txt
+index edeaa03d9e..2b7d7cf600 100644
+--- a/tools/lint/hardening_ratchet_baseline.txt
++++ b/tools/lint/hardening_ratchet_baseline.txt
+@@ -9,11 +9,6 @@
+ # core/ rows are counted and frozen like the rest of core/.
+ # Regenerate: z23-lint check-hardening-ratchet --write-baseline
+ banned-str contexts/commons/modules/plugin/src/plugin_pack.c 2
+-banned-str contexts/commons/modules/vcs/src/package_recipe.c 1
+-banned-str contexts/commons/packages/zlru/tests/test_zlru.c 2
+-banned-str contexts/commons/packages/ztemplate/tests/test_ztemplate.c 1
+-banned-str contexts/commons/packages/ztoml/tests/test_ztoml.c 1
+-banned-str contexts/commons/packages/zxml/src/zxml.c 1
+ banned-str tools/bench_fresh_sync.c 1
+ banned-str tools/command/native_dev_train_keep.c 1
+ banned-str tools/corpus_census.c 1

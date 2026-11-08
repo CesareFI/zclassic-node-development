@@ -1,0 +1,330 @@
+diff --git a/tests/harness/src/test_engine.c b/tests/harness/src/test_engine.c
+index 1861241b77..aa62c614db 100644
+--- a/tests/harness/src/test_engine.c
++++ b/tests/harness/src/test_engine.c
+@@ -1875,10 +1875,9 @@ static int case_prompt_shape(void)
+ /* ── the CLI argument vector ──────────────────────────────────────────────
+  * CLI vendor arguments come from the registry, not a fixed array. */
+ 
+-static int case_cli_argv(void)
++static int cli_argv_check_turns(void)
+ {
+     int failures = 0;
+-
+     int turns = 77;
+     EN_CHECK("CLI turns accepts the bounded decimal range",
+              engine_cli_turns_parse("1", &turns) && turns == 1
+@@ -1894,7 +1893,12 @@ static int case_cli_argv(void)
+         EN_CHECK("malformed CLI turns are refused without changing output",
+                  !engine_cli_turns_parse(text, &turns) && turns == 77);
+     }
++    return failures;
++}
+ 
++static int cli_argv_check_registry(void)
++{
++    int failures = 0;
+     /* Every CLI row is complete, and no other row pretends to be one. */
+     bool cli_rows_complete = true;
+     bool non_cli_rows_clean = true;
+@@ -1920,34 +1924,28 @@ static int case_cli_argv(void)
+              grok_cap && engine_cli_accepts_turns(grok_cap));
+     EN_CHECK("GLM does not claim a CLI turn slot",
+              glm_cap && !engine_cli_accepts_turns(glm_cap));
++    return failures;
++}
+ 
+-    const struct engine_cli_inputs in = {
+-        .prompt  = "/p.txt",
+-        .workdir = "/w",
+-        .turns   = "3",
+-        .model   = "m-1",
+-        .reasoning_effort = "high",
+-    };
+-    const char *argv[ENGINE_CLI_ARGV_MAX];
+-
+-    /* A file-mode vendor: the exact exec'd vector, not just its count. */
+-    const struct engine_vendor *fileq = NULL;
+-    const struct engine_vendor *argq = NULL;
+-    for (size_t i = 0; i < engine_count(); i++) {
+-        const struct engine_vendor *v = engine_at(i);
+-        if (v->wire != ENGINE_WIRE_LOCAL_CLI) continue;
+-        if (v->cli_prompt == ENGINE_CLI_PROMPT_FILE && !fileq) fileq = v;
+-        if (v->cli_prompt == ENGINE_CLI_PROMPT_ARG && !argq) argq = v;
+-    }
+-    EN_CHECK("a file-prompt CLI vendor is registered", fileq != NULL);
+-    EN_CHECK("an argument-prompt CLI vendor is registered", argq != NULL);
+-
+-    if (fileq) {
+-        size_t n = engine_cli_argv_build(fileq, &in, argv, ENGINE_CLI_ARGV_MAX);
++static int cli_argv_check_file_header(size_t n, const struct engine_vendor *fileq, const char *const argv[ENGINE_CLI_ARGV_MAX])
++{
++    int failures = 0;
++    {
+         EN_CHECK("a file-prompt vendor builds a vector", n > 0);
+         EN_CHECK("whose argv[0] is the program",
+                  n > 0 && strcmp(argv[0], fileq->program) == 0);
+         EN_CHECK("which is NULL-terminated", n > 0 && argv[n] == NULL);
++    }
++    return failures;
++}
++
++static int cli_argv_check_file_vector(const struct engine_vendor *fileq, struct engine_cli_inputs in, const char *argv[ENGINE_CLI_ARGV_MAX])
++{
++    int failures = 0;
++    {
++        size_t n = engine_cli_argv_build(fileq, &in, argv, ENGINE_CLI_ARGV_MAX);
++        failures += cli_argv_check_file_header(n, fileq, argv);
++
+         bool carries_prompt = false, carries_workdir = false;
+         bool carries_bypass = false, carries_no_plan = false;
+         bool carries_model = false, carries_effort = false;
+@@ -1987,6 +1985,15 @@ static int case_cli_argv(void)
+         EN_CHECK("and pins the observable repository tool schema", pins_tools);
+         EN_CHECK("and no placeholder survived substitution",
+                  carries_no_placeholders);
++    }
++    return failures;
++}
++
++static int cli_argv_check_effort(const struct engine_vendor *fileq, struct engine_cli_inputs in, const char *argv[ENGINE_CLI_ARGV_MAX])
++{
++    int failures = 0;
++    size_t n;
++    {
+         struct engine_cli_inputs provider_default = in;
+         provider_default.reasoning_effort =
+             ENGINE_REASONING_EFFORT_PROVIDER_DEFAULT;
+@@ -2003,46 +2010,14 @@ static int case_cli_argv(void)
+         EN_CHECK("an unknown CLI effort is refused",
+                  engine_cli_argv_build(fileq, &invalid_effort, argv,
+                                        ENGINE_CLI_ARGV_MAX) == 0);
++    }
++    return failures;
++}
+ 
+-        const struct engine_vendor *grok = engine_by_id("grok-cli");
+-        EN_CHECK("grok-cli exposes its resume argv", grok != NULL
+-                 && grok->resume_argv != NULL
+-                 && strcmp(grok->resume_argv[0], "--resume") == 0
+-                 && strcmp(grok->resume_argv[1], ENGINE_CLI_RESUME_TOKEN) == 0);
+-        if (grok) {
+-            EN_CHECK("resume accessor returns the registered extension",
+-                     engine_registry_resume_argv("grok-cli") == grok->resume_argv
+-                     && engine_registry_resume_argv("glm-cli") == NULL
+-                     && engine_registry_resume_argv("unknown-engine") == NULL);
+-            const char *session = "23c9be10-5084-43a4-8e1a-2735a4650981";
+-            struct engine_cli_inputs base_resume = in;
+-            base_resume.reasoning_effort = "low";
+-            struct engine_cli_inputs resumed = base_resume;
+-            resumed.resume_session_id = session;
+-            size_t base_n = engine_cli_argv_build(grok, &base_resume, argv,
+-                                                   ENGINE_CLI_ARGV_MAX);
+-            const char *base_argv[ENGINE_CLI_ARGV_MAX];
+-            memcpy(base_argv, argv, sizeof(base_argv));
+-            size_t resumed_n = engine_cli_argv_build(grok, &resumed, argv,
+-                                                      ENGINE_CLI_ARGV_MAX);
+-            size_t verbatim_hits = 0;
+-            for (size_t i = 0; i < resumed_n; i++)
+-                if (strcmp(argv[i], "--verbatim") == 0)
+-                    verbatim_hits++;
+-            EN_CHECK("Grok argv preserves the supplied prompt exactly once",
+-                     resumed_n > 0 && verbatim_hits == 1);
+-            bool has_resume = false, has_id = false, has_restore = false;
+-            bool preserved = resumed_n == base_n + 2;
+-            for (size_t i = 0; preserved && i < base_n; i++)
+-                preserved = strcmp(base_argv[i], argv[i]) == 0;
+-            for (size_t i = 1; i < resumed_n; i++) {
+-                if (strcmp(argv[i], "--resume") == 0) has_resume = true;
+-                if (strcmp(argv[i], session) == 0) has_id = true;
+-                if (strcmp(argv[i], "--restore-code") == 0) has_restore = true;
+-            }
+-            EN_CHECK("valid Grok resume appends exactly flag and session",
+-                     base_n > 0 && resumed_n == base_n + 2
+-                     && preserved && has_resume && has_id && !has_restore);
++static int cli_argv_check_resume_limits(const struct engine_vendor *grok, struct engine_cli_inputs in, struct engine_cli_inputs base_resume, struct engine_cli_inputs resumed, size_t base_n, size_t resumed_n, const char *argv[ENGINE_CLI_ARGV_MAX])
++{
++    int failures = 0;
++    {
+             EN_CHECK("Grok resume needs the additional argv capacity",
+                      engine_cli_argv_build(grok, &base_resume, argv, base_n + 1) == base_n
+                      && engine_cli_argv_build(grok, &resumed, argv, resumed_n)
+@@ -2077,10 +2052,73 @@ static int case_cli_argv(void)
+                          engine_cli_argv_build(grok, &invalid, argv,
+                                                ENGINE_CLI_ARGV_MAX) == 0);
+             }
++    }
++    return failures;
++}
++
++static int cli_argv_check_resume_vector(const struct engine_vendor *grok, struct engine_cli_inputs in, const char *argv[ENGINE_CLI_ARGV_MAX])
++{
++    int failures = 0;
++    {
++            const char *session = "23c9be10-5084-43a4-8e1a-2735a4650981";
++            struct engine_cli_inputs base_resume = in;
++            base_resume.reasoning_effort = "low";
++            struct engine_cli_inputs resumed = base_resume;
++            resumed.resume_session_id = session;
++            size_t base_n = engine_cli_argv_build(grok, &base_resume, argv,
++                                                   ENGINE_CLI_ARGV_MAX);
++            const char *base_argv[ENGINE_CLI_ARGV_MAX];
++            memcpy(base_argv, argv, sizeof(base_argv));
++            size_t resumed_n = engine_cli_argv_build(grok, &resumed, argv,
++                                                      ENGINE_CLI_ARGV_MAX);
++            size_t verbatim_hits = 0;
++            for (size_t i = 0; i < resumed_n; i++)
++                if (strcmp(argv[i], "--verbatim") == 0)
++                    verbatim_hits++;
++            EN_CHECK("Grok argv preserves the supplied prompt exactly once",
++                     resumed_n > 0 && verbatim_hits == 1);
++            bool has_resume = false, has_id = false, has_restore = false;
++            bool preserved = resumed_n == base_n + 2;
++            for (size_t i = 0; preserved && i < base_n; i++)
++                preserved = strcmp(base_argv[i], argv[i]) == 0;
++            for (size_t i = 1; i < resumed_n; i++) {
++                if (strcmp(argv[i], "--resume") == 0) has_resume = true;
++                if (strcmp(argv[i], session) == 0) has_id = true;
++                if (strcmp(argv[i], "--restore-code") == 0) has_restore = true;
++            }
++            EN_CHECK("valid Grok resume appends exactly flag and session",
++                     base_n > 0 && resumed_n == base_n + 2
++                     && preserved && has_resume && has_id && !has_restore);
++            failures += cli_argv_check_resume_limits(grok, in, base_resume, resumed, base_n, resumed_n, argv);
++    }
++    return failures;
++}
++
++static int cli_argv_check_resume(struct engine_cli_inputs in, const char *argv[ENGINE_CLI_ARGV_MAX])
++{
++    int failures = 0;
++    {
++        const struct engine_vendor *grok = engine_by_id("grok-cli");
++        EN_CHECK("grok-cli exposes its resume argv", grok != NULL
++                 && grok->resume_argv != NULL
++                 && strcmp(grok->resume_argv[0], "--resume") == 0
++                 && strcmp(grok->resume_argv[1], ENGINE_CLI_RESUME_TOKEN) == 0);
++        if (grok) {
++            EN_CHECK("resume accessor returns the registered extension",
++                     engine_registry_resume_argv("grok-cli") == grok->resume_argv
++                     && engine_registry_resume_argv("glm-cli") == NULL
++                     && engine_registry_resume_argv("unknown-engine") == NULL);
++            failures += cli_argv_check_resume_vector(grok, in, argv);
++
+         }
+     }
++    return failures;
++}
+ 
+-    if (argq) {
++static int cli_argv_check_argument(const struct engine_vendor *argq, const char *argv[ENGINE_CLI_ARGV_MAX])
++{
++    int failures = 0;
++    {
+         const struct engine_cli_inputs argin = {
+             .prompt  = "THE WHOLE PROMPT TEXT",
+             .workdir = "/w",
+@@ -2122,10 +2160,13 @@ static int case_cli_argv(void)
+             EN_CHECK("the over-length CLI fixture allocates", false);
+         }
+     }
++    return failures;
++}
+ 
+-    /* A placeholder the caller left empty is a refusal, not an empty slot: an
+-     * argv entry silently filled with nothing is a different command. */
+-    if (fileq) {
++static int cli_argv_check_missing(const struct engine_vendor *fileq, struct engine_cli_inputs in, const char *argv[ENGINE_CLI_ARGV_MAX])
++{
++    int failures = 0;
++    {
+         struct engine_cli_inputs missing = in;
+         missing.workdir = NULL;
+         EN_CHECK("a placeholder with no value is refused",
+@@ -2139,7 +2180,12 @@ static int case_cli_argv(void)
+         EN_CHECK("a cap too small to hold the vector is refused",
+                  engine_cli_argv_build(fileq, &in, argv, 2) == 0);
+     }
++    return failures;
++}
+ 
++static int cli_argv_check_template(const struct engine_vendor *fileq, struct engine_cli_inputs in, const char *argv[ENGINE_CLI_ARGV_MAX])
++{
++    int failures = 0;
+     /* An unknown brace-shaped slot is refused rather than passed through as a
+      * literal, which is what a CLI would receive as a confident wrong value. */
+     static const char *const bogus_argv[] = { "--flag", "{mdoel}", NULL };
+@@ -2163,6 +2209,61 @@ static int case_cli_argv(void)
+     return failures;
+ }
+ 
++static int case_cli_argv(void)
++{
++    int failures = 0;
++
++    failures += cli_argv_check_turns();
++
++    failures += cli_argv_check_registry();
++
++    const struct engine_cli_inputs in = {
++        .prompt  = "/p.txt",
++        .workdir = "/w",
++        .turns   = "3",
++        .model   = "m-1",
++        .reasoning_effort = "high",
++    };
++    const char *argv[ENGINE_CLI_ARGV_MAX];
++
++    /* A file-mode vendor: the exact exec'd vector, not just its count. */
++    const struct engine_vendor *fileq = NULL;
++    const struct engine_vendor *argq = NULL;
++    for (size_t i = 0; i < engine_count(); i++) {
++        const struct engine_vendor *v = engine_at(i);
++        if (v->wire != ENGINE_WIRE_LOCAL_CLI) continue;
++        if (v->cli_prompt == ENGINE_CLI_PROMPT_FILE && !fileq) fileq = v;
++        if (v->cli_prompt == ENGINE_CLI_PROMPT_ARG && !argq) argq = v;
++    }
++    EN_CHECK("a file-prompt CLI vendor is registered", fileq != NULL);
++    EN_CHECK("an argument-prompt CLI vendor is registered", argq != NULL);
++
++    if (fileq) {
++        failures += cli_argv_check_file_vector(fileq, in, argv);
++
++        failures += cli_argv_check_effort(fileq, in, argv);
++
++        failures += cli_argv_check_resume(in, argv);
++
++    }
++
++    if (argq) {
++        failures += cli_argv_check_argument(argq, argv);
++
++    }
++
++    /* A placeholder the caller left empty is a refusal, not an empty slot: an
++     * argv entry silently filled with nothing is a different command. */
++    if (fileq) {
++        failures += cli_argv_check_missing(fileq, in, argv);
++
++    }
++
++    failures += cli_argv_check_template(fileq, in, argv);
++
++    return failures;
++}
++
+ static int case_cli_observation(void)
+ {
+     int failures = 0;
+diff --git a/tools/lint/cyclomatic_complexity_baseline.txt b/tools/lint/cyclomatic_complexity_baseline.txt
+index 8c73624990..ac22214f70 100644
+--- a/tools/lint/cyclomatic_complexity_baseline.txt
++++ b/tools/lint/cyclomatic_complexity_baseline.txt
+@@ -83,7 +83,6 @@ engine/services/src/property_grant_commit.c:commit_attempt:24
+ engine/services/src/shielded_history_import_service.c:shielded_history_import_from_chainstate:22
+ engine/services/src/shielded_history_promote_service.c:shielded_history_promote_run:19
+ engine/services/src/utxo_recovery_service.c:utxo_recovery_execute:21
+-tests/harness/src/test_engine.c:case_cli_argv:71
+ tests/harness/src/test_engine.c:case_cli_observation:33
+ tests/harness/src/test_engine.c:case_engine_unit_grok_projection_e2e:36
+ tests/harness/src/test_engine.c:case_engine_unit_state_e2e:29

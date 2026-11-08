@@ -1,0 +1,6 @@
+check	exit	command
+focused	0	make -j4 t-fast-exact ONLY=zcode_package_dev T_FAST_EXACT_ARGS='--jobs=1 --no-cache'
+lint-fast	0	make lint-fast ZCL_LINT_JOBS=4
+full-build	2	make -j4 all
+full-lint	2	make lint ZCL_LINT_JOBS=4
+full-suite	2	make -j4 test-parallel TEST_PARALLEL_ARGS='--jobs=4 --no-cache'

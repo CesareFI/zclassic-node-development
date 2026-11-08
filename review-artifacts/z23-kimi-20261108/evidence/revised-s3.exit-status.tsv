@@ -1,0 +1,5 @@
+check	exit	command
+focused	0	TMPDIR=<isolated-absolute-dir> taskset -c 0,1,2,3 make -j4 t-fast-exact ONLY=commons_package_tests,vcs_core,zcode_recipe,zcode_package_registry,zcode_swarm_net,zcode_score_receipt T_FAST_EXACT_ARGS='--jobs=1 --no-cache'
+lint-fast	0	TMPDIR=<isolated-absolute-dir> taskset -c 0,1,2,3 make lint-fast ZCL_LINT_JOBS=4
+lint-preflight	0	TMPDIR=<isolated-absolute-dir> taskset -c 0,1,2,3 make -j4 lint-preflight ZCL_LINT_JOBS=4
+hardening	0	saved hardening gate; exact invocation flags not retained

@@ -1,0 +1,407 @@
+diff --git a/tests/harness/src/test_engine.c b/tests/harness/src/test_engine.c
+index 63c2f5459f..1861241b77 100644
+--- a/tests/harness/src/test_engine.c
++++ b/tests/harness/src/test_engine.c
+@@ -4619,46 +4619,9 @@ static int case_receipt_attempt_binding(void)
+     return failures;
+ }
+ 
+-static int case_receipt_chain(void)
++static int receipt_chain_check_capacity(void)
+ {
+     int failures = 0;
+-    char path[PATH_MAX];
+-    test_fmt_tmpdir(path, sizeof(path), "zcl_engine_receipt", "chainlog");
+-    (void)test_ensure_tmproot();
+-    receipt_unlink(path);
+-
+-    struct engine_receipt_chain_report report;
+-    EN_CHECK("a missing file is an empty chain, not a broken one",
+-             engine_receipt_verify_chain(path, &report)
+-             && report.records == 0 && report.first_bad_line == 0);
+-
+-    struct engine_receipt a = receipt_fixture("fixture", 1000);
+-    struct engine_receipt b = receipt_fixture("glm", 1001);
+-    struct engine_receipt c = receipt_fixture("grok", 1002);
+-    struct engine_receipt_invocation calls[4] = {
+-        receipt_invocation(1, "turn", "network", -1, -1, -1, -1, -1, -1),
+-        receipt_invocation(2, "turn", "ok", 10, 4, 6, 0, 2, 14),
+-        receipt_invocation(3, "compaction", "ok", 3, 2, 1, -1, 0, 5),
+-        receipt_invocation(4, "turn", "ok", 12, 5, 4, 0, 1, 17),
+-    };
+-    struct engine_receipt_invocation overflow_calls[2] = {
+-        receipt_invocation(1, "turn", "ok", INT64_MAX, 0, 0, 0, 0,
+-                           INT64_MAX),
+-        receipt_invocation(2, "turn", "ok", 1, 0, 0, 0, 0, 1),
+-    };
+-    a.invocations = calls;
+-    a.invocations_count = sizeof(calls) / sizeof(calls[0]);
+-    calls[1].resolved_model = "grok-build-a";
+-    calls[2].resolved_model = "grok-build-b";
+-    b.invocations = overflow_calls;
+-    b.invocations_count = sizeof(overflow_calls) / sizeof(overflow_calls[0]);
+-    struct engine_receipt_invocation resumed_calls[2] = {
+-        receipt_invocation(1, "turn", "ok", 10, 4, 0, 0, 1, 14),
+-        receipt_invocation(2, "turn", "ok", 20, 8, 0, 0, 2, 28),
+-    };
+-    c.invocations = resumed_calls;
+-    c.invocations_count = sizeof(resumed_calls) / sizeof(resumed_calls[0]);
+-    c.invocation_totals_ambiguous = true;
+     struct engine_receipt_invocation maximum_calls
+         [ENGINE_RECEIPT_INVOCATIONS_MAX];
+     char maximum_model[96];
+@@ -4699,28 +4662,13 @@ static int case_receipt_chain(void)
+     maximum.requested_model = overlong_model;
+     EN_CHECK("metadata that would overflow the record is detected preflight",
+              !engine_receipt_fits(&maximum));
+-    a.requested_model = "grok-4.6";
+-    a.resolved_model = "grok-4.6-build";
+-    a.reasoning_effort = "high";
+-    a.prompt_tokens = 100;
+-    a.completion_tokens = 25;
+-    a.cache_read_input_tokens = 60;
+-    a.cache_creation_input_tokens = 10;
+-    a.reasoning_tokens = 7;
+-    a.total_tokens = 125;
+-    a.turns = 4;
+-    a.dispatch_ms = 2018;
+-    a.proof_ms = 91;
+-    a.wall_ms = 2109;
+-    a.cumulative_proof_ms = 180;
+-    a.unit_elapsed_ms = 2200;
+-    EN_CHECK("the first record appends", engine_receipt_append(path, &a, NULL));
+-    EN_CHECK("the second record appends", engine_receipt_append(path, &b, NULL));
+-    EN_CHECK("the third record appends", engine_receipt_append(path, &c, NULL));
+-    EN_CHECK("the chain verifies end to end",
+-             engine_receipt_verify_chain(path, &report)
+-             && report.records == 3 && report.first_bad_line == 0);
++    return failures;
++}
+ 
++static int receipt_chain_check_unicode(struct engine_receipt a)
++{
++    int failures = 0;
++    struct engine_receipt_chain_report report;
+     /* UTF-8 boundary: spaces and a non-ASCII filename. */
+     char unicode_path[PATH_MAX];
+     (void)test_ensure_tmproot();
+@@ -4732,23 +4680,12 @@ static int case_receipt_chain(void)
+              engine_receipt_verify_chain(unicode_path, &report)
+              && report.records == 1 && report.first_bad_line == 0);
+     receipt_unlink(unicode_path);
++    return failures;
++}
+ 
+-    char whole[65536];
+-    size_t whole_n = 0;
+-    const char *line1 = NULL;
+-    size_t line1_n = 0;
+-    EN_CHECK("the three-record file is readable",
+-             receipt_read_whole(path, whole, sizeof(whole), &whole_n)
+-             && receipt_nth_line(whole, whole_n, 1, &line1, &line1_n));
+-    static const char k_genesis[] =
+-        "\"prev_sha3\":\"0000000000000000000000000000000000000000000000000000000000000000\"";
+-    char first[ENGINE_RECEIPT_LINE_MAX + 2u];
+-    if (line1 && line1_n < sizeof(first)) {
+-        memcpy(first, line1, line1_n);
+-        first[line1_n] = '\0';
+-    } else {
+-        first[0] = '\0';
+-    }
++static int receipt_chain_check_first_metadata(const char *first, const char *k_genesis)
++{
++    int failures = 0;
+     EN_CHECK("the first record's prev_sha3 is 64 zeros",
+              strstr(first, k_genesis) != NULL);
+     EN_CHECK("groups_ran is a JSON integer, not a float",
+@@ -4768,6 +4705,12 @@ static int case_receipt_chain(void)
+              strstr(first, "\"reasoning_tokens\":7") != NULL &&
+              strstr(first, "\"total_tokens\":125") != NULL &&
+              strstr(first, "\"turns\":4") != NULL);
++    return failures;
++}
++
++static int receipt_chain_check_first_timing(const char *first)
++{
++    int failures = 0;
+     EN_CHECK("dispatch and proof timing remain separately measurable",
+              strstr(first, "\"dispatch_ms\":2018") != NULL &&
+              strstr(first, "\"proof_ms\":91") != NULL &&
+@@ -4792,7 +4735,12 @@ static int case_receipt_chain(void)
+              strstr(first, "\"total_completion_tokens\":-1") != NULL &&
+              strstr(first, "\"total_reasoning_tokens\":-1") != NULL &&
+              strstr(first, "\"total_reported_tokens\":-1") != NULL);
++    return failures;
++}
+ 
++static int receipt_chain_check_unknown_metadata(const char *whole, size_t whole_n)
++{
++    int failures = 0;
+     const char *line2 = NULL;
+     size_t line2_n = 0;
+     char second[ENGINE_RECEIPT_LINE_MAX + 2u] = {0};
+@@ -4813,7 +4761,12 @@ static int case_receipt_chain(void)
+              strstr(second, "\"total_prompt_tokens\":-1") != NULL &&
+              strstr(second, "\"total_completion_tokens\":0") != NULL &&
+              strstr(second, "\"total_reasoning_tokens\":0") != NULL);
++    return failures;
++}
+ 
++static int receipt_chain_check_resumed_metadata(const char *whole, size_t whole_n)
++{
++    int failures = 0;
+     const char *line3 = NULL;
+     size_t line3_n = 0;
+     char third[ENGINE_RECEIPT_LINE_MAX + 2u] = {0};
+@@ -4830,28 +4783,12 @@ static int case_receipt_chain(void)
+              strstr(third, "\"prompt_tokens\":20") != NULL &&
+              strstr(third, "\"total_prompt_tokens\":-1") != NULL &&
+              strstr(third, "\"total_reported_tokens\":-1") != NULL);
++    return failures;
++}
+ 
+-    char resumed_path[512], resumed_text[ENGINE_RECEIPT_LINE_MAX + 2u];
+-    (void)snprintf(resumed_path, sizeof(resumed_path), "%s.resumed", path);
+-    receipt_unlink(resumed_path);
+-    c.invocations_count = 1;
+-    size_t resumed_n = 0;
+-    EN_CHECK("a first externally resumed observation is non-additive too",
+-             engine_receipt_append(resumed_path, &c, NULL) &&
+-             receipt_read_whole(resumed_path, resumed_text,
+-                                sizeof(resumed_text), &resumed_n) &&
+-             strstr(resumed_text, "\"usage_scope\":\"non_additive_observation\"") &&
+-             strstr(resumed_text, "\"prompt_tokens\":10") &&
+-             strstr(resumed_text, "\"total_reported_tokens\":-1"));
+-    receipt_unlink(resumed_path);
+-
+-    struct zcl_rule_receipt_log scored;
+-    uint32_t bad_line = 0;
+-    EN_CHECK("the score reader keeps one trial per outer receipt",
+-             zcl_rule_receipts_parse(whole, whole_n, &scored, &bad_line)
+-                 == ZCL_RULE_CHAIN_OK &&
+-             scored.count == 3 && scored.r[0].prompt_tokens == 100);
+-
++static int receipt_chain_check_null_kind(const char *path)
++{
++    int failures = 0;
+     struct engine_receipt knull = receipt_fixture("fixture", 1003);
+     knull.kind = NULL;
+     char kpath[512];
+@@ -4864,14 +4801,12 @@ static int case_receipt_chain(void)
+              receipt_read_whole(kpath, kbuf, sizeof(kbuf), &kn)
+              && strstr(kbuf, "\"kind\":\"\"") != NULL);
+     receipt_unlink(kpath);
++    return failures;
++}
+ 
+-    struct engine_receipt bad = receipt_fixture("", 1003);
+-    bad.engine = "";
+-    EN_CHECK("a receipt with no engine id is refused",
+-             !engine_receipt_append(path, &bad, NULL));
+-    EN_CHECK("refusing an append leaves the chain intact",
+-             engine_receipt_verify_chain(path, &report) && report.records == 3);
+-
++static int receipt_chain_check_mutations(const char *path)
++{
++    int failures = 0;
+     char mut[512];
+     (void)snprintf(mut, sizeof(mut), "%s.mut", path);
+ 
+@@ -4895,7 +4830,13 @@ static int case_receipt_chain(void)
+     EN_CHECK("rewriting the last line's groups_ran is refused",
+              mutate_last_groups_ran(path, mut) && verify_refuses(mut));
+     receipt_unlink(mut);
++    return failures;
++}
+ 
++static int receipt_chain_check_directory(const char *path, struct engine_receipt a)
++{
++    int failures = 0;
++    struct engine_receipt_chain_report report;
+     {
+         char directory[600];
+         (void)snprintf(directory, sizeof(directory), "%s.directory", path);
+@@ -4916,8 +4857,14 @@ static int case_receipt_chain(void)
+         (void)rmdir(directory);
+ #endif
+     }
++    return failures;
++}
+ 
+ #ifndef _WIN32
++static int receipt_chain_check_locked(const char *path, struct engine_receipt a)
++{
++    int failures = 0;
++    struct engine_receipt_chain_report report;
+     if (geteuid() != 0) {
+         char locked[512];
+         (void)snprintf(locked, sizeof(locked), "%s.locked", path);
+@@ -4933,9 +4880,15 @@ static int case_receipt_chain(void)
+                  !append_genesis);
+         receipt_unlink(locked);
+     }
++    return failures;
++}
+ #endif
+ 
+ #ifndef _WIN32
++static int receipt_chain_check_concurrent(const char *path)
++{
++    int failures = 0;
++    struct engine_receipt_chain_report report;
+     {
+         char cpath[512];
+         (void)snprintf(cpath, sizeof(cpath), "%s.conc", path);
+@@ -4965,6 +4918,140 @@ static int case_receipt_chain(void)
+                  && report.records == 8 && report.first_bad_line == 0);
+         receipt_unlink(cpath);
+     }
++    return failures;
++}
++#endif
++
++static int case_receipt_chain(void)
++{
++    int failures = 0;
++    char path[PATH_MAX];
++    test_fmt_tmpdir(path, sizeof(path), "zcl_engine_receipt", "chainlog");
++    (void)test_ensure_tmproot();
++    receipt_unlink(path);
++
++    struct engine_receipt_chain_report report;
++    EN_CHECK("a missing file is an empty chain, not a broken one",
++             engine_receipt_verify_chain(path, &report)
++             && report.records == 0 && report.first_bad_line == 0);
++
++    struct engine_receipt a = receipt_fixture("fixture", 1000);
++    struct engine_receipt b = receipt_fixture("glm", 1001);
++    struct engine_receipt c = receipt_fixture("grok", 1002);
++    struct engine_receipt_invocation calls[4] = {
++        receipt_invocation(1, "turn", "network", -1, -1, -1, -1, -1, -1),
++        receipt_invocation(2, "turn", "ok", 10, 4, 6, 0, 2, 14),
++        receipt_invocation(3, "compaction", "ok", 3, 2, 1, -1, 0, 5),
++        receipt_invocation(4, "turn", "ok", 12, 5, 4, 0, 1, 17),
++    };
++    struct engine_receipt_invocation overflow_calls[2] = {
++        receipt_invocation(1, "turn", "ok", INT64_MAX, 0, 0, 0, 0,
++                           INT64_MAX),
++        receipt_invocation(2, "turn", "ok", 1, 0, 0, 0, 0, 1),
++    };
++    a.invocations = calls;
++    a.invocations_count = sizeof(calls) / sizeof(calls[0]);
++    calls[1].resolved_model = "grok-build-a";
++    calls[2].resolved_model = "grok-build-b";
++    b.invocations = overflow_calls;
++    b.invocations_count = sizeof(overflow_calls) / sizeof(overflow_calls[0]);
++    struct engine_receipt_invocation resumed_calls[2] = {
++        receipt_invocation(1, "turn", "ok", 10, 4, 0, 0, 1, 14),
++        receipt_invocation(2, "turn", "ok", 20, 8, 0, 0, 2, 28),
++    };
++    c.invocations = resumed_calls;
++    c.invocations_count = sizeof(resumed_calls) / sizeof(resumed_calls[0]);
++    c.invocation_totals_ambiguous = true;
++    failures += receipt_chain_check_capacity();
++
++    a.requested_model = "grok-4.6";
++    a.resolved_model = "grok-4.6-build";
++    a.reasoning_effort = "high";
++    a.prompt_tokens = 100;
++    a.completion_tokens = 25;
++    a.cache_read_input_tokens = 60;
++    a.cache_creation_input_tokens = 10;
++    a.reasoning_tokens = 7;
++    a.total_tokens = 125;
++    a.turns = 4;
++    a.dispatch_ms = 2018;
++    a.proof_ms = 91;
++    a.wall_ms = 2109;
++    a.cumulative_proof_ms = 180;
++    a.unit_elapsed_ms = 2200;
++    EN_CHECK("the first record appends", engine_receipt_append(path, &a, NULL));
++    EN_CHECK("the second record appends", engine_receipt_append(path, &b, NULL));
++    EN_CHECK("the third record appends", engine_receipt_append(path, &c, NULL));
++    EN_CHECK("the chain verifies end to end",
++             engine_receipt_verify_chain(path, &report)
++             && report.records == 3 && report.first_bad_line == 0);
++
++    failures += receipt_chain_check_unicode(a);
++
++    char whole[65536];
++    size_t whole_n = 0;
++    const char *line1 = NULL;
++    size_t line1_n = 0;
++    EN_CHECK("the three-record file is readable",
++             receipt_read_whole(path, whole, sizeof(whole), &whole_n)
++             && receipt_nth_line(whole, whole_n, 1, &line1, &line1_n));
++    static const char k_genesis[] =
++        "\"prev_sha3\":\"0000000000000000000000000000000000000000000000000000000000000000\"";
++    char first[ENGINE_RECEIPT_LINE_MAX + 2u];
++    if (line1 && line1_n < sizeof(first)) {
++        memcpy(first, line1, line1_n);
++        first[line1_n] = '\0';
++    } else {
++        first[0] = '\0';
++    }
++    failures += receipt_chain_check_first_metadata(first, k_genesis);
++
++    failures += receipt_chain_check_first_timing(first);
++
++    failures += receipt_chain_check_unknown_metadata(whole, whole_n);
++
++    failures += receipt_chain_check_resumed_metadata(whole, whole_n);
++
++    char resumed_path[512], resumed_text[ENGINE_RECEIPT_LINE_MAX + 2u];
++    (void)snprintf(resumed_path, sizeof(resumed_path), "%s.resumed", path);
++    receipt_unlink(resumed_path);
++    c.invocations_count = 1;
++    size_t resumed_n = 0;
++    EN_CHECK("a first externally resumed observation is non-additive too",
++             engine_receipt_append(resumed_path, &c, NULL) &&
++             receipt_read_whole(resumed_path, resumed_text,
++                                sizeof(resumed_text), &resumed_n) &&
++             strstr(resumed_text, "\"usage_scope\":\"non_additive_observation\"") &&
++             strstr(resumed_text, "\"prompt_tokens\":10") &&
++             strstr(resumed_text, "\"total_reported_tokens\":-1"));
++    receipt_unlink(resumed_path);
++
++    struct zcl_rule_receipt_log scored;
++    uint32_t bad_line = 0;
++    EN_CHECK("the score reader keeps one trial per outer receipt",
++             zcl_rule_receipts_parse(whole, whole_n, &scored, &bad_line)
++                 == ZCL_RULE_CHAIN_OK &&
++             scored.count == 3 && scored.r[0].prompt_tokens == 100);
++
++    failures += receipt_chain_check_null_kind(path);
++
++    struct engine_receipt bad = receipt_fixture("", 1003);
++    bad.engine = "";
++    EN_CHECK("a receipt with no engine id is refused",
++             !engine_receipt_append(path, &bad, NULL));
++    EN_CHECK("refusing an append leaves the chain intact",
++             engine_receipt_verify_chain(path, &report) && report.records == 3);
++
++    failures += receipt_chain_check_mutations(path);
++
++    failures += receipt_chain_check_directory(path, a);
++
++#ifndef _WIN32
++    failures += receipt_chain_check_locked(path, a);
++#endif
++
++#ifndef _WIN32
++    failures += receipt_chain_check_concurrent(path);
+ #endif
+ 
+     receipt_unlink(path);
+diff --git a/tools/lint/cyclomatic_complexity_baseline.txt b/tools/lint/cyclomatic_complexity_baseline.txt
+index 91925eda7c..8c73624990 100644
+--- a/tools/lint/cyclomatic_complexity_baseline.txt
++++ b/tools/lint/cyclomatic_complexity_baseline.txt
+@@ -87,7 +87,6 @@ tests/harness/src/test_engine.c:case_cli_argv:71
+ tests/harness/src/test_engine.c:case_cli_observation:33
+ tests/harness/src/test_engine.c:case_engine_unit_grok_projection_e2e:36
+ tests/harness/src/test_engine.c:case_engine_unit_state_e2e:29
+-tests/harness/src/test_engine.c:case_receipt_chain:74
+ tests/harness/src/test_parallel.c:main:121
+ tests/harness/src/test_wallet_backup.c:t_force_now_encrypted:27
+ tests/harness/src/test_wallet_destruction_drill.c:act1_transparent:73

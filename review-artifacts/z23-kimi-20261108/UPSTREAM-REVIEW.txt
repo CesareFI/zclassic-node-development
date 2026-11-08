@@ -1,0 +1,43 @@
+Comparison anchor (canonical z23c/z23 main fetched 2026-11-08):
+d80415b63e51c3ada03beb9c6dcd806d77010553
+Tree: 78142f86bb639313ee4ead691e11dec4d8a25f71
+
+Separate upstream changes present in that anchor:
+48e2379f837ceef3289396cbe777e8ed4f463cb9 — positive receipt fixture overflow
+fbee99f8b19008259737795a5417d906c292689b — CLI/receipt engine case splits
+61ee41c1aa08a2383fcafcfc5484b08b3c8c5589 — ZPD work-start/benchmark phase splits
+f8cdb3ec8199d6d7872df3d29ac411186bfe5f3c — zxml bounded copy/baseline retirement
+
+git cherry against this anchor returned '+' for each original frozen unit:
+b48a324bee680324e9d8036fddf64f9b3cd8ae78
+e29792bdf718931f3a1eb4a9e2a24f6fe33be625
+53be5aff6ee86599f1625f4e24a7a7a01acdf339
+db17fc6d365122741b4dfc8cdcc04fca8e0adca4
+Their exact patches were not identified as landed. Analogous source changes
+do not prove receiver acknowledgement, independent review, or acceptance.
+
+Remaining distinct S3 calls at this anchor:
+contexts/commons/modules/vcs/src/package_recipe.c:236 — strcpy
+contexts/commons/packages/zlru/tests/test_zlru.c:146-147 — two strcat calls
+contexts/commons/packages/ztemplate/tests/test_ztemplate.c:243 — strcat
+contexts/commons/packages/ztoml/tests/test_ztoml.c:259 — strcat
+The corresponding four hardening baseline rows remain. zxml's copy already
+uses a name_valid-bounded memcpy and its old banned-str row is absent.
+The current generated zclassic23/package registry row differs from S3's row.
+
+Residual receipt question: b48 checks both signed bounds and returns the
+unreported sentinel outside them; main saturates only the positive overflow
+to INT64_MAX. All current call sites use positive ordinals. Negative-boundary
+coverage is missing, but no current-call runtime failure is established by
+that observation. A maintainer must choose the supported input contract and
+expected policy before requesting an updated regression or implementation.
+
+Suggested next test for main's positive saturation policy: direct helper
+checks at U=INT64_MAX/10, U+1 and INT64_MAX, before the capacity fixture's
+elapsed_ms overwrite. If negative inputs are supported, specify and test the
+lower bound separately. This proposed regression was NOT RUN or implemented.
+
+S3 needs a separately identified successor only if maintainers request one:
+respect the independent zxml fix, regenerate package metadata for the actual
+selected tree, and rerun its owning focused groups, lint-fast and required
+area preflight. Frozen candidate evidence is not evidence for that new tree.

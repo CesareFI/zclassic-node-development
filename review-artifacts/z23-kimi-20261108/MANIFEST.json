@@ -1,0 +1,880 @@
+{
+  "schema": "z23.public_review_manifest.v1",
+  "prepared_date_utc": "2026-11-08",
+  "publication_repository": "https://github.com/CesareFI/zclassic-node-development",
+  "review_branch": "review/kimi-z23-artifacts-20261108",
+  "artifact_directory": "review-artifacts/z23-kimi-20261108",
+  "purpose": "Review handoff of exact recoverable frozen artifacts; no release or landing claim.",
+  "upstream_comparison": {
+    "repository": "https://github.com/z23c/z23",
+    "commit": "d80415b63e51c3ada03beb9c6dcd806d77010553",
+    "tree": "78142f86bb639313ee4ead691e11dec4d8a25f71",
+    "fetched_date_utc": "2026-11-08",
+    "patch_id_match_found_for_any_of_four_units": false
+  },
+  "evidence_policy": {
+    "new_tests_run_for_publication": false,
+    "saved_results_apply_only_to_recorded_candidate_tree": true,
+    "full_logs_not_published": "Only allowlisted verdict lines and exact saved exit values are included; private runtime/management data are excluded.",
+    "native_receipt_ids_are_not_git_commits": true,
+    "native_delivery_is_separate_from_github_publication": true,
+    "receiver_has_read_notification": "NOT PROVEN",
+    "review_readiness_is_not_qualification": true
+  },
+  "historical_full_failure_causes": {
+    "full_build": "test_fleet_board.c:9747 LTO -Werror=stringop-overread",
+    "full_lint": [
+      "Tor fatal_handler_policy provenance missing/unsupported",
+      "standalone tools link: ld.lld absent"
+    ],
+    "full_suite": "Prerequisite failure; ZERO test groups executed."
+  },
+  "withdrawals": {
+    "S1": "WITHDRAWN",
+    "S2": "WITHDRAWN",
+    "native_superseding_post": "d77732072f431e8a377e3fe781ce7a2e811ac75795eb194f1b147ff75f6ecf06"
+  },
+  "existing_cli_zpd_question": {
+    "post_readback_id": "7159735654733b3290a110a7b46fb5e817218428b0aef1fd80d877a464a6c297",
+    "automatic_acknowledgement": "b28ba01d553c289e68e470bac3c87ecb89cb1143e817cdec85cf3fb4b97f2312",
+    "artifact_acknowledgement": false,
+    "lead_disposition": "NOT OBSERVED"
+  },
+  "contributions": [
+    {
+      "id": "receipt-successor",
+      "name": "case_receipt_chain corrective successor",
+      "classification": "Useful but requiring an update or further tests",
+      "status": "historical reference; awaiting maintainer integration decision",
+      "why": "Preserves receipt checks while splitting the case and guarding both signed multiplication bounds.",
+      "limits": [
+        "Upstream independently split the case and fixed the positive overflow with saturation; this candidate instead uses an unreported sentinel outside both bounds.",
+        "Direct lower-bound and adjacent-boundary regression is missing.",
+        "The artifact is not an exact patch-id match in current main."
+      ],
+      "not_run": [
+        "full make all",
+        "full make lint",
+        "full make test-parallel",
+        "new direct arithmetic-boundary regression"
+      ],
+      "focused": {
+        "groups_ran": 1,
+        "cached": 0,
+        "failed": 0,
+        "skipped": 0
+      },
+      "asan": {
+        "groups_ran": 4,
+        "cached": 0,
+        "failed": 0,
+        "skipped": 0,
+        "ubsan_halt_on_error": true
+      },
+      "native": {
+        "offered": true,
+        "post_readback_id": "5d567f273b4019836c894aa9b20619d6fbdfafa32931e172b1379aeecde1cf87",
+        "root": "0147153ea0992d5d2a73bc6eabe70819b309ceab04894e27e9b3089fdd6c6a12"
+      },
+      "candidate_commit": "b48a324bee680324e9d8036fddf64f9b3cd8ae78",
+      "tree": "bf2b4025c66e63cf953bd5ce04133e2492061f1e",
+      "base_commit": "931648f56d6369280e49a99ec36c5ed4a5499c15",
+      "files_changed": [
+        "tests/harness/src/test_engine.c",
+        "tools/lint/cyclomatic_complexity_baseline.txt"
+      ],
+      "saved_checks": [
+        {
+          "name": "focused",
+          "saved_exit": 0,
+          "result": "PASS",
+          "command": "make -j4 t-fast-exact ONLY=engine T_FAST_EXACT_ARGS='--jobs=1 --no-cache'",
+          "command_fidelity": "recorded invocation"
+        },
+        {
+          "name": "lint-fast",
+          "saved_exit": 0,
+          "result": "PASS",
+          "command": "make lint-fast ZCL_LINT_JOBS=4",
+          "command_fidelity": "recorded invocation"
+        },
+        {
+          "name": "asan-ubsan",
+          "saved_exit": 0,
+          "result": "PASS",
+          "command": "taskset -c 0,1,2,3 make -j4 t-asan ONLY=test_engine",
+          "command_fidelity": "recorded invocation"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "evidence/receipt-successor.exit-status.tsv",
+          "bytes": 211,
+          "sha256": "84e0cbcfcb59076264dd547de1ddd934c722c21686cee5d924b639be9ea9cb48",
+          "git_blob_sha1": "8e52409f4958ac24245541636a1b336f6f865d40"
+        },
+        {
+          "path": "evidence/receipt-successor.verdicts.txt",
+          "bytes": 695,
+          "sha256": "db1e2688f0b91c9f371df445bbc0dc4a67f53f04d602b2755a488a0d9b7a2a2f",
+          "git_blob_sha1": "844e2dabb82268ea90403b1e65e5d26d6c9050ff"
+        },
+        {
+          "path": "receipt-successor/candidate.bundle",
+          "bytes": 1995,
+          "sha256": "e4680d3400f179da0ed2642051335b649d209437b8877dd0706e4119ea7295b3",
+          "git_blob_sha1": "f0d4fec484b910123acf46f07ca6fae4b5133a5f"
+        },
+        {
+          "path": "receipt-successor/change.patch",
+          "bytes": 17567,
+          "sha256": "83bfb9981f03a04d6af362e9cf0999f67c041b6b89641e0f839a8772990f4ee4",
+          "git_blob_sha1": "9cae09aa9bfb3c818c6e1aa66c4005252ebeb500"
+        },
+        {
+          "path": "receipt-successor/files-changed.txt",
+          "bytes": 78,
+          "sha256": "f223647bdf9d36c128b6b158ba922204ffb594b1e335d1069fb2ead4a91edf1b",
+          "git_blob_sha1": "e44a7a4ce6c7420fe0381b9ce135d75edb7fdacf"
+        },
+        {
+          "path": "receipt-successor/git-identity.txt",
+          "bytes": 123,
+          "sha256": "19564882f51145e85678d58cb932e6d68d68c66fbebc27266cb798069d347c4f",
+          "git_blob_sha1": "f864f5edd7e19fd14c26c71bd88fba86d1e6f4f8"
+        },
+        {
+          "path": "receipt-successor/sources.tar.gz",
+          "bytes": 70325,
+          "sha256": "8f8a0a3324e650de23e555147769c7760638af60f542c5f5e224e889916c6fa3",
+          "git_blob_sha1": "95664c5c810a4b399ec8e653e4b475c5daa28009"
+        }
+      ],
+      "independent_local_source_review": "Previously recorded as no blocking source finding; not a maintainer qualification receipt.",
+      "maintainer_artifact_acknowledgement": "NOT OBSERVED",
+      "maintainer_review": "NOT OBSERVED / REVIEW PENDING",
+      "maintainer_acceptance": "NOT OBSERVED",
+      "original_artifact_landing": "NOT PROVEN"
+    },
+    {
+      "id": "revised-s3",
+      "name": "Revised S3 bounded Commons copies",
+      "classification": "Useful but requiring an update or further tests",
+      "status": "historical frozen review candidate; awaiting successor decision",
+      "why": "Replaces six banned string calls with destination-sized operations and retires their five baseline rows.",
+      "limits": [
+        "Upstream independently replaced zxml's copy and removed its baseline row. Five other calls remain in four source files.",
+        "The generated zclassic23/package row is stale relative to current main; any successor must regenerate metadata on its own source tree.",
+        "The full frozen source snapshot inherits the earlier receipt fixture overflow outside this unit's changed files.",
+        "Full qualification and an ASan run on this candidate were not performed."
+      ],
+      "not_run": [
+        "full make all",
+        "full make lint",
+        "full make test-parallel",
+        "ASan/UBSan"
+      ],
+      "focused": {
+        "groups_ran": 6,
+        "cached": 0,
+        "failed": 0,
+        "skipped": 0,
+        "commons_packages": "80/80",
+        "swarm_subsuites": "26/26"
+      },
+      "native": {
+        "offered": true,
+        "post_readback_id": "3821cac924f71e2f4b90b94ed4eb55d632462495fe05f690770f651cb4dfb4f6",
+        "root": "d5b9f9bca2e75506cd1c85c20c9c812d86b5331c6b8e8462eaf8009bdf90f864"
+      },
+      "candidate_commit": "e29792bdf718931f3a1eb4a9e2a24f6fe33be625",
+      "tree": "dd8cdd1f7ab774f7982612ac0ac7eadbeb3ec3b0",
+      "base_commit": "5bbf388d2fc10a081ff684e08dbb69564972354e",
+      "files_changed": [
+        "contexts/commons/modules/vcs/src/package_recipe.c",
+        "contexts/commons/packages/zlru/tests/test_zlru.c",
+        "contexts/commons/packages/ztemplate/tests/test_ztemplate.c",
+        "contexts/commons/packages/ztoml/tests/test_ztoml.c",
+        "contexts/commons/packages/zxml/src/zxml.c",
+        "engine/composition/zcode_package_registry.def",
+        "tools/lint/hardening_ratchet_baseline.txt"
+      ],
+      "saved_checks": [
+        {
+          "name": "focused",
+          "saved_exit": 0,
+          "result": "PASS",
+          "command": "TMPDIR=<isolated-absolute-dir> taskset -c 0,1,2,3 make -j4 t-fast-exact ONLY=commons_package_tests,vcs_core,zcode_recipe,zcode_package_registry,zcode_swarm_net,zcode_score_receipt T_FAST_EXACT_ARGS='--jobs=1 --no-cache'",
+          "command_fidelity": "private TMPDIR path redacted; flags retained"
+        },
+        {
+          "name": "lint-fast",
+          "saved_exit": 0,
+          "result": "PASS",
+          "command": "TMPDIR=<isolated-absolute-dir> taskset -c 0,1,2,3 make lint-fast ZCL_LINT_JOBS=4",
+          "command_fidelity": "private TMPDIR path redacted; flags retained"
+        },
+        {
+          "name": "lint-preflight",
+          "saved_exit": 0,
+          "result": "PASS",
+          "command": "TMPDIR=<isolated-absolute-dir> taskset -c 0,1,2,3 make -j4 lint-preflight ZCL_LINT_JOBS=4",
+          "command_fidelity": "private TMPDIR path redacted; flags retained"
+        },
+        {
+          "name": "hardening",
+          "saved_exit": 0,
+          "result": "PASS",
+          "command": "saved hardening gate; exact invocation flags not retained",
+          "command_fidelity": "exact flags not retained"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "evidence/revised-s3.exit-status.tsv",
+          "bytes": 519,
+          "sha256": "7cab1fb8f02da15498202a16c23f798cf8bc5e600fcb5cfd26a3d9856022fac5",
+          "git_blob_sha1": "1efe68058cb259c33d13ed7542d2b3390eb9a902"
+        },
+        {
+          "path": "evidence/revised-s3.verdicts.txt",
+          "bytes": 491,
+          "sha256": "53d3c8e604105ce3b947f766352a708977a77d9204f5998d3b5ce6a66d319969",
+          "git_blob_sha1": "b1daa05b28f6836f5fc0bebed1b9ababc32874d1"
+        },
+        {
+          "path": "revised-s3/candidate.bundle",
+          "bytes": 3335,
+          "sha256": "0dde2bf4408bf9fa59d74e91a9a40861e038c8ddb16a18caee801e46704dd0f9",
+          "git_blob_sha1": "e788382d8a911e5025710f0e5610d2130af6299b"
+        },
+        {
+          "path": "revised-s3/change.patch",
+          "bytes": 7307,
+          "sha256": "3452c1b6abaff5154ee4f0b09fc2279eed4fdfb89ce83ee92bd5a71dbbe23bb1",
+          "git_blob_sha1": "0fc96800e0fc80b64ffb42b4a022fc06010f13a8"
+        },
+        {
+          "path": "revised-s3/files-changed.txt",
+          "bytes": 339,
+          "sha256": "e4e7213858fddfa8eee968f06c6d5427454787cf7e30a34eff57cd65558ccf41",
+          "git_blob_sha1": "674adebe6515e9e65c453a6a18d1ee4b6c49de4f"
+        },
+        {
+          "path": "revised-s3/git-identity.txt",
+          "bytes": 123,
+          "sha256": "4f066becc9251d54aa9a21617c7949cf2b6dce6c014c9edc3ae6ea412d5c0db8",
+          "git_blob_sha1": "48118ff298be3f91e0bcd4e6eb1fb190f46beb91"
+        },
+        {
+          "path": "revised-s3/sources.tar.gz",
+          "bytes": 34599,
+          "sha256": "61457cb13310d17127222cac1d60b7b3c8db855ef5ffa80353357a4b19d26243",
+          "git_blob_sha1": "5175e39e3f987a78fd3dd355b25311603ccee71e"
+        }
+      ],
+      "independent_local_source_review": "Previously recorded as no blocking source finding; not a maintainer qualification receipt.",
+      "maintainer_artifact_acknowledgement": "NOT OBSERVED",
+      "maintainer_review": "NOT OBSERVED / REVIEW PENDING",
+      "maintainer_acceptance": "NOT OBSERVED",
+      "original_artifact_landing": "NOT PROVEN"
+    },
+    {
+      "id": "cli-argv",
+      "name": "case_cli_argv split",
+      "classification": "Superseded by upstream",
+      "status": "historical; do not merge as a new duplicate split",
+      "why": "Preserves the CLI argument checks while reducing the target's recorded complexity from 71 to 10.",
+      "limits": [
+        "Upstream fbee99f8b19008259737795a5417d906c292689b supplies a separate split; exact patch-id acceptance of this candidate is not proven.",
+        "Depends on historical receipt commit 93aeaa7aa66e42d08b29e097931921d349e477a6 and retains its overflowing fixture helper.",
+        "Full build, full lint and full suite attempts failed; full suite executed zero groups."
+      ],
+      "not_run": [
+        "ASan/UBSan",
+        "maintainer land-queue qualification"
+      ],
+      "focused": {
+        "groups_ran": 1,
+        "cached": 0,
+        "failed": 0,
+        "skipped": 0
+      },
+      "native": {
+        "offered": false,
+        "post_readback_id": null
+      },
+      "candidate_commit": "53be5aff6ee86599f1625f4e24a7a7a01acdf339",
+      "tree": "31d69d5cf840ee1ab0785550bb275e1a8c0b406d",
+      "base_commit": "93aeaa7aa66e42d08b29e097931921d349e477a6",
+      "files_changed": [
+        "tests/harness/src/test_engine.c",
+        "tools/lint/cyclomatic_complexity_baseline.txt"
+      ],
+      "saved_checks": [
+        {
+          "name": "focused",
+          "saved_exit": 0,
+          "result": "PASS",
+          "command": "make -j4 t-fast-exact ONLY=engine T_FAST_EXACT_ARGS='--jobs=1 --no-cache'",
+          "command_fidelity": "recorded invocation"
+        },
+        {
+          "name": "lint-fast",
+          "saved_exit": 0,
+          "result": "PASS",
+          "command": "make lint-fast ZCL_LINT_JOBS=4",
+          "command_fidelity": "recorded invocation"
+        },
+        {
+          "name": "full-build",
+          "saved_exit": 2,
+          "result": "FAIL",
+          "command": "make -j4 all",
+          "command_fidelity": "recorded invocation"
+        },
+        {
+          "name": "full-lint",
+          "saved_exit": 2,
+          "result": "FAIL",
+          "command": "make lint ZCL_LINT_JOBS=4",
+          "command_fidelity": "recorded invocation"
+        },
+        {
+          "name": "full-suite",
+          "saved_exit": 2,
+          "result": "FAIL",
+          "command": "make -j4 test-parallel TEST_PARALLEL_ARGS='--jobs=4 --no-cache'",
+          "command_fidelity": "recorded invocation"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "cli-argv/candidate.bundle",
+          "bytes": 1717,
+          "sha256": "32c99202dbf449315ac6f8f8d124642629327411caa147dc0d66318bf312223b",
+          "git_blob_sha1": "d3e64f625b53dcd667ae7a72998533ed60d5cafe"
+        },
+        {
+          "path": "cli-argv/change.patch",
+          "bytes": 14765,
+          "sha256": "7598ed6512fd3e329be27642fe316e60d3c1ad841a3b8c0193aa74dac960346f",
+          "git_blob_sha1": "a8fab5333dd826afc3322641b40ced1b4cff8bea"
+        },
+        {
+          "path": "cli-argv/files-changed.txt",
+          "bytes": 78,
+          "sha256": "f223647bdf9d36c128b6b158ba922204ffb594b1e335d1069fb2ead4a91edf1b",
+          "git_blob_sha1": "e44a7a4ce6c7420fe0381b9ce135d75edb7fdacf"
+        },
+        {
+          "path": "cli-argv/git-identity.txt",
+          "bytes": 123,
+          "sha256": "5eec8d1f1ec42c77ccf2f03d44a898da542c06a4d2eb013e4c38c09dd198f456",
+          "git_blob_sha1": "f5d25722bd06db5d2f794b266dd539ce6562798e"
+        },
+        {
+          "path": "cli-argv/sources.tar.gz",
+          "bytes": 71540,
+          "sha256": "d4dfde06c2fb97f7d461d58db7fc6dc55179867968165f690f846047ece337b4",
+          "git_blob_sha1": "d76f7a6931b43cdba5fd85be74bef68a8e467a18"
+        },
+        {
+          "path": "evidence/cli-argv.exit-status.tsv",
+          "bytes": 287,
+          "sha256": "88f0857dfdf4cda7c8d9cd77207c22dc0f8543ad351c585721cdc7f8ca2c573a",
+          "git_blob_sha1": "2d9d379cd71dc47d819e68d7077a50337a72ba5c"
+        },
+        {
+          "path": "evidence/cli-argv.verdicts.txt",
+          "bytes": 500,
+          "sha256": "30c67e3d4eb96bf390b7b68f24c37df4635adc715dde17d5675d0d1fe95d5eb6",
+          "git_blob_sha1": "acb1ed171fbc2b3910f8ee1a932e0a9e2974fb5a"
+        }
+      ],
+      "independent_local_source_review": "Previously recorded as no blocking source finding; not a maintainer qualification receipt.",
+      "maintainer_artifact_acknowledgement": "NOT OBSERVED",
+      "maintainer_review": "NOT OBSERVED / REVIEW PENDING",
+      "maintainer_acceptance": "NOT OBSERVED",
+      "original_artifact_landing": "NOT PROVEN"
+    },
+    {
+      "id": "zpd-work-start",
+      "name": "zpd_test_work_start split",
+      "classification": "Superseded by upstream",
+      "status": "historical; do not merge as a new duplicate split",
+      "why": "Preserves the work-start assertions while reducing the target's recorded complexity from 56 to 15.",
+      "limits": [
+        "Upstream 61ee41c1aa08a2383fcafcfc5484b08b3c8c5589 supplies a separate phase split; exact patch-id acceptance of this candidate is not proven.",
+        "Depends on CLI commit 53be5aff6ee86599f1625f4e24a7a7a01acdf339; the whole snapshot inherits the old receipt helper overflow.",
+        "Its focused package-dev umbrella does not execute the static engine receipt fixture.",
+        "Full build, full lint and full suite attempts failed; full suite executed zero groups."
+      ],
+      "not_run": [
+        "ASan/UBSan",
+        "maintainer land-queue qualification"
+      ],
+      "focused": {
+        "groups_ran": 1,
+        "cached": 0,
+        "failed": 0,
+        "skipped": 0,
+        "umbrella_subsuites": 19
+      },
+      "native": {
+        "offered": false,
+        "post_readback_id": null
+      },
+      "candidate_commit": "db17fc6d365122741b4dfc8cdcc04fca8e0adca4",
+      "tree": "6af66c55dc54c7f210191689ba449dde24668e0b",
+      "base_commit": "53be5aff6ee86599f1625f4e24a7a7a01acdf339",
+      "files_changed": [
+        "tests/harness/src/test_zcode_package_dev.c",
+        "tools/lint/cyclomatic_complexity_baseline.txt"
+      ],
+      "saved_checks": [
+        {
+          "name": "focused",
+          "saved_exit": 0,
+          "result": "PASS",
+          "command": "make -j4 t-fast-exact ONLY=zcode_package_dev T_FAST_EXACT_ARGS='--jobs=1 --no-cache'",
+          "command_fidelity": "recorded invocation"
+        },
+        {
+          "name": "lint-fast",
+          "saved_exit": 0,
+          "result": "PASS",
+          "command": "make lint-fast ZCL_LINT_JOBS=4",
+          "command_fidelity": "recorded invocation"
+        },
+        {
+          "name": "full-build",
+          "saved_exit": 2,
+          "result": "FAIL",
+          "command": "make -j4 all",
+          "command_fidelity": "recorded invocation"
+        },
+        {
+          "name": "full-lint",
+          "saved_exit": 2,
+          "result": "FAIL",
+          "command": "make lint ZCL_LINT_JOBS=4",
+          "command_fidelity": "recorded invocation"
+        },
+        {
+          "name": "full-suite",
+          "saved_exit": 2,
+          "result": "FAIL",
+          "command": "make -j4 test-parallel TEST_PARALLEL_ARGS='--jobs=4 --no-cache'",
+          "command_fidelity": "recorded invocation"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "evidence/zpd-work-start.exit-status.tsv",
+          "bytes": 298,
+          "sha256": "b3820c3cb4bbe14564b39e17f9d9660c27bc041920e68662034939c009312bd4",
+          "git_blob_sha1": "59a9bd1023246654eb111ff70abf396c95899c4d"
+        },
+        {
+          "path": "evidence/zpd-work-start.verdicts.txt",
+          "bytes": 500,
+          "sha256": "39ef89bfc97b59ca3009b91726b42c87216f324f65a1264de9ef6c604f7e9337",
+          "git_blob_sha1": "c8576d41844e809f7fe8c9c325b5899319721a1c"
+        },
+        {
+          "path": "zpd-work-start/candidate.bundle",
+          "bytes": 2846,
+          "sha256": "d58ad93f5b2717e0a1bd03f06a3fc1fd3c334add00a158efd98e778f3c7069a9",
+          "git_blob_sha1": "2f1d0830a08522b6e5d7261729853b2dc5bf9b57"
+        },
+        {
+          "path": "zpd-work-start/change.patch",
+          "bytes": 62804,
+          "sha256": "e931fb46fcb6f5a8839f73e7c0197f71d13994efe9aa60234a219dfe04d99fef",
+          "git_blob_sha1": "8def460a69b15f693222e91cbcebba988c14d0c7"
+        },
+        {
+          "path": "zpd-work-start/files-changed.txt",
+          "bytes": 89,
+          "sha256": "4dd3f44c1badf7676499bb3b2afa870c3f22417459f4f15f7a79de11e2791bba",
+          "git_blob_sha1": "763de869c2b85788739ff2cda8688f46e2762820"
+        },
+        {
+          "path": "zpd-work-start/git-identity.txt",
+          "bytes": 123,
+          "sha256": "8097487ef79acf7b666776f5ac54b032dfe70929b032f511251ac20b6e2699be",
+          "git_blob_sha1": "1a3ae3db39e2ff62b618b60736aeb357def44edb"
+        },
+        {
+          "path": "zpd-work-start/sources.tar.gz",
+          "bytes": 65195,
+          "sha256": "179f7a6d527428bdf8ac30d46ba2e3dc4f8a8e137ea8e84457b5c40565e80806",
+          "git_blob_sha1": "e2b44ee8a47122fd07d016e56be5aeab2429ceec"
+        }
+      ],
+      "independent_local_source_review": "Previously recorded as no blocking source finding; not a maintainer qualification receipt.",
+      "maintainer_artifact_acknowledgement": "NOT OBSERVED",
+      "maintainer_review": "NOT OBSERVED / REVIEW PENDING",
+      "maintainer_acceptance": "NOT OBSERVED",
+      "original_artifact_landing": "NOT PROVEN"
+    },
+    {
+      "id": "historical-receipt",
+      "name": "Original receipt split / CLI prerequisite",
+      "classification": "Superseded by upstream",
+      "status": "historical dependency only; superseded also by local corrective successor",
+      "why": "Preserves the original receipt case extraction needed to reconstruct the CLI/ZPD bundle chain.",
+      "limits": [
+        "Retains signed ordinal * 10 overflow in the fixture helper.",
+        "Included as an immutable bundle prerequisite, not offered as an overflow fix.",
+        "Full build, full lint and full suite attempts failed; full suite executed zero groups."
+      ],
+      "not_run": [
+        "ASan/UBSan",
+        "maintainer land-queue qualification"
+      ],
+      "focused": {
+        "groups_ran": 1,
+        "cached": 0,
+        "failed": 0,
+        "skipped": 0
+      },
+      "native": {
+        "offered": false,
+        "post_readback_id": null
+      },
+      "candidate_commit": "93aeaa7aa66e42d08b29e097931921d349e477a6",
+      "tree": "17ed6e1e8397b8b328ab6467205c691753fa10b7",
+      "base_commit": "4ab50180a190c88e018bc5ab0b2614466e4940a9",
+      "files_changed": [
+        "tests/harness/src/test_engine.c",
+        "tools/lint/cyclomatic_complexity_baseline.txt"
+      ],
+      "saved_checks": [
+        {
+          "name": "focused",
+          "saved_exit": 0,
+          "result": "PASS",
+          "command": "make -j4 t-fast-exact ONLY=engine T_FAST_EXACT_ARGS='--jobs=1 --no-cache'",
+          "command_fidelity": "recorded invocation"
+        },
+        {
+          "name": "lint-fast",
+          "saved_exit": 0,
+          "result": "PASS",
+          "command": "make lint-fast ZCL_LINT_JOBS=4",
+          "command_fidelity": "recorded invocation"
+        },
+        {
+          "name": "full-build",
+          "saved_exit": 2,
+          "result": "FAIL",
+          "command": "make -j4 all",
+          "command_fidelity": "recorded invocation"
+        },
+        {
+          "name": "full-lint",
+          "saved_exit": 2,
+          "result": "FAIL",
+          "command": "make lint ZCL_LINT_JOBS=4",
+          "command_fidelity": "recorded invocation"
+        },
+        {
+          "name": "full-suite",
+          "saved_exit": 2,
+          "result": "FAIL",
+          "command": "make -j4 test-parallel TEST_PARALLEL_ARGS='--jobs=4 --no-cache'",
+          "command_fidelity": "recorded invocation"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "evidence/historical-receipt.exit-status.tsv",
+          "bytes": 287,
+          "sha256": "88f0857dfdf4cda7c8d9cd77207c22dc0f8543ad351c585721cdc7f8ca2c573a",
+          "git_blob_sha1": "2d9d379cd71dc47d819e68d7077a50337a72ba5c"
+        },
+        {
+          "path": "evidence/historical-receipt.verdicts.txt",
+          "bytes": 500,
+          "sha256": "e8c5beec12f99297978e2a9562a1953c0879af612582957af83217d9498b7bb6",
+          "git_blob_sha1": "42e95741d87b3a891b8d3d8ba2c307e5f5d8115b"
+        },
+        {
+          "path": "historical-receipt/candidate.bundle",
+          "bytes": 1645,
+          "sha256": "1093bf6c6bf436fc8b9879fb8c5abbe9cadb8efdfbd02d28694985c893b4cef1",
+          "git_blob_sha1": "7058ecad639194400d873e6569cb3d56bffb24fd"
+        },
+        {
+          "path": "historical-receipt/change.patch",
+          "bytes": 16752,
+          "sha256": "6482e665dba67d22d425306ee5779bb720faabadfd5f27aea6f89ad6942c47a3",
+          "git_blob_sha1": "9fc52f4e3cd57be526954a3fb1ce29a737f571f6"
+        },
+        {
+          "path": "historical-receipt/files-changed.txt",
+          "bytes": 78,
+          "sha256": "f223647bdf9d36c128b6b158ba922204ffb594b1e335d1069fb2ead4a91edf1b",
+          "git_blob_sha1": "e44a7a4ce6c7420fe0381b9ce135d75edb7fdacf"
+        },
+        {
+          "path": "historical-receipt/git-identity.txt",
+          "bytes": 123,
+          "sha256": "3101bd6a6d0e7b7545da247151572b8dbb7cf227b1995b2c313b5eafc5fa4475",
+          "git_blob_sha1": "82d5273492071f418beb011e18ba5f321c14f4c3"
+        },
+        {
+          "path": "historical-receipt/sources.tar.gz",
+          "bytes": 71272,
+          "sha256": "e79ec8ca71b6d3c51023f25a7fa0fd52139428ac2fac6edf7be8c404f53366b9",
+          "git_blob_sha1": "48e6c421f90942bd6767a5dc5c05b0cea4b09474"
+        }
+      ],
+      "independent_local_source_review": "Previously recorded as no blocking source finding; not a maintainer qualification receipt.",
+      "maintainer_artifact_acknowledgement": "NOT OBSERVED",
+      "maintainer_review": "NOT OBSERVED / REVIEW PENDING",
+      "maintainer_acceptance": "NOT OBSERVED",
+      "original_artifact_landing": "NOT PROVEN"
+    }
+  ],
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "git_blob_sha1": "d645695673349e3947e8e5ae42332d0ac3164cd7"
+    },
+    {
+      "path": "README.txt",
+      "bytes": 3499,
+      "sha256": "956f5ead248cfb9a11c3c24bcb2d60684f7467bf59315d2469240176982eb870",
+      "git_blob_sha1": "8ac5a59ffbf44bf31e030145b822e7f7b303f1d9"
+    },
+    {
+      "path": "UPSTREAM-REVIEW.txt",
+      "bytes": 2528,
+      "sha256": "f90987781cb039395e6bb6b0edaf7df4946708959d942da1ce7263c7644e3426",
+      "git_blob_sha1": "0a7041227cc151ad7ef7ef5a38acf53bba2b746f"
+    },
+    {
+      "path": "cli-argv/candidate.bundle",
+      "bytes": 1717,
+      "sha256": "32c99202dbf449315ac6f8f8d124642629327411caa147dc0d66318bf312223b",
+      "git_blob_sha1": "d3e64f625b53dcd667ae7a72998533ed60d5cafe"
+    },
+    {
+      "path": "cli-argv/change.patch",
+      "bytes": 14765,
+      "sha256": "7598ed6512fd3e329be27642fe316e60d3c1ad841a3b8c0193aa74dac960346f",
+      "git_blob_sha1": "a8fab5333dd826afc3322641b40ced1b4cff8bea"
+    },
+    {
+      "path": "cli-argv/files-changed.txt",
+      "bytes": 78,
+      "sha256": "f223647bdf9d36c128b6b158ba922204ffb594b1e335d1069fb2ead4a91edf1b",
+      "git_blob_sha1": "e44a7a4ce6c7420fe0381b9ce135d75edb7fdacf"
+    },
+    {
+      "path": "cli-argv/git-identity.txt",
+      "bytes": 123,
+      "sha256": "5eec8d1f1ec42c77ccf2f03d44a898da542c06a4d2eb013e4c38c09dd198f456",
+      "git_blob_sha1": "f5d25722bd06db5d2f794b266dd539ce6562798e"
+    },
+    {
+      "path": "cli-argv/sources.tar.gz",
+      "bytes": 71540,
+      "sha256": "d4dfde06c2fb97f7d461d58db7fc6dc55179867968165f690f846047ece337b4",
+      "git_blob_sha1": "d76f7a6931b43cdba5fd85be74bef68a8e467a18"
+    },
+    {
+      "path": "evidence/cli-argv.exit-status.tsv",
+      "bytes": 287,
+      "sha256": "88f0857dfdf4cda7c8d9cd77207c22dc0f8543ad351c585721cdc7f8ca2c573a",
+      "git_blob_sha1": "2d9d379cd71dc47d819e68d7077a50337a72ba5c"
+    },
+    {
+      "path": "evidence/cli-argv.verdicts.txt",
+      "bytes": 500,
+      "sha256": "30c67e3d4eb96bf390b7b68f24c37df4635adc715dde17d5675d0d1fe95d5eb6",
+      "git_blob_sha1": "acb1ed171fbc2b3910f8ee1a932e0a9e2974fb5a"
+    },
+    {
+      "path": "evidence/historical-receipt.exit-status.tsv",
+      "bytes": 287,
+      "sha256": "88f0857dfdf4cda7c8d9cd77207c22dc0f8543ad351c585721cdc7f8ca2c573a",
+      "git_blob_sha1": "2d9d379cd71dc47d819e68d7077a50337a72ba5c"
+    },
+    {
+      "path": "evidence/historical-receipt.verdicts.txt",
+      "bytes": 500,
+      "sha256": "e8c5beec12f99297978e2a9562a1953c0879af612582957af83217d9498b7bb6",
+      "git_blob_sha1": "42e95741d87b3a891b8d3d8ba2c307e5f5d8115b"
+    },
+    {
+      "path": "evidence/receipt-successor.exit-status.tsv",
+      "bytes": 211,
+      "sha256": "84e0cbcfcb59076264dd547de1ddd934c722c21686cee5d924b639be9ea9cb48",
+      "git_blob_sha1": "8e52409f4958ac24245541636a1b336f6f865d40"
+    },
+    {
+      "path": "evidence/receipt-successor.verdicts.txt",
+      "bytes": 695,
+      "sha256": "db1e2688f0b91c9f371df445bbc0dc4a67f53f04d602b2755a488a0d9b7a2a2f",
+      "git_blob_sha1": "844e2dabb82268ea90403b1e65e5d26d6c9050ff"
+    },
+    {
+      "path": "evidence/revised-s3.exit-status.tsv",
+      "bytes": 519,
+      "sha256": "7cab1fb8f02da15498202a16c23f798cf8bc5e600fcb5cfd26a3d9856022fac5",
+      "git_blob_sha1": "1efe68058cb259c33d13ed7542d2b3390eb9a902"
+    },
+    {
+      "path": "evidence/revised-s3.verdicts.txt",
+      "bytes": 491,
+      "sha256": "53d3c8e604105ce3b947f766352a708977a77d9204f5998d3b5ce6a66d319969",
+      "git_blob_sha1": "b1daa05b28f6836f5fc0bebed1b9ababc32874d1"
+    },
+    {
+      "path": "evidence/zpd-work-start.exit-status.tsv",
+      "bytes": 298,
+      "sha256": "b3820c3cb4bbe14564b39e17f9d9660c27bc041920e68662034939c009312bd4",
+      "git_blob_sha1": "59a9bd1023246654eb111ff70abf396c95899c4d"
+    },
+    {
+      "path": "evidence/zpd-work-start.verdicts.txt",
+      "bytes": 500,
+      "sha256": "39ef89bfc97b59ca3009b91726b42c87216f324f65a1264de9ef6c604f7e9337",
+      "git_blob_sha1": "c8576d41844e809f7fe8c9c325b5899319721a1c"
+    },
+    {
+      "path": "historical-receipt/candidate.bundle",
+      "bytes": 1645,
+      "sha256": "1093bf6c6bf436fc8b9879fb8c5abbe9cadb8efdfbd02d28694985c893b4cef1",
+      "git_blob_sha1": "7058ecad639194400d873e6569cb3d56bffb24fd"
+    },
+    {
+      "path": "historical-receipt/change.patch",
+      "bytes": 16752,
+      "sha256": "6482e665dba67d22d425306ee5779bb720faabadfd5f27aea6f89ad6942c47a3",
+      "git_blob_sha1": "9fc52f4e3cd57be526954a3fb1ce29a737f571f6"
+    },
+    {
+      "path": "historical-receipt/files-changed.txt",
+      "bytes": 78,
+      "sha256": "f223647bdf9d36c128b6b158ba922204ffb594b1e335d1069fb2ead4a91edf1b",
+      "git_blob_sha1": "e44a7a4ce6c7420fe0381b9ce135d75edb7fdacf"
+    },
+    {
+      "path": "historical-receipt/git-identity.txt",
+      "bytes": 123,
+      "sha256": "3101bd6a6d0e7b7545da247151572b8dbb7cf227b1995b2c313b5eafc5fa4475",
+      "git_blob_sha1": "82d5273492071f418beb011e18ba5f321c14f4c3"
+    },
+    {
+      "path": "historical-receipt/sources.tar.gz",
+      "bytes": 71272,
+      "sha256": "e79ec8ca71b6d3c51023f25a7fa0fd52139428ac2fac6edf7be8c404f53366b9",
+      "git_blob_sha1": "48e6c421f90942bd6767a5dc5c05b0cea4b09474"
+    },
+    {
+      "path": "receipt-successor/candidate.bundle",
+      "bytes": 1995,
+      "sha256": "e4680d3400f179da0ed2642051335b649d209437b8877dd0706e4119ea7295b3",
+      "git_blob_sha1": "f0d4fec484b910123acf46f07ca6fae4b5133a5f"
+    },
+    {
+      "path": "receipt-successor/change.patch",
+      "bytes": 17567,
+      "sha256": "83bfb9981f03a04d6af362e9cf0999f67c041b6b89641e0f839a8772990f4ee4",
+      "git_blob_sha1": "9cae09aa9bfb3c818c6e1aa66c4005252ebeb500"
+    },
+    {
+      "path": "receipt-successor/files-changed.txt",
+      "bytes": 78,
+      "sha256": "f223647bdf9d36c128b6b158ba922204ffb594b1e335d1069fb2ead4a91edf1b",
+      "git_blob_sha1": "e44a7a4ce6c7420fe0381b9ce135d75edb7fdacf"
+    },
+    {
+      "path": "receipt-successor/git-identity.txt",
+      "bytes": 123,
+      "sha256": "19564882f51145e85678d58cb932e6d68d68c66fbebc27266cb798069d347c4f",
+      "git_blob_sha1": "f864f5edd7e19fd14c26c71bd88fba86d1e6f4f8"
+    },
+    {
+      "path": "receipt-successor/sources.tar.gz",
+      "bytes": 70325,
+      "sha256": "8f8a0a3324e650de23e555147769c7760638af60f542c5f5e224e889916c6fa3",
+      "git_blob_sha1": "95664c5c810a4b399ec8e653e4b475c5daa28009"
+    },
+    {
+      "path": "revised-s3/candidate.bundle",
+      "bytes": 3335,
+      "sha256": "0dde2bf4408bf9fa59d74e91a9a40861e038c8ddb16a18caee801e46704dd0f9",
+      "git_blob_sha1": "e788382d8a911e5025710f0e5610d2130af6299b"
+    },
+    {
+      "path": "revised-s3/change.patch",
+      "bytes": 7307,
+      "sha256": "3452c1b6abaff5154ee4f0b09fc2279eed4fdfb89ce83ee92bd5a71dbbe23bb1",
+      "git_blob_sha1": "0fc96800e0fc80b64ffb42b4a022fc06010f13a8"
+    },
+    {
+      "path": "revised-s3/files-changed.txt",
+      "bytes": 339,
+      "sha256": "e4e7213858fddfa8eee968f06c6d5427454787cf7e30a34eff57cd65558ccf41",
+      "git_blob_sha1": "674adebe6515e9e65c453a6a18d1ee4b6c49de4f"
+    },
+    {
+      "path": "revised-s3/git-identity.txt",
+      "bytes": 123,
+      "sha256": "4f066becc9251d54aa9a21617c7949cf2b6dce6c014c9edc3ae6ea412d5c0db8",
+      "git_blob_sha1": "48118ff298be3f91e0bcd4e6eb1fb190f46beb91"
+    },
+    {
+      "path": "revised-s3/sources.tar.gz",
+      "bytes": 34599,
+      "sha256": "61457cb13310d17127222cac1d60b7b3c8db855ef5ffa80353357a4b19d26243",
+      "git_blob_sha1": "5175e39e3f987a78fd3dd355b25311603ccee71e"
+    },
+    {
+      "path": "zpd-work-start/candidate.bundle",
+      "bytes": 2846,
+      "sha256": "d58ad93f5b2717e0a1bd03f06a3fc1fd3c334add00a158efd98e778f3c7069a9",
+      "git_blob_sha1": "2f1d0830a08522b6e5d7261729853b2dc5bf9b57"
+    },
+    {
+      "path": "zpd-work-start/change.patch",
+      "bytes": 62804,
+      "sha256": "e931fb46fcb6f5a8839f73e7c0197f71d13994efe9aa60234a219dfe04d99fef",
+      "git_blob_sha1": "8def460a69b15f693222e91cbcebba988c14d0c7"
+    },
+    {
+      "path": "zpd-work-start/files-changed.txt",
+      "bytes": 89,
+      "sha256": "4dd3f44c1badf7676499bb3b2afa870c3f22417459f4f15f7a79de11e2791bba",
+      "git_blob_sha1": "763de869c2b85788739ff2cda8688f46e2762820"
+    },
+    {
+      "path": "zpd-work-start/git-identity.txt",
+      "bytes": 123,
+      "sha256": "8097487ef79acf7b666776f5ac54b032dfe70929b032f511251ac20b6e2699be",
+      "git_blob_sha1": "1a3ae3db39e2ff62b618b60736aeb357def44edb"
+    },
+    {
+      "path": "zpd-work-start/sources.tar.gz",
+      "bytes": 65195,
+      "sha256": "179f7a6d527428bdf8ac30d46ba2e3dc4f8a8e137ea8e84457b5c40565e80806",
+      "git_blob_sha1": "e2b44ee8a47122fd07d016e56be5aeab2429ceec"
+    }
+  ],
+  "digest_scope": "File records exclude this manifest and SHA256SUMS to avoid self-reference; SHA256SUMS includes this manifest.",
+  "packaging_verification": {
+    "preserved_patches_match_exact_git_diffs": true,
+    "original_bundle_bytes_unchanged": true,
+    "all_five_original_bundles_verify": true,
+    "sources_archived_from_exact_git_objects": true,
+    "credential_runtime_and_wallet_files_excluded": true
+  }
+}

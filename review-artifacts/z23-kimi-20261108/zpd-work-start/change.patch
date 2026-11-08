@@ -1,0 +1,1116 @@
+diff --git a/tests/harness/src/test_zcode_package_dev.c b/tests/harness/src/test_zcode_package_dev.c
+index 78a1e53a75..51db9cc1b1 100644
+--- a/tests/harness/src/test_zcode_package_dev.c
++++ b/tests/harness/src/test_zcode_package_dev.c
+@@ -4417,61 +4417,10 @@ static bool zpd_custom_ledger_cases(
+         zpd_custom_ledger_continuation(accept_input, datadir, long_dir, job, false);
+ }
+ 
+-static __attribute__((unused)) int zpd_test_work_start(void)
++static bool zpd_work_start_metadata(
++    const struct zcl_command_reply reply, const char *absolute_root, char *work_out, char *task_out, char *source_out, char *scope_out, int *total_failures)
+ {
+     int failures = 0;
+-    TEST("zcode work start: goal and profile compose existing task owners") {
+-        char root[512];
+-        /* The workspace path is a FIXED-LENGTH absolute /tmp path, not a
+-         * path under the checkout. The continuation's 512-byte compaction
+-         * boundary is tuned against this workspace's length, so a relative
+-         * root made the whole family checkout-depth-dependent: the same
+-         * tree passed from a ~45-char checkout and failed deterministically
+-         * from shallower ones (compact=509, explicit datadir retained) —
+-         * and no relative padding could fix it, because the custom-ledger
+-         * cases share these fields and sit on the OTHER side of the same
+-         * bound. A constant-length workspace (277 bytes, like this test
+-         * family's own /tmp/zclassic23-zcode-workspaces roots) pins every
+-         * boundary from any checkout depth. */
+-        /* 274 bytes total ("/tmp/" + 130 + "/" + 130 + "-" + pid), split
+-         * across two components so no filename part approaches NAME_MAX.
+-         * Measured anchors: explicit continuation = workspace + 243 (must
+-         * reach 512 to trigger default-datadir omission), compact =
+-         * workspace + 121 (must stay under 512 once omitted), custom
+-         * continuation = workspace + custom + 134 — 274 sits inside every
+-         * margin from any checkout depth. */
+-        char ws_a[131], ws_b[131];
+-        memset(ws_a, 'w', sizeof(ws_a) - 1); ws_a[sizeof(ws_a) - 1] = '\0';
+-        memset(ws_b, 'w', sizeof(ws_b) - 1); ws_b[sizeof(ws_b) - 1] = '\0';
+-        (void)snprintf(root, sizeof(root), "/tmp/%s/%s-%ld", ws_a, ws_b,
+-                       (long)getpid());
+-        {   /* directory_create is one level; zpd_fixture must create root itself */
+-            char parent[300];
+-            (void)snprintf(parent, sizeof(parent), "/tmp/%s", ws_a);
+-            ASSERT(platform_directory_ensure(parent, 0700));
+-        }
+-        ASSERT(zpd_fixture(root, false));
+-        char absolute_root[4400];
+-        ASSERT(platform_directory_canonical_real(
+-            root, absolute_root, sizeof(absolute_root)));
+-        uint8_t source_before[32], source_after[32];
+-        ASSERT(vcs_tree_capture_path(root, source_before) == VCS_OK);
+-
+-        struct json_value input;
+-        json_init(&input); json_set_object(&input);
+-        ASSERT(json_push_kv_str(&input, "workspace", root));
+-        ASSERT(json_push_kv_str(&input, "goal", "Fix x"));
+-        ASSERT(json_push_kv_str(&input, "profile", "quick"));
+-        ASSERT(json_push_kv_str(&input, "context_symbol",
+-                                "fixture_parse_options"));
+-        ASSERT(json_push_kv_bool(&input, "details", true));
+-        struct zcl_command_request request = { .input = &input };
+-        struct zcl_command_reply reply;
+-        zcl_command_reply_init(&reply, "zcl.zcode_work_start_test.v1");
+-        zcl_native_handle_zcode_work_start(&request, &reply);
+-        ASSERT(reply.status == ZCL_COMMAND_STATUS_PASSED);
+-        ASSERT(vcs_tree_capture_path(root, source_after) == VCS_OK);
+-        ASSERT(memcmp(source_before, source_after, sizeof(source_before)) == 0);
+         const struct json_value *work_id = json_get(&reply.data, "work_id");
+         const struct json_value *state = json_get(&reply.data, "state");
+         const struct json_value *context =
+@@ -4533,9 +4482,481 @@ static __attribute__((unused)) int zpd_test_work_start(void)
+         ASSERT(next_spec && zcl_command_registry_input_validate(
+             next_spec, &next_input, next_why, sizeof(next_why)));
+         json_free(&next_input);
+-        zcl_command_reply_free(&reply);
+-        json_free(&input);
++    memcpy(work_out, saved_work_id, strlen(saved_work_id) + 1u);
++    memcpy(task_out, saved_task_root, strlen(saved_task_root) + 1u);
++    memcpy(source_out, saved_source_root, strlen(saved_source_root) + 1u);
++    memcpy(scope_out, saved_scope_root, strlen(saved_scope_root) + 1u);
++    *total_failures += failures;
++    return true;
++_test_next:
++    *total_failures += failures;
++    return false;
++}
++
++static bool zpd_work_start_manual_result(
++    const struct zcl_command_reply reply, const struct json_value input, const char *root, const char *absolute_root, const char *saved_work_id, const uint8_t *before, uint8_t *after, char *workspace_out, int *total_failures)
++{
++    int failures = 0;
++    uint8_t source_before[32], source_after[32];
++    memcpy(source_before, before, sizeof(source_before));
++    memcpy(source_after, after, sizeof(source_after));
++        const struct json_value *candidate_workspace =
++            json_get(&reply.data, "candidate_workspace");
++        const struct json_value *packet_path =
++            json_get(&reply.data, "adapter_packet_path");
++        ASSERT(candidate_workspace &&
++               json_get_str(candidate_workspace)[0] == '/');
++        char saved_candidate_workspace[4400];
++        (void)snprintf(saved_candidate_workspace,
++                       sizeof(saved_candidate_workspace), "%s",
++                       json_get_str(candidate_workspace));
++        ASSERT(packet_path && json_get_str(packet_path)[0] == '/');
++        ASSERT(strncmp(json_get_str(packet_path),
++                       saved_candidate_workspace,
++                       strlen(saved_candidate_workspace)) == 0);
++        ASSERT(access(json_get_str(packet_path), F_OK) == 0);
++        ASSERT(json_get_int(json_get(
++                   &reply.data, "model_context_bytes")) > 0);
++        ASSERT(json_get(&reply.data, "adapter_packet_bytes") == NULL);
++        ASSERT(json_get(&reply.data, "workspace_created") == NULL);
++        ASSERT(json_get(&reply.data, "next_safe_command") == NULL);
++        char *packet_text = zpd_read_bounded(json_get_str(packet_path),
++                                             2u * 1024u * 1024u);
++        ASSERT(packet_text != NULL);
++        ASSERT(strstr(packet_text, "\"Write C23 only.") != NULL);
++        ASSERT(strstr(packet_text,
++                      "\"selected_dependency_context\"") != NULL);
++        ASSERT(strstr(packet_text, "\"selected_excerpts\"") != NULL);
++        ASSERT(strstr(packet_text, "\"allowed_write_scopes\"") != NULL);
++        ASSERT(strstr(packet_text, "\"dependency_lock_root\"") != NULL);
++        ASSERT(strstr(packet_text, "\"max_changed_files\"") != NULL);
++        ASSERT(strstr(packet_text, "\"max_patch_bytes\"") != NULL);
++        ASSERT(strstr(packet_text, "\"candidate_workspace\"") == NULL);
++        ASSERT(strstr(packet_text, "\"dependency_context_bytes\"") == NULL);
++        ASSERT(strstr(packet_text,
++                      "\"dependency_context_headers\"") == NULL);
++        ASSERT(strstr(packet_text, "\"max_context_bytes\"") == NULL);
++        ASSERT(strstr(packet_text, "\"max_cpu_seconds\"") == NULL);
++        ASSERT(strstr(packet_text, "\"max_memory_bytes\"") == NULL);
++        ASSERT(strstr(packet_text, "\"max_output_bytes\"") == NULL);
++        ASSERT(strstr(packet_text, "\"task_root\"") == NULL);
++        ASSERT(strstr(packet_text, "\"source_root\"") == NULL);
++        ASSERT(strstr(packet_text, "\"context_root\"") == NULL);
++        ASSERT(strstr(packet_text, "\"write_scope_root\"") == NULL);
++        ASSERT(strstr(packet_text, "\"package_recipe_root\"") == NULL);
++        ASSERT(strstr(packet_text, "\"proof_policy_root\"") == NULL);
++        ASSERT(strstr(packet_text, "\"toolchain_capsule_root\"") == NULL);
++        struct json_value packet;
++        json_init(&packet);
++        ASSERT(json_read(&packet, packet_text, strlen(packet_text)));
++        const struct json_value *allowed =
++            json_get(&packet, "allowed_write_scopes");
++        ASSERT(zpd_array_has_string(allowed, "app"));
++        ASSERT(zpd_array_has_string(allowed, "include"));
++        ASSERT(zpd_array_has_string(allowed, "src"));
++        ASSERT(zpd_array_has_string(allowed, "tests"));
++        json_free(&packet);
++        free(packet_text);
++        ASSERT(strcmp(json_get_str(json_get(&reply.data, "authority")),
++                      "NONE_MANUAL_HANDOFF") == 0);
++        ASSERT(strcmp(json_get_str(json_get(&reply.data, "stage")),
++                      "Creating missing code") == 0);
++        ASSERT(json_get_bool(json_get(&reply.data, "details_available")));
++        ASSERT(zpd_next_is(&reply, "zcode.work.status", absolute_root,
++                           saved_work_id, NULL));
++        {
++            const struct zcl_command_registry *registry =
++                zcl_command_catalog();
++            const struct zcl_command_spec *run_spec =
++                zcl_command_registry_find(registry, "zcode.work.run", NULL);
++            struct zcl_command_context context = {
++                .registry = registry,
++                .granted_capabilities = ~(uint64_t)0,
++                .authority_ceiling = ZCL_COMMAND_AUTH_OWNER,
++            };
++            char rendered[ZCL_COMMAND_RESULT_BUDGET + 1u];
++            enum zcl_command_exit exit_code = ZCL_COMMAND_EXIT_OK;
++            ASSERT(run_spec != NULL);
++            size_t rendered_bytes = zcl_command_registry_execute_json(
++                registry, run_spec, &context, &input, false, run_spec->path,
++                "normal", 0, 0, NULL, rendered, sizeof(rendered),
++                &exit_code);
++            ASSERT(rendered_bytes > 0);
++            ASSERT(exit_code == ZCL_COMMAND_EXIT_OK);
++            ASSERT(strstr(rendered, "RESPONSE_BUDGET_EXCEEDED") == NULL);
++            ASSERT(strstr(rendered,
++                          "\"command\":\"zcode.work.status\"") != NULL);
++        }
++        ASSERT(vcs_tree_capture_path(root, source_after) == VCS_OK);
++        ASSERT(memcmp(source_before, source_after, sizeof(source_before)) == 0);
++        struct stat candidate_stat;
++        ASSERT(stat(json_get_str(candidate_workspace), &candidate_stat) == 0 &&
++               S_ISDIR(candidate_stat.st_mode));
++    memcpy(after, source_after, sizeof(source_after));
++    memcpy(workspace_out, saved_candidate_workspace, strlen(saved_candidate_workspace) + 1u);
++    *total_failures += failures;
++    return true;
++_test_next:
++    *total_failures += failures;
++    return false;
++}
++
++static bool zpd_work_start_repair_result(
++    const struct zcl_command_reply reply, const char *absolute_root, const char *saved_work_id, char *workspace_out, int *total_failures)
++{
++    int failures = 0;
++    char saved_candidate_workspace[4400];
++        ASSERT(reply.status == ZCL_COMMAND_STATUS_PASSED);
++        ASSERT(strcmp(json_get_str(json_get(&reply.data, "state")),
++                      "REPAIR_NEEDED") == 0);
++        ASSERT(strcmp(json_get_str(json_get(&reply.data, "stage")),
++                      "Creating missing code") == 0);
++        ASSERT(json_get(&reply.data, "changed_files") &&
++               json_get_int(json_get(&reply.data, "changed_files")) == 1);
++        ASSERT(json_get(&reply.data, "candidate_root") != NULL);
++        ASSERT(json_get(&reply.data, "work_receipt_root") != NULL);
++        ASSERT(strcmp(json_get_str(json_get(&reply.data, "build_result")),
++                      "failed") == 0);
++        const struct json_value *repair_packet =
++            json_get(&reply.data, "repair_packet");
++        ASSERT(repair_packet && repair_packet->type == JSON_OBJ);
++        ASSERT(strcmp(json_get_str(json_get(repair_packet, "goal")),
++                      "Fix x") == 0);
++        ASSERT(json_get(repair_packet, "parent_candidate_root") == NULL);
++        ASSERT(json_get(repair_packet, "prior_patch_root") == NULL);
++        ASSERT(json_get(repair_packet, "selected_excerpts") != NULL);
++        const struct json_value *repair_diagnostic =
++            json_get(repair_packet, "diagnostic");
++        ASSERT(json_get(repair_diagnostic, "evidence_root") == NULL);
++        ASSERT(json_get(repair_diagnostic, "work_receipt_root") == NULL);
++        const struct json_value *compiler_feedback = repair_diagnostic
++            ? json_get(repair_diagnostic, "compiler_feedback") : NULL;
++        ASSERT(compiler_feedback &&
++               json_get_bool(json_get(compiler_feedback, "available")));
++        ASSERT(strcmp(json_get_str(json_get(compiler_feedback, "stage")),
++                      "compile") == 0);
++        ASSERT(strstr(json_get_str(json_get(compiler_feedback, "path")),
++                      "src/x.c") != NULL);
++        ASSERT(json_get_int(json_get(compiler_feedback, "line")) > 0);
++        ASSERT(json_get_str(json_get(compiler_feedback, "message"))[0]);
++        const struct json_value *repair_workspace =
++            json_get(&reply.data, "candidate_workspace");
++        const struct json_value *repair_packet_path =
++            json_get(&reply.data, "repair_packet_path");
++        ASSERT(repair_workspace && strstr(json_get_str(repair_workspace),
++                                           "/attempt-2") != NULL);
++        ASSERT(repair_packet_path &&
++               access(json_get_str(repair_packet_path), F_OK) == 0);
++        ASSERT(json_get_int(json_get(&reply.data,
++                                     "model_context_bytes")) > 0);
++        ASSERT(zpd_next_is(&reply, "zcode.work.status", absolute_root,
++                           saved_work_id, NULL));
++        (void)snprintf(saved_candidate_workspace,
++                       sizeof(saved_candidate_workspace), "%s",
++                       json_get_str(repair_workspace));
++    memcpy(workspace_out, saved_candidate_workspace, strlen(saved_candidate_workspace) + 1u);
++    *total_failures += failures;
++    return true;
++_test_next:
++    *total_failures += failures;
++    return false;
++}
++
++static bool zpd_work_start_proof_result(
++    const struct zcl_command_reply reply, const char *saved_action_id, const char *saved_candidate_workspace, char *datadir_out, int *total_failures)
++{
++    int failures = 0;
++    const struct json_value *status_proof;
++        status_proof = json_get(&reply.data, "proof");
++        ASSERT(status_proof &&
++               json_get_bool(json_get(status_proof, "facts_available")));
++        ASSERT(json_get_bool(json_get(status_proof, "compile_satisfied")));
++        ASSERT(json_get_bool(json_get(status_proof, "test_satisfied")));
++        ASSERT(json_get_bool(json_get(status_proof, "policy_satisfied")));
++        ASSERT(json_get_int(json_get(status_proof, "compile_receipts")) > 0);
++        ASSERT(json_get_int(json_get(status_proof, "test_receipts")) > 0);
++        const struct json_value *proof_expert =
++            json_get(&reply.data, "expert");
++        const char *proof_action_root = proof_expert
++            ? json_get_str(json_get(proof_expert, "proof_action_root"))
++            : NULL;
++        const char *build_output_root = proof_expert
++            ? json_get_str(json_get(proof_expert, "build_output_root"))
++            : NULL;
++        ASSERT(proof_action_root && strlen(proof_action_root) == 64);
++        ASSERT(build_output_root && strlen(build_output_root) == 64);
++        ASSERT(strcmp(proof_action_root, saved_action_id) == 0);
++        ASSERT(json_write(&reply.data, NULL, 0) < 4096u);
++        char zbuild_datadir[4400];
++        (void)snprintf(zbuild_datadir, sizeof(zbuild_datadir), "%s",
++                       saved_candidate_workspace);
++        char *attempt_dir = strrchr(zbuild_datadir, '/');
++        ASSERT(attempt_dir != NULL);
++        (void)snprintf(attempt_dir,
++                       (size_t)(zbuild_datadir + sizeof(zbuild_datadir) -
++                                attempt_dir), "/zbuild");
++    memcpy(datadir_out, zbuild_datadir, strlen(zbuild_datadir) + 1u);
++    *total_failures += failures;
++    return true;
++_test_next:
++    *total_failures += failures;
++    return false;
++}
++
++static bool zpd_work_start_review_result(
++    const struct zcl_command_reply reply, const char *absolute_root, const char *saved_work_id, char *confirmation_out, char *action_out, char *task_out, char *candidate_out, char *policy_out, int *total_failures)
++{
++    int failures = 0;
++    const struct json_value *status_proof;
++        ASSERT(reply.status == ZCL_COMMAND_STATUS_PASSED);
++        ASSERT(strcmp(json_get_str(json_get(&reply.data, "review_verdict")),
++                      "approve") == 0);
++        status_proof = json_get(&reply.data, "proof");
++        ASSERT(status_proof &&
++               json_get_bool(json_get(status_proof, "facts_available")));
++        ASSERT(json_get_int(json_get(status_proof, "review_receipts")) == 1);
++        ASSERT(json_get_bool(json_get(status_proof, "review_satisfied")));
++        ASSERT(strcmp(json_get_str(json_get(
++                          &reply.data, "next_safe_command")),
++                      "ask user to confirm exact candidate") == 0);
++        ASSERT(zpd_next_is(&reply, "app.presentation.release-confirm",
++                           absolute_root, saved_work_id, NULL));
++        const char *status_confirmation = json_get_str(json_get(
++            &reply.data, "confirmation_identity"));
++        ASSERT(status_confirmation && strlen(status_confirmation) == 64);
++        char status_confirmation_identity[65];
++        (void)snprintf(status_confirmation_identity,
++                       sizeof(status_confirmation_identity), "%s",
++                       status_confirmation);
++        const struct json_value *status_expert =
++            json_get(&reply.data, "expert");
++        const struct json_value *proof_receipt_roots =
++            json_get(status_proof, "receipt_roots");
++        ASSERT(json_get_bool(json_get(status_proof,
++                                      "receipt_roots_available")));
++        ASSERT(proof_receipt_roots &&
++               proof_receipt_roots->type == JSON_ARR &&
++               json_size(proof_receipt_roots) > 0);
++        uint8_t status_receipt_roots[VCS_ZCODE_PROOF_SET_MAX_RECEIPTS][32];
++        size_t status_receipt_count = json_size(proof_receipt_roots);
++        ASSERT(status_receipt_count <= VCS_ZCODE_PROOF_SET_MAX_RECEIPTS);
++        for (size_t i = 0; i < status_receipt_count; i++) {
++            const char *root_text = json_get_str(
++                json_at(proof_receipt_roots, i));
++            ASSERT(root_text && strlen(root_text) == 64);
++            ASSERT(zcl_hex_decode_lower(root_text,
++                                        status_receipt_roots[i], 32));
++            ASSERT(i == 0 || memcmp(status_receipt_roots[i - 1],
++                                    status_receipt_roots[i], 32) < 0);
++        }
++        uint8_t projected_proof_root[32], status_proof_root_bytes[32];
++        ASSERT(vcs_zcode_proof_set_root(
++                   (const uint8_t (*)[32])status_receipt_roots,
++                   status_receipt_count, projected_proof_root) ==
++               VCS_ZCODE_DEV_OK);
++        ASSERT(zcl_hex_decode_lower(json_get_str(json_get(
++                   status_expert, "proof_set_root")),
++                   status_proof_root_bytes, 32));
++        ASSERT(memcmp(projected_proof_root,
++                      status_proof_root_bytes, 32) == 0);
++        ASSERT(strcmp(json_get_str(json_get(
++                          status_expert, "accepted_work_root")), "") == 0);
++        ASSERT(strlen(json_get_str(json_get(
++                   status_expert, "review_root"))) == 64);
++        const char *status_action = json_get_str(json_get(
++            status_expert, "action_id"));
++        const char *status_task = json_get_str(json_get(
++            status_expert, "task_root"));
++        const char *status_candidate = json_get_str(json_get(
++            status_expert, "candidate_root"));
++        const char *status_policy = json_get_str(json_get(
++            status_expert, "proof_policy_root"));
++        ASSERT(status_action && status_task && status_candidate &&
++               status_policy);
++        char status_action_saved[65], status_task_saved[65];
++        char status_candidate_saved[65], status_policy_saved[65];
++        (void)snprintf(status_action_saved, sizeof(status_action_saved),
++                       "%s", status_action);
++        (void)snprintf(status_task_saved, sizeof(status_task_saved),
++                       "%s", status_task);
++        (void)snprintf(status_candidate_saved,
++                       sizeof(status_candidate_saved), "%s",
++                       status_candidate);
++        (void)snprintf(status_policy_saved, sizeof(status_policy_saved),
++                       "%s", status_policy);
++    memcpy(confirmation_out, status_confirmation_identity, strlen(status_confirmation_identity) + 1u);
++    memcpy(action_out, status_action_saved, strlen(status_action_saved) + 1u);
++    memcpy(task_out, status_task_saved, strlen(status_task_saved) + 1u);
++    memcpy(candidate_out, status_candidate_saved, strlen(status_candidate_saved) + 1u);
++    memcpy(policy_out, status_policy_saved, strlen(status_policy_saved) + 1u);
++    *total_failures += failures;
++    return true;
++_test_next:
++    *total_failures += failures;
++    return false;
++}
++
++static bool zpd_work_start_accept_result(
++    const struct zcl_command_reply reply, const char *root, const char *zbuild_datadir, const char *saved_task_root, const char *saved_work_id, const char *saved_candidate_workspace, char *accepted_out, char *workspace_out, char *job_out, char *why_out, int *total_failures)
++{
++    int failures = 0;
++        const char *accepted_root_text = json_get_str(json_get(
++            json_get(&reply.data, "expert"), "lane_receipt_root"));
++        ASSERT(accepted_root_text && strlen(accepted_root_text) == 64);
++        ASSERT(strcmp(json_get_str(json_get(
++                          json_get(&reply.data, "expert"),
++                          "accepted_work_root")),
++                      accepted_root_text) == 0);
++        char accepted_root_hex[65];
++        (void)snprintf(accepted_root_hex, sizeof(accepted_root_hex), "%s",
++                       accepted_root_text);
++        const char *publication_workspace_text = json_get_str(json_get(
++            &reply.data, "publication_workspace"));
++        const char *publication_job_text = json_get_str(json_get(
++            &reply.data, "publication_job_root"));
++        const char *accepted_candidate_workspace = json_get_str(json_get(
++            &reply.data, "candidate_workspace"));
++        ASSERT(publication_workspace_text && publication_job_text &&
++               accepted_candidate_workspace);
++        ASSERT(strcmp(json_get_str(json_get(
++                          &reply.data, "publication_status")),
++                      "ACCEPTED_LANE_BOUND") == 0);
++        ASSERT(!json_get_bool(json_get(
++            &reply.data, "publication_reused")));
++        ASSERT(json_get_bool(json_get(
++            &reply.data, "details_available")));
++        ASSERT(strlen(json_get_str(json_get(
++                   &reply.data, "publication_progress_root"))) == 64);
++        char accepted_publication_workspace[4400];
++        char publication_job_hex[65];
++        (void)snprintf(accepted_publication_workspace,
++                       sizeof(accepted_publication_workspace), "%s",
++                       publication_workspace_text);
++        (void)snprintf(publication_job_hex, sizeof(publication_job_hex), "%s",
++                       publication_job_text);
++        char resolved_authority_workspace[4400];
++        ASSERT(platform_directory_canonical_real(
++            root, resolved_authority_workspace,
++            sizeof(resolved_authority_workspace)));
++        ASSERT(reply.next_count == 1);
++        ASSERT(strcmp(reply.next[0].command,
++                      "zcode.work.publish") == 0);
++        struct json_value publication_next;
++        json_init(&publication_next);
++        ASSERT(json_read(&publication_next, reply.next[0].input_json,
++                         strlen(reply.next[0].input_json)));
++        ASSERT(strcmp(json_get_str(json_get(
++                          &publication_next, "workspace")),
++                      resolved_authority_workspace) == 0);
++        ASSERT(zpd_compact_default_continuation(
++            &publication_next, zbuild_datadir, saved_task_root));
++        ASSERT(strcmp(json_get_str(json_get(
++                          &publication_next, "job_root")),
++                      publication_job_hex) == 0);
++        ASSERT(strcmp(json_get_str(json_get(
++                          &publication_next, "work")), saved_work_id) == 0);
++        ASSERT(json_get(&publication_next, "task_root") == NULL);
++        ASSERT(json_get(&publication_next, "candidate_root") == NULL);
++        const struct zcl_command_spec *publication_next_spec =
++            zcl_command_registry_find(
++                zcl_command_catalog(), reply.next[0].command, NULL);
++        char publication_next_why[160] = {0};
++        ASSERT(publication_next_spec && zcl_command_registry_input_validate(
++            publication_next_spec, &publication_next,
++            publication_next_why, sizeof(publication_next_why)));
++        json_free(&publication_next);
++        ASSERT(strcmp(accepted_publication_workspace,
++                      resolved_authority_workspace) == 0);
++        ASSERT(strcmp(accepted_candidate_workspace,
++                      saved_candidate_workspace) == 0);
++    memcpy(accepted_out, accepted_root_hex, strlen(accepted_root_hex) + 1u);
++    memcpy(workspace_out, accepted_publication_workspace, strlen(accepted_publication_workspace) + 1u);
++    memcpy(job_out, publication_job_hex, strlen(publication_job_hex) + 1u);
++    memcpy(why_out, publication_next_why, sizeof(publication_next_why));
++    *total_failures += failures;
++    return true;
++_test_next:
++    *total_failures += failures;
++    return false;
++}
++
++static bool zpd_work_start_publish_render(
++    const struct zcl_command_registry *registry, const struct zcl_command_spec *spec, struct zcl_command_context context, const struct json_value guided_publication_next, int *total_failures)
++{
++    int failures = 0;
++            char rendered[ZCL_COMMAND_RESULT_BUDGET + 1u];
++            enum zcl_command_exit exit_code;
++            size_t len = zcl_command_registry_execute_json(
++                registry, spec, &context, &guided_publication_next,
++                false, spec->path, "normal", 0, 0, NULL,
++                rendered, sizeof(rendered), &exit_code);
++            ASSERT(len > 0 && len <= ZCL_COMMAND_RESULT_BUDGET);
++            ASSERT(exit_code == ZCL_COMMAND_EXIT_OK);
++            struct json_value envelope;
++            json_init(&envelope);
++            ASSERT(json_read(&envelope, rendered, len));
++            ASSERT(json_get_bool(json_get(&envelope, "ok")));
++            const struct json_value *next = json_get(&envelope, "next");
++            ASSERT(json_size(next) == 1);
++            for (size_t i = 0; i < json_size(next); i++)
++                ASSERT(strcmp(json_get_str(json_get(json_at(next, i), "command")),
++                              spec->path) != 0);
++            ASSERT(strcmp(json_get_str(json_get(json_at(next, 0), "command")),
++                          "discover.schema") == 0);
++            ASSERT(json_get(json_get(&envelope, "data"), "expert") == NULL);
++            json_free(&envelope);
++            context.authority_ceiling = ZCL_COMMAND_AUTH_OPERATOR;
++            len = zcl_command_registry_execute_json(
++                registry, spec, &context, &guided_publication_next,
++                false, spec->path, "normal", 0, 0, NULL,
++                rendered, sizeof(rendered), &exit_code);
++            ASSERT(len > 0);
++            ASSERT(exit_code == ZCL_COMMAND_EXIT_DENIED);
++            ASSERT(strstr(rendered, "AUTHORITY_DENIED") != NULL);
++    *total_failures += failures;
++    return true;
++_test_next:
++    *total_failures += failures;
++    return false;
++}
++
++static void zpd_work_start_admission_diagnostic(const struct zcl_command_reply reply)
++{
++        if (reply.status != ZCL_COMMAND_STATUS_PASSED)
++            printf("work admission failed: %s: %s\n", reply.error.code,
++                   reply.error.message);
++}
++
++static void zpd_work_start_repair_diagnostic(const struct zcl_command_reply reply)
++{
++        if (reply.status != ZCL_COMMAND_STATUS_PASSED)
++            printf("failed-candidate admission failed: %s: %s\n", reply.error.code,
++                   reply.error.message);
++}
++
++static void zpd_work_start_stale_confirmation(char *stale_confirmation)
++{
++        stale_confirmation[0] = stale_confirmation[0] == '0' ? '1' : '0';
++}
++
++static void zpd_work_start_mismatched_job(char *mismatched_job)
++{
++        mismatched_job[0] = mismatched_job[0] == '0' ? '1' : '0';
++}
+ 
++static bool zpd_work_start_manual_and_repair(
++    const char *root, const char *absolute_root, const char *saved_work_id,
++    const char *saved_task_root, const char *saved_source_root,
++    const char *saved_scope_root, const uint8_t *before, uint8_t *after,
++    char *workspace_out, char *source_path_out, int *total_failures)
++{
++    int failures = 0;
++    struct json_value input;
++    struct zcl_command_request request = {0};
++    struct zcl_command_reply reply;
++    uint8_t source_before[32], source_after[32];
++    memcpy(source_before, before, sizeof(source_before));
++    memcpy(source_after, after, sizeof(source_after));
+         /* A distinct task identity for the same exact source and goal must
+          * carry improve's rooted duplicate evidence through the normal
+          * human-first entry point. Authorship still is not assignment or an
+@@ -4727,102 +5148,11 @@ static __attribute__((unused)) int zpd_test_work_start(void)
+         request.input = &input;
+         zcl_command_reply_init(&reply, "zcl.zcode_work_run_test.v1");
+         zcl_native_handle_zcode_work_run(&request, &reply);
+-        if (reply.status != ZCL_COMMAND_STATUS_PASSED)
+-            printf("work admission failed: %s: %s\n", reply.error.code,
+-                   reply.error.message);
++        zpd_work_start_admission_diagnostic(reply);
+         ASSERT(reply.status == ZCL_COMMAND_STATUS_PASSED);
+-        const struct json_value *candidate_workspace =
+-            json_get(&reply.data, "candidate_workspace");
+-        const struct json_value *packet_path =
+-            json_get(&reply.data, "adapter_packet_path");
+-        ASSERT(candidate_workspace &&
+-               json_get_str(candidate_workspace)[0] == '/');
+         char saved_candidate_workspace[4400];
+-        (void)snprintf(saved_candidate_workspace,
+-                       sizeof(saved_candidate_workspace), "%s",
+-                       json_get_str(candidate_workspace));
+-        ASSERT(packet_path && json_get_str(packet_path)[0] == '/');
+-        ASSERT(strncmp(json_get_str(packet_path),
+-                       saved_candidate_workspace,
+-                       strlen(saved_candidate_workspace)) == 0);
+-        ASSERT(access(json_get_str(packet_path), F_OK) == 0);
+-        ASSERT(json_get_int(json_get(
+-                   &reply.data, "model_context_bytes")) > 0);
+-        ASSERT(json_get(&reply.data, "adapter_packet_bytes") == NULL);
+-        ASSERT(json_get(&reply.data, "workspace_created") == NULL);
+-        ASSERT(json_get(&reply.data, "next_safe_command") == NULL);
+-        char *packet_text = zpd_read_bounded(json_get_str(packet_path),
+-                                             2u * 1024u * 1024u);
+-        ASSERT(packet_text != NULL);
+-        ASSERT(strstr(packet_text, "\"Write C23 only.") != NULL);
+-        ASSERT(strstr(packet_text,
+-                      "\"selected_dependency_context\"") != NULL);
+-        ASSERT(strstr(packet_text, "\"selected_excerpts\"") != NULL);
+-        ASSERT(strstr(packet_text, "\"allowed_write_scopes\"") != NULL);
+-        ASSERT(strstr(packet_text, "\"dependency_lock_root\"") != NULL);
+-        ASSERT(strstr(packet_text, "\"max_changed_files\"") != NULL);
+-        ASSERT(strstr(packet_text, "\"max_patch_bytes\"") != NULL);
+-        ASSERT(strstr(packet_text, "\"candidate_workspace\"") == NULL);
+-        ASSERT(strstr(packet_text, "\"dependency_context_bytes\"") == NULL);
+-        ASSERT(strstr(packet_text,
+-                      "\"dependency_context_headers\"") == NULL);
+-        ASSERT(strstr(packet_text, "\"max_context_bytes\"") == NULL);
+-        ASSERT(strstr(packet_text, "\"max_cpu_seconds\"") == NULL);
+-        ASSERT(strstr(packet_text, "\"max_memory_bytes\"") == NULL);
+-        ASSERT(strstr(packet_text, "\"max_output_bytes\"") == NULL);
+-        ASSERT(strstr(packet_text, "\"task_root\"") == NULL);
+-        ASSERT(strstr(packet_text, "\"source_root\"") == NULL);
+-        ASSERT(strstr(packet_text, "\"context_root\"") == NULL);
+-        ASSERT(strstr(packet_text, "\"write_scope_root\"") == NULL);
+-        ASSERT(strstr(packet_text, "\"package_recipe_root\"") == NULL);
+-        ASSERT(strstr(packet_text, "\"proof_policy_root\"") == NULL);
+-        ASSERT(strstr(packet_text, "\"toolchain_capsule_root\"") == NULL);
+-        struct json_value packet;
+-        json_init(&packet);
+-        ASSERT(json_read(&packet, packet_text, strlen(packet_text)));
+-        const struct json_value *allowed =
+-            json_get(&packet, "allowed_write_scopes");
+-        ASSERT(zpd_array_has_string(allowed, "app"));
+-        ASSERT(zpd_array_has_string(allowed, "include"));
+-        ASSERT(zpd_array_has_string(allowed, "src"));
+-        ASSERT(zpd_array_has_string(allowed, "tests"));
+-        json_free(&packet);
+-        free(packet_text);
+-        ASSERT(strcmp(json_get_str(json_get(&reply.data, "authority")),
+-                      "NONE_MANUAL_HANDOFF") == 0);
+-        ASSERT(strcmp(json_get_str(json_get(&reply.data, "stage")),
+-                      "Creating missing code") == 0);
+-        ASSERT(json_get_bool(json_get(&reply.data, "details_available")));
+-        ASSERT(zpd_next_is(&reply, "zcode.work.status", absolute_root,
+-                           saved_work_id, NULL));
+-        {
+-            const struct zcl_command_registry *registry =
+-                zcl_command_catalog();
+-            const struct zcl_command_spec *run_spec =
+-                zcl_command_registry_find(registry, "zcode.work.run", NULL);
+-            struct zcl_command_context context = {
+-                .registry = registry,
+-                .granted_capabilities = ~(uint64_t)0,
+-                .authority_ceiling = ZCL_COMMAND_AUTH_OWNER,
+-            };
+-            char rendered[ZCL_COMMAND_RESULT_BUDGET + 1u];
+-            enum zcl_command_exit exit_code = ZCL_COMMAND_EXIT_OK;
+-            ASSERT(run_spec != NULL);
+-            size_t rendered_bytes = zcl_command_registry_execute_json(
+-                registry, run_spec, &context, &input, false, run_spec->path,
+-                "normal", 0, 0, NULL, rendered, sizeof(rendered),
+-                &exit_code);
+-            ASSERT(rendered_bytes > 0);
+-            ASSERT(exit_code == ZCL_COMMAND_EXIT_OK);
+-            ASSERT(strstr(rendered, "RESPONSE_BUDGET_EXCEEDED") == NULL);
+-            ASSERT(strstr(rendered,
+-                          "\"command\":\"zcode.work.status\"") != NULL);
+-        }
+-        ASSERT(vcs_tree_capture_path(root, source_after) == VCS_OK);
+-        ASSERT(memcmp(source_before, source_after, sizeof(source_before)) == 0);
+-        struct stat candidate_stat;
+-        ASSERT(stat(json_get_str(candidate_workspace), &candidate_stat) == 0 &&
+-               S_ISDIR(candidate_stat.st_mode));
++        if (!zpd_work_start_manual_result(reply, input, root, absolute_root, saved_work_id, source_before, source_after, saved_candidate_workspace, &failures))
++            goto _test_next;
+         zcl_command_reply_free(&reply);
+         json_free(&input);
+ 
+@@ -4862,84 +5192,115 @@ static __attribute__((unused)) int zpd_test_work_start(void)
+         zcl_native_bridge_bind_rpc(absolute_root, 0);
+         zcl_native_handle_zcode_work_run(&request, &reply);
+         zcl_native_bridge_bind_rpc("", 0);
+-        if (reply.status != ZCL_COMMAND_STATUS_PASSED)
+-            printf("failed-candidate admission failed: %s: %s\n", reply.error.code,
+-                   reply.error.message);
++        zpd_work_start_repair_diagnostic(reply);
++        if (!zpd_work_start_repair_result(reply, absolute_root, saved_work_id, saved_candidate_workspace, &failures))
++            goto _test_next;
++        zcl_command_reply_free(&reply);
++        json_free(&input);
++
++        json_init(&input); json_set_object(&input);
++        ASSERT(json_push_kv_str(&input, "workspace", root));
++        ASSERT(json_push_kv_str(&input, "work", saved_work_id));
++        ASSERT(json_push_kv_bool(&input, "details", true));
++        request.input = &input;
++        zcl_command_reply_init(&reply, "zcl.zcode_work_status_test.v1");
++        zcl_native_handle_zcode_work_status(&request, &reply);
+         ASSERT(reply.status == ZCL_COMMAND_STATUS_PASSED);
+         ASSERT(strcmp(json_get_str(json_get(&reply.data, "state")),
+                       "REPAIR_NEEDED") == 0);
+-        ASSERT(strcmp(json_get_str(json_get(&reply.data, "stage")),
+-                      "Creating missing code") == 0);
+-        ASSERT(json_get(&reply.data, "changed_files") &&
+-               json_get_int(json_get(&reply.data, "changed_files")) == 1);
+-        ASSERT(json_get(&reply.data, "candidate_root") != NULL);
+-        ASSERT(json_get(&reply.data, "work_receipt_root") != NULL);
+         ASSERT(strcmp(json_get_str(json_get(&reply.data, "build_result")),
+                       "failed") == 0);
+-        const struct json_value *repair_packet =
+-            json_get(&reply.data, "repair_packet");
+-        ASSERT(repair_packet && repair_packet->type == JSON_OBJ);
+-        ASSERT(strcmp(json_get_str(json_get(repair_packet, "goal")),
+-                      "Fix x") == 0);
+-        ASSERT(json_get(repair_packet, "parent_candidate_root") == NULL);
+-        ASSERT(json_get(repair_packet, "prior_patch_root") == NULL);
+-        ASSERT(json_get(repair_packet, "selected_excerpts") != NULL);
+-        const struct json_value *repair_diagnostic =
+-            json_get(repair_packet, "diagnostic");
+-        ASSERT(json_get(repair_diagnostic, "evidence_root") == NULL);
+-        ASSERT(json_get(repair_diagnostic, "work_receipt_root") == NULL);
+-        const struct json_value *compiler_feedback = repair_diagnostic
+-            ? json_get(repair_diagnostic, "compiler_feedback") : NULL;
+-        ASSERT(compiler_feedback &&
+-               json_get_bool(json_get(compiler_feedback, "available")));
+-        ASSERT(strcmp(json_get_str(json_get(compiler_feedback, "stage")),
+-                      "compile") == 0);
+-        ASSERT(strstr(json_get_str(json_get(compiler_feedback, "path")),
+-                      "src/x.c") != NULL);
+-        ASSERT(json_get_int(json_get(compiler_feedback, "line")) > 0);
+-        ASSERT(json_get_str(json_get(compiler_feedback, "message"))[0]);
+-        const struct json_value *repair_workspace =
+-            json_get(&reply.data, "candidate_workspace");
+-        const struct json_value *repair_packet_path =
+-            json_get(&reply.data, "repair_packet_path");
+-        ASSERT(repair_workspace && strstr(json_get_str(repair_workspace),
+-                                           "/attempt-2") != NULL);
+-        ASSERT(repair_packet_path &&
+-               access(json_get_str(repair_packet_path), F_OK) == 0);
+-        ASSERT(json_get_int(json_get(&reply.data,
+-                                     "model_context_bytes")) > 0);
+-        ASSERT(zpd_next_is(&reply, "zcode.work.status", absolute_root,
++        const struct json_value *status_proof =
++            json_get(&reply.data, "proof");
++        ASSERT(status_proof &&
++               json_get_bool(json_get(status_proof, "facts_available")));
++        ASSERT(strcmp(json_get_str(json_get(
++                          &reply.data, "remaining_risks")),
++                      "latest candidate failed confined package build or tests") == 0);
++        ASSERT(zpd_next_is(&reply, "zcode.work.run", absolute_root,
+                            saved_work_id, NULL));
+-        (void)snprintf(saved_candidate_workspace,
+-                       sizeof(saved_candidate_workspace), "%s",
+-                       json_get_str(repair_workspace));
+         zcl_command_reply_free(&reply);
+         json_free(&input);
+ 
++    memcpy(after, source_after, sizeof(source_after));
++    memcpy(workspace_out, saved_candidate_workspace, strlen(saved_candidate_workspace) + 1u);
++    memcpy(source_path_out, candidate_source, strlen(candidate_source) + 1u);
++    *total_failures += failures;
++    return true;
++_test_next:
++    *total_failures += failures;
++    return false;
++}
++
++static __attribute__((unused)) int zpd_test_work_start(void)
++{
++    int failures = 0;
++    TEST("zcode work start: goal and profile compose existing task owners") {
++        char root[512];
++        /* The workspace path is a FIXED-LENGTH absolute /tmp path, not a
++         * path under the checkout. The continuation's 512-byte compaction
++         * boundary is tuned against this workspace's length, so a relative
++         * root made the whole family checkout-depth-dependent: the same
++         * tree passed from a ~45-char checkout and failed deterministically
++         * from shallower ones (compact=509, explicit datadir retained) —
++         * and no relative padding could fix it, because the custom-ledger
++         * cases share these fields and sit on the OTHER side of the same
++         * bound. A constant-length workspace (277 bytes, like this test
++         * family's own /tmp/zclassic23-zcode-workspaces roots) pins every
++         * boundary from any checkout depth. */
++        /* 274 bytes total ("/tmp/" + 130 + "/" + 130 + "-" + pid), split
++         * across two components so no filename part approaches NAME_MAX.
++         * Measured anchors: explicit continuation = workspace + 243 (must
++         * reach 512 to trigger default-datadir omission), compact =
++         * workspace + 121 (must stay under 512 once omitted), custom
++         * continuation = workspace + custom + 134 — 274 sits inside every
++         * margin from any checkout depth. */
++        char ws_a[131], ws_b[131];
++        memset(ws_a, 'w', sizeof(ws_a) - 1); ws_a[sizeof(ws_a) - 1] = '\0';
++        memset(ws_b, 'w', sizeof(ws_b) - 1); ws_b[sizeof(ws_b) - 1] = '\0';
++        (void)snprintf(root, sizeof(root), "/tmp/%s/%s-%ld", ws_a, ws_b,
++                       (long)getpid());
++        {   /* directory_create is one level; zpd_fixture must create root itself */
++            char parent[300];
++            (void)snprintf(parent, sizeof(parent), "/tmp/%s", ws_a);
++            ASSERT(platform_directory_ensure(parent, 0700));
++        }
++        ASSERT(zpd_fixture(root, false));
++        char absolute_root[4400];
++        ASSERT(platform_directory_canonical_real(
++            root, absolute_root, sizeof(absolute_root)));
++        uint8_t source_before[32], source_after[32];
++        ASSERT(vcs_tree_capture_path(root, source_before) == VCS_OK);
++
++        struct json_value input;
+         json_init(&input); json_set_object(&input);
+         ASSERT(json_push_kv_str(&input, "workspace", root));
+-        ASSERT(json_push_kv_str(&input, "work", saved_work_id));
++        ASSERT(json_push_kv_str(&input, "goal", "Fix x"));
++        ASSERT(json_push_kv_str(&input, "profile", "quick"));
++        ASSERT(json_push_kv_str(&input, "context_symbol",
++                                "fixture_parse_options"));
+         ASSERT(json_push_kv_bool(&input, "details", true));
+-        request.input = &input;
+-        zcl_command_reply_init(&reply, "zcl.zcode_work_status_test.v1");
+-        zcl_native_handle_zcode_work_status(&request, &reply);
++        struct zcl_command_request request = { .input = &input };
++        struct zcl_command_reply reply;
++        zcl_command_reply_init(&reply, "zcl.zcode_work_start_test.v1");
++        zcl_native_handle_zcode_work_start(&request, &reply);
+         ASSERT(reply.status == ZCL_COMMAND_STATUS_PASSED);
+-        ASSERT(strcmp(json_get_str(json_get(&reply.data, "state")),
+-                      "REPAIR_NEEDED") == 0);
+-        ASSERT(strcmp(json_get_str(json_get(&reply.data, "build_result")),
+-                      "failed") == 0);
+-        const struct json_value *status_proof =
+-            json_get(&reply.data, "proof");
+-        ASSERT(status_proof &&
+-               json_get_bool(json_get(status_proof, "facts_available")));
+-        ASSERT(strcmp(json_get_str(json_get(
+-                          &reply.data, "remaining_risks")),
+-                      "latest candidate failed confined package build or tests") == 0);
+-        ASSERT(zpd_next_is(&reply, "zcode.work.run", absolute_root,
+-                           saved_work_id, NULL));
++        ASSERT(vcs_tree_capture_path(root, source_after) == VCS_OK);
++        ASSERT(memcmp(source_before, source_after, sizeof(source_before)) == 0);
++        char saved_work_id[32];
++        char saved_task_root[65], saved_source_root[65], saved_scope_root[65];
++        if (!zpd_work_start_metadata(reply, absolute_root, saved_work_id, saved_task_root, saved_source_root, saved_scope_root, &failures))
++            goto _test_next;
+         zcl_command_reply_free(&reply);
+         json_free(&input);
+ 
++        char saved_candidate_workspace[4400], candidate_source[4500];
++        if (!zpd_work_start_manual_and_repair(
++                root, absolute_root, saved_work_id, saved_task_root,
++                saved_source_root, saved_scope_root, source_before, source_after,
++                saved_candidate_workspace, candidate_source, &failures))
++            goto _test_next;
++
+         json_init(&input); json_set_object(&input);
+         ASSERT(json_push_kv_str(&input, "workspace", root));
+         ASSERT(json_push_kv_str(&input, "work", saved_work_id));
+@@ -4952,7 +5313,8 @@ static __attribute__((unused)) int zpd_test_work_start(void)
+                       "REPAIR_NEEDED") == 0);
+         ASSERT(zpd_next_is(&reply, "zcode.work.status", absolute_root,
+                            saved_work_id, NULL));
+-        repair_packet_path = json_get(&reply.data, "adapter_packet_path");
++        const struct json_value *repair_packet_path =
++            json_get(&reply.data, "adapter_packet_path");
+         ASSERT(repair_packet_path != NULL);
+         char *repair_packet_text = zpd_read_bounded(
+             json_get_str(repair_packet_path), 2u * 1024u * 1024u);
+@@ -5058,34 +5420,9 @@ static __attribute__((unused)) int zpd_test_work_start(void)
+                            absolute_root, saved_work_id, NULL));
+         ASSERT(strlen(json_get_str(json_get(
+                    &reply.data, "confirmation_identity"))) == 64);
+-        status_proof = json_get(&reply.data, "proof");
+-        ASSERT(status_proof &&
+-               json_get_bool(json_get(status_proof, "facts_available")));
+-        ASSERT(json_get_bool(json_get(status_proof, "compile_satisfied")));
+-        ASSERT(json_get_bool(json_get(status_proof, "test_satisfied")));
+-        ASSERT(json_get_bool(json_get(status_proof, "policy_satisfied")));
+-        ASSERT(json_get_int(json_get(status_proof, "compile_receipts")) > 0);
+-        ASSERT(json_get_int(json_get(status_proof, "test_receipts")) > 0);
+-        const struct json_value *proof_expert =
+-            json_get(&reply.data, "expert");
+-        const char *proof_action_root = proof_expert
+-            ? json_get_str(json_get(proof_expert, "proof_action_root"))
+-            : NULL;
+-        const char *build_output_root = proof_expert
+-            ? json_get_str(json_get(proof_expert, "build_output_root"))
+-            : NULL;
+-        ASSERT(proof_action_root && strlen(proof_action_root) == 64);
+-        ASSERT(build_output_root && strlen(build_output_root) == 64);
+-        ASSERT(strcmp(proof_action_root, saved_action_id) == 0);
+-        ASSERT(json_write(&reply.data, NULL, 0) < 4096u);
+         char zbuild_datadir[4400];
+-        (void)snprintf(zbuild_datadir, sizeof(zbuild_datadir), "%s",
+-                       saved_candidate_workspace);
+-        char *attempt_dir = strrchr(zbuild_datadir, '/');
+-        ASSERT(attempt_dir != NULL);
+-        (void)snprintf(attempt_dir,
+-                       (size_t)(zbuild_datadir + sizeof(zbuild_datadir) -
+-                                attempt_dir), "/zbuild");
++        if (!zpd_work_start_proof_result(reply, saved_action_id, saved_candidate_workspace, zbuild_datadir, &failures))
++            goto _test_next;
+         ASSERT(zpd_assert_work_envelopes(&input, &reply.data, absolute_root,
+                                          zbuild_datadir, saved_action_id));
+         zcl_command_reply_free(&reply);
+@@ -5135,82 +5472,11 @@ static __attribute__((unused)) int zpd_test_work_start(void)
+         request.input = &input;
+         zcl_command_reply_init(&reply, "zcl.zcode_work_status_test.v1");
+         zcl_native_handle_zcode_work_status(&request, &reply);
+-        ASSERT(reply.status == ZCL_COMMAND_STATUS_PASSED);
+-        ASSERT(strcmp(json_get_str(json_get(&reply.data, "review_verdict")),
+-                      "approve") == 0);
+-        status_proof = json_get(&reply.data, "proof");
+-        ASSERT(status_proof &&
+-               json_get_bool(json_get(status_proof, "facts_available")));
+-        ASSERT(json_get_int(json_get(status_proof, "review_receipts")) == 1);
+-        ASSERT(json_get_bool(json_get(status_proof, "review_satisfied")));
+-        ASSERT(strcmp(json_get_str(json_get(
+-                          &reply.data, "next_safe_command")),
+-                      "ask user to confirm exact candidate") == 0);
+-        ASSERT(zpd_next_is(&reply, "app.presentation.release-confirm",
+-                           absolute_root, saved_work_id, NULL));
+-        const char *status_confirmation = json_get_str(json_get(
+-            &reply.data, "confirmation_identity"));
+-        ASSERT(status_confirmation && strlen(status_confirmation) == 64);
+         char status_confirmation_identity[65];
+-        (void)snprintf(status_confirmation_identity,
+-                       sizeof(status_confirmation_identity), "%s",
+-                       status_confirmation);
+-        const struct json_value *status_expert =
+-            json_get(&reply.data, "expert");
+-        const struct json_value *proof_receipt_roots =
+-            json_get(status_proof, "receipt_roots");
+-        ASSERT(json_get_bool(json_get(status_proof,
+-                                      "receipt_roots_available")));
+-        ASSERT(proof_receipt_roots &&
+-               proof_receipt_roots->type == JSON_ARR &&
+-               json_size(proof_receipt_roots) > 0);
+-        uint8_t status_receipt_roots[VCS_ZCODE_PROOF_SET_MAX_RECEIPTS][32];
+-        size_t status_receipt_count = json_size(proof_receipt_roots);
+-        ASSERT(status_receipt_count <= VCS_ZCODE_PROOF_SET_MAX_RECEIPTS);
+-        for (size_t i = 0; i < status_receipt_count; i++) {
+-            const char *root_text = json_get_str(
+-                json_at(proof_receipt_roots, i));
+-            ASSERT(root_text && strlen(root_text) == 64);
+-            ASSERT(zcl_hex_decode_lower(root_text,
+-                                        status_receipt_roots[i], 32));
+-            ASSERT(i == 0 || memcmp(status_receipt_roots[i - 1],
+-                                    status_receipt_roots[i], 32) < 0);
+-        }
+-        uint8_t projected_proof_root[32], status_proof_root_bytes[32];
+-        ASSERT(vcs_zcode_proof_set_root(
+-                   (const uint8_t (*)[32])status_receipt_roots,
+-                   status_receipt_count, projected_proof_root) ==
+-               VCS_ZCODE_DEV_OK);
+-        ASSERT(zcl_hex_decode_lower(json_get_str(json_get(
+-                   status_expert, "proof_set_root")),
+-                   status_proof_root_bytes, 32));
+-        ASSERT(memcmp(projected_proof_root,
+-                      status_proof_root_bytes, 32) == 0);
+-        ASSERT(strcmp(json_get_str(json_get(
+-                          status_expert, "accepted_work_root")), "") == 0);
+-        ASSERT(strlen(json_get_str(json_get(
+-                   status_expert, "review_root"))) == 64);
+-        const char *status_action = json_get_str(json_get(
+-            status_expert, "action_id"));
+-        const char *status_task = json_get_str(json_get(
+-            status_expert, "task_root"));
+-        const char *status_candidate = json_get_str(json_get(
+-            status_expert, "candidate_root"));
+-        const char *status_policy = json_get_str(json_get(
+-            status_expert, "proof_policy_root"));
+-        ASSERT(status_action && status_task && status_candidate &&
+-               status_policy);
+         char status_action_saved[65], status_task_saved[65];
+         char status_candidate_saved[65], status_policy_saved[65];
+-        (void)snprintf(status_action_saved, sizeof(status_action_saved),
+-                       "%s", status_action);
+-        (void)snprintf(status_task_saved, sizeof(status_task_saved),
+-                       "%s", status_task);
+-        (void)snprintf(status_candidate_saved,
+-                       sizeof(status_candidate_saved), "%s",
+-                       status_candidate);
+-        (void)snprintf(status_policy_saved, sizeof(status_policy_saved),
+-                       "%s", status_policy);
++        if (!zpd_work_start_review_result(reply, absolute_root, saved_work_id, status_confirmation_identity, status_action_saved, status_task_saved, status_candidate_saved, status_policy_saved, &failures))
++            goto _test_next;
+         zcl_command_reply_free(&reply);
+         json_free(&input);
+ 
+@@ -5334,7 +5600,7 @@ static __attribute__((unused)) int zpd_test_work_start(void)
+         char stale_confirmation[65];
+         (void)snprintf(stale_confirmation, sizeof(stale_confirmation), "%s",
+                        confirmation_identity);
+-        stale_confirmation[0] = stale_confirmation[0] == '0' ? '1' : '0';
++        zpd_work_start_stale_confirmation(stale_confirmation);
+         ASSERT(json_push_kv_str(&input, "confirmation_identity",
+                                 stale_confirmation));
+         request.input = &input;
+@@ -5360,75 +5626,10 @@ static __attribute__((unused)) int zpd_test_work_start(void)
+         ASSERT(strcmp(json_get_str(json_get(
+                           &reply.data, "confirmation_identity")),
+                       confirmation_identity) == 0);
+-        const char *accepted_root_text = json_get_str(json_get(
+-            json_get(&reply.data, "expert"), "lane_receipt_root"));
+-        ASSERT(accepted_root_text && strlen(accepted_root_text) == 64);
+-        ASSERT(strcmp(json_get_str(json_get(
+-                          json_get(&reply.data, "expert"),
+-                          "accepted_work_root")),
+-                      accepted_root_text) == 0);
+-        char accepted_root_hex[65];
+-        (void)snprintf(accepted_root_hex, sizeof(accepted_root_hex), "%s",
+-                       accepted_root_text);
+-        const char *publication_workspace_text = json_get_str(json_get(
+-            &reply.data, "publication_workspace"));
+-        const char *publication_job_text = json_get_str(json_get(
+-            &reply.data, "publication_job_root"));
+-        const char *accepted_candidate_workspace = json_get_str(json_get(
+-            &reply.data, "candidate_workspace"));
+-        ASSERT(publication_workspace_text && publication_job_text &&
+-               accepted_candidate_workspace);
+-        ASSERT(strcmp(json_get_str(json_get(
+-                          &reply.data, "publication_status")),
+-                      "ACCEPTED_LANE_BOUND") == 0);
+-        ASSERT(!json_get_bool(json_get(
+-            &reply.data, "publication_reused")));
+-        ASSERT(json_get_bool(json_get(
+-            &reply.data, "details_available")));
+-        ASSERT(strlen(json_get_str(json_get(
+-                   &reply.data, "publication_progress_root"))) == 64);
+-        char accepted_publication_workspace[4400];
+-        char publication_job_hex[65];
+-        (void)snprintf(accepted_publication_workspace,
+-                       sizeof(accepted_publication_workspace), "%s",
+-                       publication_workspace_text);
+-        (void)snprintf(publication_job_hex, sizeof(publication_job_hex), "%s",
+-                       publication_job_text);
+-        char resolved_authority_workspace[4400];
+-        ASSERT(platform_directory_canonical_real(
+-            root, resolved_authority_workspace,
+-            sizeof(resolved_authority_workspace)));
+-        ASSERT(reply.next_count == 1);
+-        ASSERT(strcmp(reply.next[0].command,
+-                      "zcode.work.publish") == 0);
+-        struct json_value publication_next;
+-        json_init(&publication_next);
+-        ASSERT(json_read(&publication_next, reply.next[0].input_json,
+-                         strlen(reply.next[0].input_json)));
+-        ASSERT(strcmp(json_get_str(json_get(
+-                          &publication_next, "workspace")),
+-                      resolved_authority_workspace) == 0);
+-        ASSERT(zpd_compact_default_continuation(
+-            &publication_next, zbuild_datadir, saved_task_root));
+-        ASSERT(strcmp(json_get_str(json_get(
+-                          &publication_next, "job_root")),
+-                      publication_job_hex) == 0);
+-        ASSERT(strcmp(json_get_str(json_get(
+-                          &publication_next, "work")), saved_work_id) == 0);
+-        ASSERT(json_get(&publication_next, "task_root") == NULL);
+-        ASSERT(json_get(&publication_next, "candidate_root") == NULL);
+-        const struct zcl_command_spec *publication_next_spec =
+-            zcl_command_registry_find(
+-                zcl_command_catalog(), reply.next[0].command, NULL);
+-        char publication_next_why[160] = {0};
+-        ASSERT(publication_next_spec && zcl_command_registry_input_validate(
+-            publication_next_spec, &publication_next,
+-            publication_next_why, sizeof(publication_next_why)));
+-        json_free(&publication_next);
+-        ASSERT(strcmp(accepted_publication_workspace,
+-                      resolved_authority_workspace) == 0);
+-        ASSERT(strcmp(accepted_candidate_workspace,
+-                      saved_candidate_workspace) == 0);
++        char accepted_root_hex[65], accepted_publication_workspace[4400];
++        char publication_job_hex[65], publication_next_why[160];
++        if (!zpd_work_start_accept_result(reply, root, zbuild_datadir, saved_task_root, saved_work_id, saved_candidate_workspace, accepted_root_hex, accepted_publication_workspace, publication_job_hex, publication_next_why, &failures))
++            goto _test_next;
+         zcl_command_reply_free(&reply);
+         json_free(&input);
+         ASSERT(vcs_tree_capture_path(root, source_after) == VCS_OK);
+@@ -5497,7 +5698,7 @@ static __attribute__((unused)) int zpd_test_work_start(void)
+         char mismatched_job[65];
+         (void)snprintf(mismatched_job, sizeof(mismatched_job), "%s",
+                        publication_job_hex);
+-        mismatched_job[0] = mismatched_job[0] == '0' ? '1' : '0';
++        zpd_work_start_mismatched_job(mismatched_job);
+         json_set_str((struct json_value *)json_get(
+             &guided_publication_next, "job_root"), mismatched_job);
+         zcl_command_reply_init(&reply, "zcl.zcode_work_publish_test.v1");
+@@ -5620,35 +5821,8 @@ static __attribute__((unused)) int zpd_test_work_start(void)
+             };
+             json_set_bool((struct json_value *)json_get(
+                 &guided_publication_next, "details"), false);
+-            char rendered[ZCL_COMMAND_RESULT_BUDGET + 1u];
+-            enum zcl_command_exit exit_code;
+-            size_t len = zcl_command_registry_execute_json(
+-                registry, spec, &context, &guided_publication_next,
+-                false, spec->path, "normal", 0, 0, NULL,
+-                rendered, sizeof(rendered), &exit_code);
+-            ASSERT(len > 0 && len <= ZCL_COMMAND_RESULT_BUDGET);
+-            ASSERT(exit_code == ZCL_COMMAND_EXIT_OK);
+-            struct json_value envelope;
+-            json_init(&envelope);
+-            ASSERT(json_read(&envelope, rendered, len));
+-            ASSERT(json_get_bool(json_get(&envelope, "ok")));
+-            const struct json_value *next = json_get(&envelope, "next");
+-            ASSERT(json_size(next) == 1);
+-            for (size_t i = 0; i < json_size(next); i++)
+-                ASSERT(strcmp(json_get_str(json_get(json_at(next, i), "command")),
+-                              spec->path) != 0);
+-            ASSERT(strcmp(json_get_str(json_get(json_at(next, 0), "command")),
+-                          "discover.schema") == 0);
+-            ASSERT(json_get(json_get(&envelope, "data"), "expert") == NULL);
+-            json_free(&envelope);
+-            context.authority_ceiling = ZCL_COMMAND_AUTH_OPERATOR;
+-            len = zcl_command_registry_execute_json(
+-                registry, spec, &context, &guided_publication_next,
+-                false, spec->path, "normal", 0, 0, NULL,
+-                rendered, sizeof(rendered), &exit_code);
+-            ASSERT(len > 0);
+-            ASSERT(exit_code == ZCL_COMMAND_EXIT_DENIED);
+-            ASSERT(strstr(rendered, "AUTHORITY_DENIED") != NULL);
++        if (!zpd_work_start_publish_render(registry, spec, context, guided_publication_next, &failures))
++            goto _test_next;
+         }
+         json_free(&guided_publication_next);
+         json_free(&accepted_next);
+diff --git a/tools/lint/cyclomatic_complexity_baseline.txt b/tools/lint/cyclomatic_complexity_baseline.txt
+index ac22214f70..673ec5e494 100644
+--- a/tools/lint/cyclomatic_complexity_baseline.txt
++++ b/tools/lint/cyclomatic_complexity_baseline.txt
+@@ -93,7 +93,6 @@ tests/harness/src/test_wallet_destruction_drill.c:act2_bodyless_restore_must_fai
+ tests/harness/src/test_wallet_destruction_drill.c:act3_shielded:61
+ tests/harness/src/test_wallet_destruction_drill.c:act4_recovery_phrase:26
+ tests/harness/src/test_zcode_package_dev.c:zpd_test_twelve_task_benchmark:30
+-tests/harness/src/test_zcode_package_dev.c:zpd_test_work_start:56
+ tools/acme/tls_client.c:tls_client_fetch:36
+ tools/acme/tls_client.c:tls_client_response_parse_bounded:27
+ tools/acme/tls_client.c:tls_client_url_parse:17

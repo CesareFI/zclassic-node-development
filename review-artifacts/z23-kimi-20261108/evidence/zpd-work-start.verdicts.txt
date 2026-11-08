@@ -1,0 +1,9 @@
+Historical saved verdict lines; no new test run for publication.
+Check: focused; saved exit: 0
+SUITE VERDICT mode=cold groups_total=1448 groups_ran=1 groups_cached=0 groups_gated=1447 groups_failed=0 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=3513f119ed58
+ALL TESTS PASSED — 0/1 groups failed, 0 skipped (5.3s wall, 1 workers) [--exact filtered]
+Check: lint-fast; saved exit: 0
+lint-fast: OK
+Check: full-build; saved exit: 2
+Check: full-lint; saved exit: 2
+Check: full-suite; saved exit: 2

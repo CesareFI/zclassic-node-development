@@ -1,0 +1,4 @@
+check	exit	command
+focused	0	make -j4 t-fast-exact ONLY=engine T_FAST_EXACT_ARGS='--jobs=1 --no-cache'
+lint-fast	0	make lint-fast ZCL_LINT_JOBS=4
+asan-ubsan	0	taskset -c 0,1,2,3 make -j4 t-asan ONLY=test_engine
