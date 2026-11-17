@@ -1,0 +1,210 @@
+diff --git a/tests/harness/src/test_zcode_swarm_net.c b/tests/harness/src/test_zcode_swarm_net.c
+index 6ea8a2f3e6..69d6ddf401 100644
+--- a/tests/harness/src/test_zcode_swarm_net.c
++++ b/tests/harness/src/test_zcode_swarm_net.c
+@@ -867,6 +867,17 @@ static bool zwn_prepare_package_transport(
+ 
+ /* ── the loopback node: msg_processor + engine + store + book ───────── */
+ 
++/* Opt-in observations from the real dispatch hook, never a second transport. */
++struct zwn_exact_root_trace {
++    uint8_t root[32];
++    uint64_t requester_peer, provider_peer;
++    const struct vcs_package_manifest *manifest;
++    struct vcs_package_swarm_object want;
++    bool want_seen, reply_seen, data_seen;
++    unsigned announces;
++    const char *failure;
++};
++
+ struct zwn_node {
+     struct main_state ms;
+     struct tx_mempool mempool;
+@@ -885,6 +896,7 @@ struct zwn_node {
+     uint32_t invalid_chunk_events;
+     bool tamper_chunks; /* corrupt DATA replies carrying chunk objects */
+     uint32_t chunk_data_replies[ZWN_MAX_FILES];
++    struct zwn_exact_root_trace *exact_root_trace;
+ };
+ 
+ struct zwn_link {
+@@ -1567,6 +1579,71 @@ static void zwn_frame_reply(struct zwn_node *z, struct p2p_node *node,
+     free(ev->reply);
+ }
+ 
++/* Called only after the real parser/dispatcher delivered a frame and the
++ * engine processed it. Inspect the actual reply before the ordinary send. */
++static void zwn_exact_root_observe(
++    struct zwn_node *z, struct p2p_node *node,
++    const uint8_t *payload, size_t payload_len,
++    const struct vcs_swarm_frame_result *ev)
++{
++    struct zwn_exact_root_trace *t = z->exact_root_trace;
++    if (!t || t->failure)
++        return;
++    struct vcs_package_swarm_message msg;
++    if (!vcs_package_swarm_parse(payload, payload_len, &msg)) {
++        t->failure = "unparseable dispatched frame";
++        return;
++    }
++    if (msg.type == VCS_PACKAGE_SWARM_ANNOUNCE) {
++        t->announces++;
++    } else if (msg.type == VCS_PACKAGE_SWARM_WANT) {
++        if ((uint64_t)node->id != t->requester_peer ||
++            memcmp(msg.body.want.package_root, t->root, 32) != 0) {
++            t->failure = "WANT reached the wrong peer or root";
++            return;
++        }
++        bool manifest = msg.body.want.object_kind ==
++                        VCS_PACKAGE_SWARM_OBJECT_MANIFEST;
++        if (manifest) {
++            if (t->want_seen) {
++                t->failure = "repeated manifest WANT";
++                return;
++            }
++            t->want = msg.body.want;
++            t->want_seen = true;
++        }
++        if (ev->rule || ev->penalty != VCS_SWARM_PENALTY_NONE ||
++            ev->disconnect_peer || !ev->reply || !ev->reply_len) {
++            t->failure = ev->rule ? ev->rule : "provider refused DATA";
++        } else if (manifest) {
++            struct vcs_package_swarm_message reply;
++            t->reply_seen = vcs_package_swarm_parse(
++                    ev->reply, ev->reply_len, &reply) &&
++                reply.type == VCS_PACKAGE_SWARM_DATA &&
++                vcs_package_swarm_verify_data(
++                    t->manifest, &t->want, &reply.body.data);
++            if (!t->reply_seen)
++                t->failure = "provider returned uncorrelated manifest DATA";
++        }
++    } else if (msg.type == VCS_PACKAGE_SWARM_DATA) {
++        if ((uint64_t)node->id != t->provider_peer ||
++            memcmp(msg.body.data.object.package_root, t->root, 32) != 0) {
++            t->failure = "DATA reached the wrong peer or root";
++        } else if (ev->rule || ev->penalty != VCS_SWARM_PENALTY_NONE ||
++                   ev->disconnect_peer) {
++            t->failure = ev->rule ? ev->rule : "consumer refused DATA";
++        } else if (msg.body.data.object.object_kind ==
++                   VCS_PACKAGE_SWARM_OBJECT_MANIFEST) {
++            if (!t->want_seen || !t->reply_seen || t->data_seen ||
++                !vcs_package_swarm_verify_data(
++                    t->manifest, &t->want, &msg.body.data))
++                t->failure = "consumer received uncorrelated manifest DATA";
++            else
++                t->data_seen = true;
++        }
++    }
++}
++
+ static bool zwn_frame(struct msg_processor *mp, struct p2p_node *node,
+                       const uint8_t *payload, size_t payload_len, void *ctx)
+ {
+@@ -1582,6 +1659,7 @@ static bool zwn_frame(struct msg_processor *mp, struct p2p_node *node,
+     struct vcs_swarm_frame_result ev = vcs_swarm_engine_handle_frame(
+         z->engine, (uint64_t)node->id, payload, payload_len, ZWN_DAY,
+         zwn_tick_value(z));
++    zwn_exact_root_observe(z, node, payload, payload_len, &ev);
+     zwn_tcp_frame_observe(z, &ev);
+     if (ev.penalty != VCS_SWARM_PENALTY_NONE)
+         peer_scoring_record(mp->net_mgr, node, zwn_offence(ev.penalty),
+@@ -2081,6 +2159,83 @@ static bool zwn_store_matches(struct vcs_package_store *store,
+     return true;
+ }
+ 
++/* A named provider must serve an unannounced exact root through zpkgswm,
++ * not merely connect or leave a fetch pending until its budget expires. */
++static int zwn_t_exact_root_transport(const struct chain_params *params)
++{
++    int failures = 0;
++    struct zwn_fixture fixture = {0};
++    struct zwn_node a, b;
++    struct zwn_link a_b, b_a;
++    struct zwn_pkg pkg = {0};
++    struct zwn_exact_root_trace trace = {0};
++    TEST("named peer: exact-root WANT and correlated DATA traverse the real "
++         "dispatcher without ANNOUNCE, then complete byte-identically") {
++        ASSERT(zwn_make_package(&pkg, 3, 0x61));
++        const struct zwn_node_spec nodes[] = {{&a, "era"}, {&b, "erb"}};
++        ASSERT(zwn_fixture_nodes(&fixture, params, nodes,
++                                 sizeof(nodes) / sizeof(nodes[0])));
++        ASSERT(zwn_store_package(a.store, &pkg));
++        ASSERT(vcs_package_store_pin(a.store, pkg.root, true) ==
++               VCS_PACKAGE_STORE_OK);
++        struct vcs_package_store_status status = {0};
++        ASSERT(vcs_package_store_package_status(a.store, pkg.root, &status));
++        ASSERT(status.complete && status.pinned);
++        ASSERT(zwn_store_matches(a.store, &pkg));
++        ASSERT(!vcs_package_store_package_status(b.store, pkg.root, &status) ||
++               !status.complete);
++
++        const struct zwn_link_spec links[] = {
++            {&a, &a_b, {10, 3, 0, 2}, "named-consumer"},
++            {&b, &b_a, {10, 3, 0, 1}, "named-provider"},
++        };
++        ASSERT(zwn_fixture_links(&fixture, links,
++                                 sizeof(links) / sizeof(links[0])));
++        memcpy(trace.root, pkg.root, 32);
++        trace.manifest = &pkg.manifest;
++        trace.requester_peer = (uint64_t)a_b.node->id;
++        trace.provider_peer = (uint64_t)b_a.node->id;
++        a.exact_root_trace = b.exact_root_trace = &trace;
++        ASSERT(zwn_meet_side_quiet(&a, &a_b));
++        ASSERT(zwn_meet_side_quiet(&b, &b_a));
++        ASSERT(vcs_swarm_engine_peer_known(a.engine, trace.requester_peer));
++        ASSERT(vcs_swarm_engine_peer_known(b.engine, trace.provider_peer));
++        ASSERT(a_b.sentinel->next == NULL && b_a.sentinel->next == NULL);
++        ASSERT(zwn_pump(&a_b, &b_a, params->pchMessageStart));
++        ASSERT(zwn_pump(&b_a, &a_b, params->pchMessageStart));
++        ASSERT(!trace.want_seen && !trace.reply_seen && !trace.data_seen &&
++               trace.announces == 0 && trace.failure == NULL);
++
++        /* Existing helper bounds this to 600 rounds of the real wire pump. */
++        bool complete = zwn_fetch_package_from_provider(
++            &b, pkg.root, &a_b, &b_a, params->pchMessageStart);
++        char root_hex[65];
++        zcl_hex_encode(pkg.root, 32, root_hex);
++        printf("[exact-root-transport] root=%s provider_peer=%llu "
++               "requester_peer=%llu request=%llu want=%d reply=%d data=%d "
++               "announces=%u complete=%d failure=%s\n", root_hex,
++               (unsigned long long)trace.provider_peer,
++               (unsigned long long)trace.requester_peer,
++               (unsigned long long)trace.want.request_id, trace.want_seen,
++               trace.reply_seen, trace.data_seen, trace.announces, complete,
++               trace.failure ? trace.failure : "none");
++        ASSERT(trace.failure == NULL); /* refusal is a failure, not a timeout */
++        ASSERT(trace.want_seen && trace.want.request_id != 0);
++        ASSERT(trace.reply_seen && trace.data_seen);
++        ASSERT(trace.announces == 0);
++        ASSERT(complete);
++        ASSERT(vcs_package_store_package_status(b.store, pkg.root, &status));
++        ASSERT(status.complete && status.total_bytes == pkg.total_bytes);
++        ASSERT(zwn_store_matches(b.store, &pkg));
++        ASSERT(vcs_package_store_package_status(a.store, pkg.root, &status));
++        ASSERT(status.complete && status.pinned);
++        PASS();
++    } _test_next:
++    zwn_fixture_cleanup(&fixture);
++    zwn_free_package(&pkg);
++    return failures;
++}
++
+ static bool zwn_read_manifest_parse(
+     const uint8_t *manifest_wire, size_t manifest_wire_len,
+     const uint8_t package_root[32], struct vcs_package_manifest *manifest)
+@@ -9104,6 +9259,7 @@ static const struct zwn_case g_zwn_cases[] = {
+     ZWN_CASE(zwn_t_component_tcp_unavailable, 0),
+ #endif
+     ZWN_CASE(zwn_t_golden_plain, 1),
++    ZWN_CASE(zwn_t_exact_root_transport, 1),
+     ZWN_CASE(zwn_t_golden_restart, 3),
+     ZWN_CASE(zwn_t_golden_disconnect, 2),
+     ZWN_CASE(zwn_t_incomplete_carrier_import, 0),
+@@ -9141,6 +9297,7 @@ static const struct zwn_case g_zwn_cases[] = {
+ static const char *const g_zwn_original[] = {
+     "zwn_t_fixture_abort_reacquire", "zwn_t_hosting_refresh_foreign_writer",
+     "zwn_t_golden_plain",
++    "zwn_t_exact_root_transport",
+ #if defined(__linux__) && defined(__x86_64__) && defined(ZCL_TESTING)
+     "zwn_t_component_tcp", "zwn_t_component_tcp_corrupt",
+ #else

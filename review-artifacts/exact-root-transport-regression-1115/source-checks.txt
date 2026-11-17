@@ -1,0 +1,11 @@
+git rev-parse HEAD: exact assigned base PASS
+git diff --check: PASS (exit0)
+git diff --name-only + git diff --cached --quiet: one permitted file, no preexisting staged changes PASS
+tests/harness/src/test_zcode_swarm_net.c:2164:static int zwn_t_exact_root_transport(const struct chain_params *params)
+tests/harness/src/test_zcode_swarm_net.c:9262:    ZWN_CASE(zwn_t_exact_root_transport, 1),
+tests/harness/src/test_zcode_swarm_net.c:9300:    "zwn_t_exact_root_transport",
+source registration inspection: one definition, one shard1 table row (registered shard02), one original-list entry PASS; case execution NOT RUN
+157	0	tests/harness/src/test_zcode_swarm_net.c
+ tests/harness/src/test_zcode_swarm_net.c | 157 +++++++++++++++++++++++++++++++
+ 1 file changed, 157 insertions(+)
+Compilation, runtime groups, lint-fast/full gates, independent review, native landing: NOT RUN; maintainer lane owns execution
