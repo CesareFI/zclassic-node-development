@@ -1,0 +1,122 @@
+diff --git a/tests/harness/src/test_zcode_swarm_net.c b/tests/harness/src/test_zcode_swarm_net.c
+index 69d6ddf401..314d12ae31 100644
+--- a/tests/harness/src/test_zcode_swarm_net.c
++++ b/tests/harness/src/test_zcode_swarm_net.c
+@@ -1579,6 +1579,64 @@ static void zwn_frame_reply(struct zwn_node *z, struct p2p_node *node,
+     free(ev->reply);
+ }
+ 
++static void zwn_exact_root_manifest_reply(
++    struct zwn_exact_root_trace *t, const struct vcs_swarm_frame_result *ev)
++{
++    struct vcs_package_swarm_message reply;
++    t->reply_seen = vcs_package_swarm_parse(ev->reply, ev->reply_len, &reply) &&
++        reply.type == VCS_PACKAGE_SWARM_DATA &&
++        vcs_package_swarm_verify_data(t->manifest, &t->want, &reply.body.data);
++    if (!t->reply_seen)
++        t->failure = "provider returned uncorrelated manifest DATA";
++}
++
++static void zwn_exact_root_want(
++    struct zwn_exact_root_trace *t, const struct p2p_node *node,
++    const struct vcs_package_swarm_object *want,
++    const struct vcs_swarm_frame_result *ev)
++{
++    if ((uint64_t)node->id != t->requester_peer ||
++        memcmp(want->package_root, t->root, 32) != 0) {
++        t->failure = "WANT reached the wrong peer or root";
++        return;
++    }
++    bool manifest = want->object_kind == VCS_PACKAGE_SWARM_OBJECT_MANIFEST;
++    if (manifest) {
++        if (t->want_seen) {
++            t->failure = "repeated manifest WANT";
++            return;
++        }
++        t->want = *want;
++        t->want_seen = true;
++    }
++    if (ev->rule || ev->penalty != VCS_SWARM_PENALTY_NONE ||
++        ev->disconnect_peer || !ev->reply || !ev->reply_len) {
++        t->failure = ev->rule ? ev->rule : "provider refused DATA";
++    } else if (manifest) {
++        zwn_exact_root_manifest_reply(t, ev);
++    }
++}
++
++static void zwn_exact_root_data(
++    struct zwn_exact_root_trace *t, const struct p2p_node *node,
++    const struct vcs_package_swarm_data *data,
++    const struct vcs_swarm_frame_result *ev)
++{
++    if ((uint64_t)node->id != t->provider_peer ||
++        memcmp(data->object.package_root, t->root, 32) != 0) {
++        t->failure = "DATA reached the wrong peer or root";
++    } else if (ev->rule || ev->penalty != VCS_SWARM_PENALTY_NONE ||
++               ev->disconnect_peer) {
++        t->failure = ev->rule ? ev->rule : "consumer refused DATA";
++    } else if (data->object.object_kind == VCS_PACKAGE_SWARM_OBJECT_MANIFEST) {
++        if (!t->want_seen || !t->reply_seen || t->data_seen ||
++            !vcs_package_swarm_verify_data(t->manifest, &t->want, data))
++            t->failure = "consumer received uncorrelated manifest DATA";
++        else
++            t->data_seen = true;
++    }
++}
++
+ /* Called only after the real parser/dispatcher delivered a frame and the
+  * engine processed it. Inspect the actual reply before the ordinary send. */
+ static void zwn_exact_root_observe(
+@@ -1597,50 +1655,9 @@ static void zwn_exact_root_observe(
+     if (msg.type == VCS_PACKAGE_SWARM_ANNOUNCE) {
+         t->announces++;
+     } else if (msg.type == VCS_PACKAGE_SWARM_WANT) {
+-        if ((uint64_t)node->id != t->requester_peer ||
+-            memcmp(msg.body.want.package_root, t->root, 32) != 0) {
+-            t->failure = "WANT reached the wrong peer or root";
+-            return;
+-        }
+-        bool manifest = msg.body.want.object_kind ==
+-                        VCS_PACKAGE_SWARM_OBJECT_MANIFEST;
+-        if (manifest) {
+-            if (t->want_seen) {
+-                t->failure = "repeated manifest WANT";
+-                return;
+-            }
+-            t->want = msg.body.want;
+-            t->want_seen = true;
+-        }
+-        if (ev->rule || ev->penalty != VCS_SWARM_PENALTY_NONE ||
+-            ev->disconnect_peer || !ev->reply || !ev->reply_len) {
+-            t->failure = ev->rule ? ev->rule : "provider refused DATA";
+-        } else if (manifest) {
+-            struct vcs_package_swarm_message reply;
+-            t->reply_seen = vcs_package_swarm_parse(
+-                    ev->reply, ev->reply_len, &reply) &&
+-                reply.type == VCS_PACKAGE_SWARM_DATA &&
+-                vcs_package_swarm_verify_data(
+-                    t->manifest, &t->want, &reply.body.data);
+-            if (!t->reply_seen)
+-                t->failure = "provider returned uncorrelated manifest DATA";
+-        }
++        zwn_exact_root_want(t, node, &msg.body.want, ev);
+     } else if (msg.type == VCS_PACKAGE_SWARM_DATA) {
+-        if ((uint64_t)node->id != t->provider_peer ||
+-            memcmp(msg.body.data.object.package_root, t->root, 32) != 0) {
+-            t->failure = "DATA reached the wrong peer or root";
+-        } else if (ev->rule || ev->penalty != VCS_SWARM_PENALTY_NONE ||
+-                   ev->disconnect_peer) {
+-            t->failure = ev->rule ? ev->rule : "consumer refused DATA";
+-        } else if (msg.body.data.object.object_kind ==
+-                   VCS_PACKAGE_SWARM_OBJECT_MANIFEST) {
+-            if (!t->want_seen || !t->reply_seen || t->data_seen ||
+-                !vcs_package_swarm_verify_data(
+-                    t->manifest, &t->want, &msg.body.data))
+-                t->failure = "consumer received uncorrelated manifest DATA";
+-            else
+-                t->data_seen = true;
+-        }
++        zwn_exact_root_data(t, node, &msg.body.data, ev);
+     }
+ }
+ 

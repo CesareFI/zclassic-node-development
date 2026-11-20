@@ -1,0 +1,46 @@
+Task exact-root-transport-regression-1115
+Fresh native lease story exact-root-transport-repair, issued 2026-11-20T08:11:04Z for tests/harness/src/test_zcode_swarm_net.c, renewed immediately before editing and committing. Initial dev.agent.claim response SHA-256 0a9d36a8399b398bf9c98773f180c584c507609524c3062463bbb4af04bef6c3.
+Contribution base 909a85d7fb4839964938c92bc2d919aa0c87af0b
+Repair parent aaa888ac6d61f64bc798247ac3d5fb87731cf550
+Successor 0298bba8895298e4a43f00fb9e85db6e53a605f6
+Tree debea398948c034017110fed8e513b6b83f8c8f5
+Only changed path tests/harness/src/test_zcode_swarm_net.c, blob 314d12ae310fe9797ed295c138601e4147e078da.
+The observer delegates manifest-reply verification, WANT and DATA handling to three private helpers. Its dispatch hook, first-error and short-circuit order, peer/root/request correlation, exact bytes, bounded fixture and case registration are retained. Source-counted complexities: manifest reply 4, WANT 12, DATA 12, routing 7 (cap 15).
+Independent contributor source review found no blocker on this commit. Git bundle verify and diff --check passed. The contribution is unsigned; R1 controls receiver verification, acceptance, native proof and landing.
+
+Command make -j4 t-fast-exact ONLY=zcode_swarm_net_shard_02 T_FAST_EXACT_ARGS=--no-cache --jobs=1 
+Total scheduler/build/test wall seconds 412.23
+Exit 0
+[exact-root-transport] root=42cad53c8c421023289d6b5d818c73368b9cf469803043775590d57acb301de3 provider_peer=103 requester_peer=102 request=4294967297 want=1 reply=1 data=1 announces=0 complete=1 failure=none
+[zcode-swarm-net-case] shard=2 name=zwn_t_exact_root_transport ms=12 failures=0
+zcode_swarm_net: ran 4 of 27 sub-suites (one shard), 0 failed
+SUITE VERDICT mode=cold groups_total=1604 groups_ran=1 groups_cached=0 groups_gated=1603 groups_failed=0 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=8ec86dcaa1b6
+ALL TESTS PASSED — 0/1 groups failed, 0 skipped (0.3s wall, 1 workers) [--exact filtered]
+
+Command make -j4 t-fast-exact ONLY=zcode_swarm_net T_FAST_EXACT_ARGS=--no-cache --jobs=1 
+Total scheduler/build/test wall seconds 216.00
+Exit 0
+[exact-root-transport] root=42cad53c8c421023289d6b5d818c73368b9cf469803043775590d57acb301de3 provider_peer=113 requester_peer=112 request=4294967297 want=1 reply=1 data=1 announces=0 complete=1 failure=none
+[zcode-swarm-net-case] shard=2 name=zwn_t_exact_root_transport ms=11 failures=0
+zcode_swarm_net: ran 27 of 27 sub-suites (umbrella), 0 failed
+SUITE VERDICT mode=cold groups_total=1604 groups_ran=1 groups_cached=0 groups_gated=1603 groups_failed=0 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=8ec86dcaa1b6
+ALL TESTS PASSED — 0/1 groups failed, 0 skipped (50.8s wall, 1 workers) [--exact filtered]
+
+Compilation PASS: the registered groups built and ran the candidate harness. The repository lint prerequisite also built the candidate development binary.
+First make -j4 lint: exit 2, 222/224 gates passed. check-scanner-immunity and check-standalone-tools-link failed in environment selftests.
+Corrected the tool search path by removing unused and duplicate entries, retaining search order. PATH measured 2420 to 504 bytes; make, sh, bash, git, cc, gcc, clang, ld, ld.lld, llvm-objcopy and systemd-run resolved to the same executables. No lint or source change.
+Second make -j4 lint: exit 0, all 224 passed, four lint workers. The tool reported a 75-second soft performance budget overrun.
+PASS check-scanner-immunity                          67 ms
+PASS check-cyclomatic-complexity                   2501 ms
+PASS check-standalone-tools-link                 253447 ms
+── lint timing: 224 gates, wall 317987 ms, jobs 4 ──
+══ LINT: all checks passed ══
+First and second full-lint scheduler wall seconds: 312.09 320.56 
+
+Original local log identities (bytes and SHA-256)
+shard.log 132828 4afb198f69bd32219ed3255df415112010f6ad5535d24e2525116c5aff13eb4c
+umbrella.log 110685 2dc234666a006c78327c4454971fbc25ecb1fd9c55b13e748538063f838e9995
+lint.log 52770 c488b0074af77c9a723633c5222469cc9dd3926db4966cbb40682f7584ce114c
+lint-path-corrected.log 15244 7ff466851d64be68b02caf6ca756787b35156932ae558886b2bf5f29cf6c418e
+
+Successor bundle 4544 bytes, SHA-256 03e5107548550139187ce470c3a8ba28db3bfa16b62c9b8ff3deb5731e6c5ed1. Native offer root f483559d7c9e1a58b7c2b03b1c6b6abf21a31e1366dd7d71d7d823f3fde89c0e. Local offer acknowledged, pinned, announced once. Receiver retrieval UNKNOWN. R1 formal proof, review decision and landing pending.
