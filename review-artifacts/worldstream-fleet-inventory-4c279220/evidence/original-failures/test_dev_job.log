@@ -1,0 +1,23 @@
+test_parallel: private state retained=/dev/shm/z23-scratch/efd1d92a.TeVWL4/runner-state-af4fc9ae99703dfc00
+dev.job: unknown liveness stays nonterminal until rc... OK
+{"schema":"zcl.result.v1","command":"dev.fleet.job","ok":false,"status":"blocked","request_id":"local-0000000000000001","elapsed_us":8,"budget_ms":750,"elapsed_ms":0,"budget_exceeded":false,"authority":{"policy":"exempt","agent_session":"none (local operator)"},"error":{"code":"COMMAND_COMPAT_ONLY","error_code":"COMMAND_COMPAT_ONLY","message":"canonical adapter is not executable yet","phase":"dispatch","current_state":"REQUEST_FAILED","retryable":false,"human_action_required":false,"next_action":"follow the first next command","mutated":false,"evidence":"z23-dev dev fleet job","blockers":[]},"next":[{"command":"discover.describe","input":{"path":"dev.fleet.job"},"reason":"inspect the compatibility target"}]}
+{"schema":"zcl.result.v1","command":"dev.fleet.job","ok":false,"status":"failed","request_id":"local-cli","elapsed_us":0,"error":{"code":"INVALID_INPUT","error_code":"INVALID_INPUT","message":"invalid type or range for input key 'no_cache'; accepted input keys: operation,peer,peer_binary,cwd,expected_head,task,group,job_id,timeout_s,no_cache; `--help` prints this command's input schema","phase":"normalize","current_state":"REQUEST_FAILED","retryable":false,"human_action_required":true,"next_action":"inspect the input schema","mutated":false,"evidence":"dev.fleet.job","blockers":[]},"next":[{"command":"discover.schema","input":{"path":"dev.fleet.job"},"reason":"inspect the input schema"}]}
+dev.android: plan accepts spaces and rejects shell metacharacters... Android verify fixture requires /usr/bin/7z
+FAIL at tests/harness/src/test_dev_job.c:867 (dj_android_fixture(lane, sizeof(lane)))
+dev.fleet.job: unsafe peer is rejected before SSH... OK
+dev.fleet.job: unknown group refuses before execution... OK
+dev.fleet.job: local registered test constructs the admitted job... OK
+dev.job: argv[0] outside the allowlist is refused... OK
+dev.job: a cwd that is not a registered worktree is refused... OK
+dev.job: linked worktree check excludes primary and foreign paths... OK
+dev.job: a scratch git repo that lists itself is refused as cwd... OK
+dev.job: start returns in under 1 s; wait 1 s reports running... OK
+dev.job: a duplicate start attaches to the running job... OK
+dev.job: wait after exit returns the exact rc and tail... OK
+dev.job: timeout_s=9999 is clamped to 230 and reported... OK
+dev.job: a failing job reports failed, its rc and its error lines... OK
+dev.job: the tail never exceeds its line and byte caps... OK
+dev.job: a child that vanished with no rc line reports lost... OK
+dev.job: wait follows an external log ending in an rc= line... OK
+dev.job: only a complete terminal decimal rc marker completes a log... OK
+dev.job: wait refuses an external log outside the allowed roots... OK

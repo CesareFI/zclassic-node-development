@@ -1,0 +1,110 @@
+/home/z23dev/work/fleet-inventory-20261121/build/bin/zcc cc -std=c23 -O2 -Wall -Wextra -Werror -o build/bin/check_observability_pairing tools/check_observability_pairing.c
+cc -ffile-prefix-map=/home/z23dev/work/fleet-inventory-20261121=/zclassic23 -gno-record-gcc-switches -std=c23 -O2 -Wall -Wextra -Werror -pedantic \
+    -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE \
+     \
+    -Itools/dev \
+    -o "build/bin/service-args.tmp" tools/dev/service_args.c tools/dev/service_args_main.c && \
+    mv -f "build/bin/service-args.tmp" "build/bin/service-args"
+cc -ffile-prefix-map=/home/z23dev/work/fleet-inventory-20261121=/zclassic23 -gno-record-gcc-switches -std=c23 -O2 -Wall -Wextra -Werror -pedantic \
+    -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE \
+     \
+    -Itools/dev -o "build/bin/land-preflight.tmp" tools/dev/land_preflight.c \
+    tools/dev/land_preflight_main.c && mv -f "build/bin/land-preflight.tmp" "build/bin/land-preflight"
+cc -ffile-prefix-map=/home/z23dev/work/fleet-inventory-20261121=/zclassic23 -gno-record-gcc-switches -std=c23 -O2 -Wall -Wextra -Werror -pedantic \
+    -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE \
+     \
+    -Itools/dev -Iplatform/modules/platform/include \
+    -Iplatform/modules/base/include -Iplatform/modules/util/include \
+    -o "build/bin/sovereign-source-identity-selftest.tmp" tools/dev/sovereign_source_identity_selftest.c \
+    tools/dev/sovereign_source_identity_selftest_main.c \
+    tools/dev/dev_script_dir.c \
+    platform/modules/platform/src/os_proc.c && mv -f "build/bin/sovereign-source-identity-selftest.tmp" "build/bin/sovereign-source-identity-selftest"
+/home/z23dev/work/fleet-inventory-20261121/build/bin/zcc cc -ffile-prefix-map=/home/z23dev/work/fleet-inventory-20261121=/zclassic23 -gno-record-gcc-switches -std=c23 -O2 -Wall -Wextra -Werror -pedantic \
+    -D_POSIX_C_SOURCE=200809L  -DZCL_TESTING \
+    -Itools/dev -Iplatform/modules/platform/include \
+    -Iplatform/modules/base/include -Iplatform/modules/util/include \
+    -o build/bin/check_no_hardlink_seeding tools/check_no_hardlink_seeding.c tools/dev/dependency_links.c platform/modules/platform/src/directory_compat.c platform/modules/platform/src/file_metadata.c platform/modules/base/src/safe_alloc.c platform/modules/base/src/result.c platform/modules/util/src/file_tree_ops.c
+/home/z23dev/work/fleet-inventory-20261121/build/bin/zcc cc -std=c23 -D_GNU_SOURCE  \
+    -O2 -Wall -Wextra -Werror -pedantic \
+    -Icontexts/commons/modules/vcs/include -Iplatform/modules/json/include -Iplatform/modules/codec/include -Iplatform/modules/sha3/include \
+    -Icore/modules/crypto/include -Iplatform/modules/base/include -Iplatform/modules/util/include \
+    -Iplatform/modules/platform/include -Ivendor/include -o build/bin/zcode-package-registry-check tools/zcode_package_registry_check.c contexts/commons/modules/vcs/src/package_prepare.c contexts/commons/modules/vcs/src/package_prepare_schema.c contexts/commons/modules/vcs/src/package_manifest.c contexts/commons/modules/vcs/src/package_recipe.c contexts/commons/modules/vcs/src/package_deps.c contexts/commons/modules/vcs/src/package_capsule.c contexts/commons/modules/vcs/src/package_release.c platform/modules/json/src/json.c platform/modules/codec/src/cursor.c platform/modules/sha3/src/sha3.c platform/modules/base/src/cleanse.c platform/modules/base/src/safe_alloc.c platform/modules/base/src/log_level.c platform/modules/platform/src/clock.c platform/modules/platform/src/directory_compat.c \
+    vendor/lib/libsecp256k1.a -lpthread -lm
+/home/z23dev/work/fleet-inventory-20261121/build/bin/zcc cc -std=c2x -O2 -Wall -Wextra -Werror -pedantic -D_POSIX_C_SOURCE=200809L  -Iplatform/modules/base/include -Icore/modules/crypto/include -Iplatform/modules/install/include -Iplatform/modules/platform/include -Iplatform/modules/util/include -Itools/acme -Ivendor/include -o build/bin/z23-bootstrap tools/install/z23_bootstrap.c tools/acme/tls_client.c platform/modules/install/src/front_door_pin.c platform/modules/install/src/front_door_platform.c platform/modules/install/src/front_door_dns_txt.c core/modules/crypto/src/sha256.c platform/modules/base/src/log_level.c platform/modules/base/src/safe_alloc.c platform/modules/platform/src/clock.c \
+	vendor/lib/libssl.a vendor/lib/libcrypto.a \
+	-lpthread -lm \
+	
+/home/z23dev/work/fleet-inventory-20261121/build/bin/zcc cc -ffile-prefix-map=/home/z23dev/work/fleet-inventory-20261121=/zclassic23 -gno-record-gcc-switches -std=c23 -O2 -Wall -Wextra -Werror -pedantic \
+    -D_POSIX_C_SOURCE=200809L  \
+    -Icore/chainparams/include -Icore/params/include -Icore/math/include \
+    -Icore/consensus/include -Icore/modules/chain/include -Iplatform/modules/base/include \
+    -Iplatform/modules/util/include -Icore/modules/core/include -Icore/modules/crypto/include \
+    -Iplatform/modules/codec/include -Icore/modules/primitives/include -Iplatform/modules/support/include \
+    -Iplatform/modules/encoding/include -Icore/modules/script/include -Iplatform/modules/json/include \
+    -Icore/modules/sapling/include -Icontexts/wallet/modules/keys/include -Iengine/modules/event/include \
+    -o build/bin/equihash-params-fact tools/equihash_params_fact.c core/chainparams/src/chainparams.c core/chainparams/src/chainparamsbase.c core/params/src/upgrades.c core/consensus/src/upgrades.c core/math/src/uint256.c platform/modules/encoding/src/utilstrencodings.c platform/modules/base/src/log_level.c platform/modules/base/src/result.c
+/home/z23dev/work/fleet-inventory-20261121/build/bin/zcc cc -ffile-prefix-map=/home/z23dev/work/fleet-inventory-20261121=/zclassic23 -gno-record-gcc-switches -std=c23 -O2 -Wall -Wextra -Werror -pedantic \
+    -Iplatform/modules/base/include \
+    -D_POSIX_C_SOURCE=200809L -o build/bin/z23_bounded_run tools/dev/z23_bounded_run.c platform/modules/base/src/safe_alloc.c
+/home/z23dev/work/fleet-inventory-20261121/build/bin/zcc cc -ffile-prefix-map=/home/z23dev/work/fleet-inventory-20261121=/zclassic23 -gno-record-gcc-switches -std=c23 -O2 -Wall -Wextra -Werror -pedantic -fstack-protector-strong -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 -fcf-protection=full -fPIE \
+    -Iplatform/modules/sha3/include -Icore/modules/crypto/include -Iplatform/modules/base/include \
+    -o build/bin/gate_receipt tools/agent/gate_receipt.c tools/agent/gate_receipt_proc.c tools/agent/gate_receipt_text.c platform/modules/sha3/src/sha3.c platform/modules/base/src/safe_alloc.c -pie -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack -fcf-protection=full
+/home/z23dev/work/fleet-inventory-20261121/build/bin/zcc cc -ffile-prefix-map=/home/z23dev/work/fleet-inventory-20261121=/zclassic23 -gno-record-gcc-switches -std=c23 -O2 -Wall -Wextra -Werror -fstack-protector-strong -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 -fcf-protection=full -fPIE \
+    -Iplatform/modules/sha3/include -Icore/modules/crypto/include -Iplatform/modules/support/include -Iplatform/modules/base/include \
+    -o build/bin/agent_sha3 tools/agent/agent_sha3.c platform/modules/sha3/src/sha3.c -pie -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack -fcf-protection=full
+/home/z23dev/work/fleet-inventory-20261121/build/bin/zcc cc -ffile-prefix-map=/home/z23dev/work/fleet-inventory-20261121=/zclassic23 -gno-record-gcc-switches -std=c23 -D_POSIX_C_SOURCE=200809L -O2 -Wall -Wextra -Werror -pedantic \
+    -Icognition/modules/retrieval/include -Iplatform/modules/base/include -Iplatform/modules/sha3/include -o build/bin/retrieval-eval \
+    tools/retrieval_eval.c cognition/modules/retrieval/src/retrieval_eval.c \
+    cognition/modules/retrieval/src/retrieval_eval_result.c \
+    cognition/modules/retrieval/src/retrieval_experiment.c \
+    cognition/modules/retrieval/src/retrieval_profile.c \
+    platform/modules/base/src/safe_alloc.c platform/modules/base/src/log_level.c \
+    platform/modules/sha3/src/sha3.c
+cc -ffile-prefix-map=/home/z23dev/work/fleet-inventory-20261121=/zclassic23 -gno-record-gcc-switches -std=c23 -O2 -Wall -Wextra -Werror -pedantic \
+    -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE \
+     \
+    -Itools/dev -Iplatform/modules/platform/include \
+    -Iplatform/modules/base/include -Iplatform/modules/util/include \
+    -o "build/bin/retrieval-profile-sweep.tmp" tools/dev/retrieval_profile_sweep.c \
+    tools/dev/retrieval_profile_sweep_main.c \
+    tools/dev/dev_script_dir.c \
+    platform/modules/platform/src/os_proc.c && mv -f "build/bin/retrieval-profile-sweep.tmp" "build/bin/retrieval-profile-sweep"
+cc -ffile-prefix-map=/home/z23dev/work/fleet-inventory-20261121=/zclassic23 -gno-record-gcc-switches -std=c23 -O2 -Wall -Wextra -Werror -pedantic \
+    -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE \
+     \
+    -Itools/dev -Iplatform/modules/platform/include \
+    -Iplatform/modules/base/include -Iplatform/modules/util/include \
+    -o "build/bin/check-fleet-source-status.tmp" tools/dev/fleet_source_status_selftest.c \
+    tools/dev/fleet_source_status_selftest_main.c \
+    tools/dev/dev_script_dir.c \
+    platform/modules/platform/src/os_proc.c && mv -f "build/bin/check-fleet-source-status.tmp" "build/bin/check-fleet-source-status"
+/home/z23dev/work/fleet-inventory-20261121/build/bin/zcc cc -ffile-prefix-map=/home/z23dev/work/fleet-inventory-20261121=/zclassic23 -gno-record-gcc-switches -std=c23 -O2 -Wall -Wextra -Werror -pedantic -D_POSIX_C_SOURCE=200809L \
+    -Itools/dev -o build/bin/z23-fleet-observe tools/dev/fleet_observe.c tools/dev/fleet_observe_main.c
+/home/z23dev/work/fleet-inventory-20261121/build/bin/zcc cc -ffile-prefix-map=/home/z23dev/work/fleet-inventory-20261121=/zclassic23 -gno-record-gcc-switches -std=c23 -O2 -Wall -Wextra -Werror -pedantic \
+    -Wno-stringop-overflow -D_POSIX_C_SOURCE=200809L  \
+    -Iplatform/modules/json/include -Iplatform/modules/base/include -o build/bin/arena_product_journey_c23 tools/arena_product_journey_c23.c platform/modules/json/src/json.c platform/modules/base/src/safe_alloc.c platform/modules/base/src/cleanse.c platform/modules/base/src/log_level.c -lpthread -lm
+cc -ffile-prefix-map=/home/z23dev/work/fleet-inventory-20261121=/zclassic23 -gno-record-gcc-switches -std=c23 -O2 -Wall -Wextra -Werror -pedantic \
+    -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE \
+     \
+    -Itools/dev -Iplatform/modules/platform/include \
+    -Iplatform/modules/base/include -Iplatform/modules/util/include \
+    -o "build/bin/repro-network-policy-selftest.tmp" tools/dev/repro_network_policy.c \
+    tools/dev/repro_network_policy_main.c \
+    tools/dev/dev_script_dir.c \
+    platform/modules/platform/src/os_proc.c && mv -f "build/bin/repro-network-policy-selftest.tmp" "build/bin/repro-network-policy-selftest"
+cc -ffile-prefix-map=/home/z23dev/work/fleet-inventory-20261121=/zclassic23 -gno-record-gcc-switches -std=c23 -O2 -Wall -Wextra -Werror -pedantic \
+    -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE \
+     \
+    -Itools/dev -Iplatform/modules/platform/include \
+    -Iplatform/modules/base/include -Iplatform/modules/util/include \
+    -o "build/bin/checkout-lock-selftest.tmp" tools/dev/checkout_lock_selftest.c \
+    tools/dev/checkout_lock_selftest_main.c \
+    tools/dev/dev_script_dir.c \
+    platform/modules/platform/src/os_proc.c && mv -f "build/bin/checkout-lock-selftest.tmp" "build/bin/checkout-lock-selftest"
+make[2]: warning: jobserver unavailable: using -j1.  Add '+' to parent make rule.
+tor-ready: real Tor archives already present (vendor/tor)
+[check_standalone_tools_link] Android recovery: cross-build target confirmed
+/usr/bin/ld: cannot find -l:libXtst.so.6: No such file or directory
+collect2: error: ld returned 1 exit status
+check-standalone-tools-link: FATAL - X11 runtime qualification failed
+make[1]: *** [Makefile:17844: proof-lint-prebuild] Error 2

@@ -1,0 +1,38 @@
+test_parallel: private state retained=/dev/shm/z23-scratch/efd1d92a.TeVWL4/runner-state-c720dc03ab03b47100
+shard partition: every sub-suite is owned by exactly one registered shard of the umbrella... OK
+zcode package dev prepare: base tree derives all canonical roots... base package root: a4de0ccb82fd5e4d708e6624dd1fc529a5cb4b226caf1bf27bc196b9d99a9d11
+sha3 package root: ee1f8432a62e15de875a1cf5b45a5c13c4b6c53e754f3eb8f12f1c952baec603
+OK
+[zcode-package-dev-case] shard=3 name=zpd_row_base ms=16 failures=0
+zcode package dev prepare: local control stores do not alter package roots... OK
+[zcode-package-dev-case] shard=3 name=zpd_row_control_stores ms=1 failures=0
+zcode package dev prepare: an unstated chain_id is the active chain... OK
+[zcode-package-dev-case] shard=3 name=zpd_row_default_chain_id ms=0 failures=0
+zcode package dev prepare: exact file selection is closed and root-bound... OK
+[zcode-package-dev-case] shard=3 name=zpd_row_exact_file_selection ms=1 failures=0
+zcode package dev prepare: symlink, special and unknown fields fail closed... OK
+[zcode-package-dev-case] shard=3 name=zpd_row_fail_closed ms=1 failures=0
+zcode package dev prepare: programs are declared, never inferred... OK
+[zcode-package-dev-case] shard=3 name=zpd_row_prepare_programs ms=2 failures=0
+zcode project inspect: human summary is read-only and root-free by default... OK
+[zcode-package-dev-case] shard=3 name=zpd_row_project_inspect ms=1 failures=0
+zcode project init: plan is read-only and commit is exact and exclusive... OK
+[zcode-package-dev-case] shard=3 name=zpd_row_project_init ms=3 failures=0
+zcode reuse plan: exact, partial, absent, incompatible and conflict... OK
+[zcode-package-dev-case] shard=3 name=zpd_row_reuse_plan ms=0 failures=0
+zcode work start: exact SPDX filter selects one root-bound reuse... OK
+[zcode-package-dev-case] shard=3 name=zpd_row_work_start_license_filter ms=4 failures=0
+zcode work start: license filter cannot hand off a superseded root... 2026-11-21T16:30:36Z INFO [codeindex] cognition/modules/codeindex/src/codeindex_build.c:763 rebuild_report(): index: rebuilt (9 ms)
+OK
+[zcode-package-dev-case] shard=3 name=zpd_row_work_start_license_lifecycle ms=398 failures=0
+zcode work toolchain: names capsule and whether this binary can prove... OK
+zcode work toolchain: package hosting alone does not prove a restart will enable compile work... OK
+zcode work toolchain: join next names this datadir... OK
+[zcode-package-dev-case] shard=3 name=zpd_row_work_toolchain ms=181 failures=0
+commons join posture is the same on toolchain, offered, and guide... OK
+[zcode-package-dev-case] shard=3 name=zpd_row_commons_join_front_doors ms=152 failures=0
+zcode work standard: warning-fatal sanitizer evidence reaches acceptance... 2026-11-21T16:30:37Z INFO [codeindex] cognition/modules/codeindex/src/codeindex_build.c:763 rebuild_report(): index: rebuilt (7 ms)
+standard admission failed: HANDOFF_REFUSED: isolated candidate workspace could not be created
+FAIL at tests/harness/src/test_zcode_package_dev.c:6125 (reply.status == ZCL_COMMAND_STATUS_PASSED)
+[zcode-package-dev-case] shard=3 name=zpd_row_standard_profile ms=30 failures=1
+zcode_package_dev: ran 14 of 19 sub-suites (one shard), 1 failed

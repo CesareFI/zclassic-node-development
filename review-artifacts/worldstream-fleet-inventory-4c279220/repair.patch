@@ -1,0 +1,578 @@
+From 4c27922080702f0c6b305e9222b5c98d8d865d0e Mon Sep 17 00:00:00 2001
+From: Worldstream Development <development@example.invalid>
+Date: Sat, 21 Nov 2026 16:50:49 +0100
+Subject: [PATCH] Keep fleet machine inventory reads from creating local state
+
+Classify missing private directories separately from invalid or inaccessible state. Read only the existing operator, seed and roster on inventory queries and retain the enrollment write path.
+
+Co-Authored-By: GPT-6 <noreply@openai.com>
+
+diff --git a/platform/modules/platform/include/platform/state_root.h b/platform/modules/platform/include/platform/state_root.h
+index f5966e7de8add946a170ce72d255bbe2e0bf940a..f7bd16c0f9b7df504e7f5aa44ab84040cecd79fb 100644
+--- a/platform/modules/platform/include/platform/state_root.h
++++ b/platform/modules/platform/include/platform/state_root.h
+@@ -8,6 +8,9 @@ bool platform_state_root(char *out, size_t out_size);
+ /* Resolve the development state root only when its z23 and dev directories
+  * already exist and are owner-private/no-link.  Never creates or repairs. */
+ bool platform_state_root_existing(char *out, size_t out_size);
++/* As above. On failure, absent is true only for a missing component of an
++ * otherwise traversable path. Invalid selectors and refused paths fail closed. */
++bool platform_state_root_lookup(char *out, size_t out_size, bool *absent);
+ /* Persistent app state, separate from the development root. Creates only
+  * owner-private directories beneath an absolute platform-selected base. */
+ bool platform_application_state_root(char *out, size_t out_size);
+diff --git a/platform/modules/platform/src/state_root.c b/platform/modules/platform/src/state_root.c
+index 1423368698ad27b11255f13c570e1cef4d393f66..73c7f237ebc3350e01a6d8ed6d16c649f667bc43 100644
+--- a/platform/modules/platform/src/state_root.c
++++ b/platform/modules/platform/src/state_root.c
+@@ -16,11 +16,15 @@ static bool state_root_join(char *out, size_t cap, const char *base,
+     return n > 0 && (size_t)n < cap;
+ }
+ 
+-static bool state_root_directory_existing(const char *path)
++static bool state_root_component_existing(const char *path, bool *absent);
++
++static bool state_root_directory_existing(const char *path, bool *absent)
+ {
+     uintptr_t retained = 0;
+-    if (!platform_private_directory_open_validated_traverse(path, &retained))
++    if (!platform_private_directory_open_validated_traverse(path, &retained)) {
++        if (absent) (void)state_root_component_existing(path, absent);
+         return false;
++    }
+     platform_private_directory_close(retained);
+     return true;
+ }
+@@ -34,6 +38,7 @@ static bool state_root_directory_existing(const char *path)
+ #include <shlobj.h>
+ #include <knownfolders.h>
+ #include "private_acl_internal.h"
++#include "platform/windows_path.h"
+ 
+ static bool state_root_acl_prepare(const char *path, wchar_t wide[32768],
+                                    struct platform_private_acl *acl)
+@@ -139,45 +144,103 @@ static bool state_root_base_from_known_folder(char base[32768])
+     return n > 1;
+ }
+ 
+-static bool state_root_resolve(char *out, size_t cap, bool create, bool application)
++static bool state_root_component_existing(const char *path, bool *absent)
+ {
+-    char base[32768], z23[32768];
+-    wchar_t env_base[32768];
+-    DWORD env_len = GetEnvironmentVariableW(L"ZCL_STATE_ROOT", env_base,
+-                                            32768);
+-    if (env_len > 0 && env_len < 32768) {
+-        int n = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, env_base,
+-                                    -1, base, sizeof(base), NULL, NULL);
+-        if (n <= 1) return false;
+-    } else if (env_len >= 32768) {
+-        return false;
+-    } else if (!state_root_base_from_known_folder(base)) {
++    wchar_t wide[32768];
++    if (!platform_windows_wide_path(path, wide)) return false;
++    HANDLE dir = CreateFileW(wide, FILE_READ_ATTRIBUTES,
++                             FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
++                             NULL, OPEN_EXISTING,
++                             FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
++                             NULL);
++    if (dir == INVALID_HANDLE_VALUE) {
++        DWORD error = GetLastError();
++        if (absent) *absent = error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND;
+         return false;
+     }
++    BY_HANDLE_FILE_INFORMATION info;
++    bool ok = state_root_acl_target_valid(dir, &info);
++    CloseHandle(dir);
++    return ok;
++}
++
++/* Check each prefix before classifying a missing child. The drive or UNC
++ * share must itself be reachable before a child can be reported absent. */
++static bool state_root_windows_base_existing(char *base, bool *absent)
++{
++    char *part = base;
++    if (platform_path_drive_absolute(base)) {
++        part += 3;
++    } else if (platform_path_unc_absolute(base)) {
++        part += 2 + strcspn(base + 2, "/\\");
++        part += 1 + strcspn(part + 1, "/\\");
++    }
++    if (part != base) {
++        char saved = *part;
++        *part = '\0';
++        bool reachable = state_root_component_existing(base, NULL);
++        *part = saved;
++        if (!reachable) return false;
++    }
++    while (*part) {
++        part += strspn(part, "/\\");
++        if (!*part) break;
++        part += strcspn(part, "/\\");
++        char saved = *part;
++        *part = '\0';
++        bool ok = state_root_component_existing(base, absent);
++        *part = saved;
++        if (!ok) return false;
++    }
++    return true;
++}
++
++static bool state_root_windows_base(char base[32768])
++{
++    wchar_t env_base[32768];
++    DWORD length = GetEnvironmentVariableW(L"ZCL_STATE_ROOT", env_base, 32768);
++    if (length >= 32768) return false;
++    if (!length) return state_root_base_from_known_folder(base);
++    return WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, env_base, -1,
++                               base, 32768, NULL, NULL) > 1;
++}
++
++static bool state_root_resolve(char *out, size_t cap, bool create, bool application,
++                               bool *absent)
++{
++    char base[32768], z23[32768];
++    if (!state_root_windows_base(base)) return false;
+     if (application && !platform_path_is_absolute(base)) return false;
++    if (absent && !state_root_windows_base_existing(base, absent)) return false;
+     if (!state_root_join(z23, sizeof(z23), base, "z23") ||
+         !(create ? state_root_ensure_private(z23)
+-                  : state_root_directory_existing(z23)))
++                  : state_root_directory_existing(z23, absent)))
+         return false;
+     return state_root_join(out, cap, z23, application ? "apps" : "dev") &&
+            (create ? state_root_ensure_private(out)
+-                   : state_root_directory_existing(out));
++                   : state_root_directory_existing(out, absent));
+ }
+ 
+ #else
+ #include <errno.h>
+ #include <sys/stat.h>
+ 
+-static bool ensure_parent_component(const char *path, bool create)
++static bool state_root_component_existing(const char *path, bool *absent)
++{
++    struct stat info;
++    if (lstat(path, &info) == 0) return S_ISDIR(info.st_mode);
++    if (absent) *absent = errno == ENOENT;
++    return false;
++}
++
++static bool ensure_parent_component(const char *path, bool create, bool *absent)
+ {
+     if (create && mkdir(path, 0700) != 0 && errno != EEXIST)
+         return false;
+-    struct stat info;
+-    return lstat(path, &info) == 0 && S_ISDIR(info.st_mode) &&
+-           !S_ISLNK(info.st_mode);
++    return state_root_component_existing(path, absent);
+ }
+ 
+-static bool ensure_parent(const char *path, bool create)
++static bool ensure_parent(const char *path, bool create, bool *absent)
+ {
+     char copy[4096];
+     size_t length = path ? strlen(path) : 0;
+@@ -186,7 +249,7 @@ static bool ensure_parent(const char *path, bool create)
+     for (char *p = copy + (copy[0] == '/' ? 1 : 0); ; ++p) {
+         if (*p != '/' && *p != '\0') continue;
+         char saved = *p; *p = '\0';
+-        if (copy[0] && !ensure_parent_component(copy, create))
++        if (copy[0] && !ensure_parent_component(copy, create, absent))
+             return false;
+         *p = saved;
+         if (!saved) break;
+@@ -203,33 +266,41 @@ static bool state_root_posix_base(char base[4096])
+     return n > 0 && n < 4096;
+ }
+ 
+-static bool state_root_resolve(char *out, size_t cap, bool create, bool application)
++static bool state_root_resolve(char *out, size_t cap, bool create, bool application,
++                               bool *absent)
+ {
+     char base[4096], z23[4096];
+     if (!state_root_posix_base(base)) return false;
+     if (application && !platform_path_is_absolute(base)) return false;
+-    if(!ensure_parent(base, create)||
++    if(!ensure_parent(base, create, absent)||
+        !state_root_join(z23,sizeof(z23),base,"z23")||
+        !(create ? platform_private_directory_ensure(z23)
+-                : state_root_directory_existing(z23))) return false;
++                : state_root_directory_existing(z23, absent))) return false;
+     return state_root_join(out,cap,z23,application ? "apps" : "dev")&&
+            (create ? platform_private_directory_ensure(out)
+-                   : state_root_directory_existing(out));
++                   : state_root_directory_existing(out, absent));
+ }
+ 
+ #endif
+ 
+ bool platform_state_root(char *out, size_t cap)
+ {
+-    return state_root_resolve(out, cap, true, false);
++    return state_root_resolve(out, cap, true, false, NULL);
+ }
+ 
+ bool platform_state_root_existing(char *out, size_t cap)
+ {
+-    return state_root_resolve(out, cap, false, false);
++    return state_root_resolve(out, cap, false, false, NULL);
++}
++
++bool platform_state_root_lookup(char *out, size_t cap, bool *absent)
++{
++    if (!absent) return false;
++    *absent = false;
++    return state_root_resolve(out, cap, false, false, absent);
+ }
+ 
+ bool platform_application_state_root(char *out, size_t cap)
+ {
+-    return state_root_resolve(out, cap, true, true);
++    return state_root_resolve(out, cap, true, true, NULL);
+ }
+diff --git a/platform/modules/platform/tests/state_root_windows_acceptance.c b/platform/modules/platform/tests/state_root_windows_acceptance.c
+index 51ad0451d8fd2f15380f8bacc1c89802652b7bcf..4785509c1c579e4de10f61365f87fcff71d7e94c 100644
+--- a/platform/modules/platform/tests/state_root_windows_acceptance.c
++++ b/platform/modules/platform/tests/state_root_windows_acceptance.c
+@@ -32,10 +32,11 @@ static bool existing_root_missing_is_read_only(const char *actual,
+                                                 const wchar_t *dev)
+ {
+     char existing[32768], recreated[32768];
++    bool absent = false;
+     return platform_state_root_existing(existing, sizeof(existing)) &&
+            strcmp(existing, actual) == 0 && RemoveDirectoryW(dev) &&
+-           !platform_state_root_existing(existing, sizeof(existing)) &&
+-           GetFileAttributesW(dev) == INVALID_FILE_ATTRIBUTES &&
++           !platform_state_root_lookup(existing, sizeof(existing), &absent) &&
++           absent && GetFileAttributesW(dev) == INVALID_FILE_ATTRIBUTES &&
+            platform_state_root(recreated, sizeof(recreated));
+ }
+ 
+@@ -60,13 +61,32 @@ static bool unsafe_root_is_not_repaired(
+            SetEnvironmentVariableW(L"ZCL_STATE_ROOT", base);
+ }
+ 
++static bool unavailable_drive_is_refused(const wchar_t *base)
++{
++    DWORD drives = GetLogicalDrives();
++    if (!drives) return false;
++    for (unsigned i = 0; i < 26; ++i) {
++        if ((drives & (1ul << i)) != 0) continue;
++        wchar_t path[] = L"A:\\not-present";
++        path[0] = (wchar_t)(L'A' + i);
++        char existing[32768];
++        bool absent = true;
++        bool refused = SetEnvironmentVariableW(L"ZCL_STATE_ROOT", path) &&
++                       !platform_state_root_lookup(existing, sizeof(existing), &absent) &&
++                       !absent;
++        return SetEnvironmentVariableW(L"ZCL_STATE_ROOT", base) && refused;
++    }
++    return true; /* All drive letters are in use. */
++}
++
+ static bool state_root_read_only_cases(
+     const char *actual, const wchar_t *dev, const wchar_t *permissive,
+     const wchar_t *base, wchar_t unsafe_z23[MAX_PATH],
+     wchar_t unsafe_dev[MAX_PATH])
+ {
+     char tiny[4];
+-    return !platform_state_root(tiny, sizeof(tiny)) &&
++    return unavailable_drive_is_refused(base) &&
++           !platform_state_root(tiny, sizeof(tiny)) &&
+            existing_root_missing_is_read_only(actual, dev) &&
+            unsafe_root_is_not_repaired(permissive, base, unsafe_z23,
+                                        unsafe_dev);
+diff --git a/tests/harness/src/test_fleet_enrol.c b/tests/harness/src/test_fleet_enrol.c
+index edff3cc6911b1f273a26c52902237ef15cd47455..6416ca3834ff4c0e527fac300208f9dd60235e26 100644
+--- a/tests/harness/src/test_fleet_enrol.c
++++ b/tests/harness/src/test_fleet_enrol.c
+@@ -1015,6 +1015,86 @@ static bool fe_machines_call(const char *body, struct zcl_command_reply *reply,
+     return true;
+ }
+ 
++/* Exercise the registered inventory leaf and its typed refusal. */
++static bool fe_inventory_outcome(const char *code)
++{
++    struct zcl_command_reply reply;
++    char why[160];
++    if (!fe_machines_call("{}", &reply, why, sizeof(why))) return false;
++    bool ok = strcmp(reply.error.code, code) == 0;
++    if (!code[0])
++        ok = ok && reply.exit_code == ZCL_COMMAND_EXIT_OK &&
++             json_get_int(json_get(&reply.data, "total")) == 0 &&
++             !json_get_bool(json_get(&reply.data, "joined"));
++    else
++        ok = ok && reply.exit_code != ZCL_COMMAND_EXIT_OK;
++    zcl_command_reply_free(&reply);
++    return ok;
++}
++
++static int test_fe_machines_absent(void)
++{
++    int failures = 0;
++    struct stat st;
++    TEST("fleet machines keeps missing and empty state unchanged on repeated reads") {
++        fe_isolate("machines-absent");
++        for (int i = 0; i < 2; ++i) {
++            ASSERT(fe_inventory_outcome(""));
++            ASSERT(lstat(g_fe_state, &st) != 0 && errno == ENOENT);
++        }
++        ASSERT(mkdir(g_fe_state, 0700) == 0);
++        ASSERT(fe_inventory_outcome(""));
++        ASSERT(fe_inventory_outcome(""));
++        ASSERT(rmdir(g_fe_state) == 0); /* still empty */
++        PASS();
++    } _test_next:;
++    return failures;
++}
++
++static int test_fe_machines_invalid_state(void)
++{
++    int failures = 0;
++    char path[FLEET_ENROL_PATH_MAX];
++    FILE *file;
++    TEST("fleet machines distinguishes invalid private state and leaves from absence") {
++        fe_isolate("machines-invalid");
++        ASSERT(mkdir(g_fe_home, 0700) == 0);
++        ASSERT(symlink(g_fe_home, g_fe_state) == 0);
++        ASSERT(fe_inventory_outcome("FLEET_OPERATOR_UNREADABLE"));
++        ASSERT(unlink(g_fe_state) == 0);
++        ASSERT(rmdir(g_fe_home) == 0);
++        file = fopen(g_fe_state, "wb");
++        ASSERT(file && fclose(file) == 0);
++        ASSERT(fe_inventory_outcome("FLEET_OPERATOR_UNREADABLE"));
++        ASSERT(unlink(g_fe_state) == 0);
++        ASSERT(fleet_enrol_state_path("box.ed25519", path, sizeof(path)));
++        ASSERT(symlink("missing-seed", path) == 0);
++        ASSERT(fe_inventory_outcome("FLEET_KEY_UNAVAILABLE"));
++        ASSERT(unlink(path) == 0);
++        file = fopen(path, "wb");
++        ASSERT(file && fclose(file) == 0);
++        ASSERT(fe_inventory_outcome("FLEET_KEY_UNAVAILABLE"));
++        ASSERT(unlink(path) == 0);
++        ASSERT(fleet_enrol_state_path_existing("machines.roster", path, sizeof(path)));
++        ASSERT(symlink("missing-roster", path) == 0);
++        ASSERT(fe_inventory_outcome("FLEET_ROSTER_UNREADABLE"));
++        ASSERT(unlink(path) == 0);
++        ASSERT(fleet_enrol_state_path_existing("operator.pub", path, sizeof(path)));
++        file = fopen(path, "wb");
++        ASSERT(file && fclose(file) == 0);
++        ASSERT(fe_inventory_outcome("FLEET_OPERATOR_UNREADABLE"));
++        ASSERT(unlink(path) == 0);
++        char *leaf = strrchr(path, '/');
++        ASSERT(leaf != NULL);
++        *leaf = '\0';
++        ASSERT(chmod(path, 0755) == 0);
++        ASSERT(fe_inventory_outcome("FLEET_OPERATOR_UNREADABLE"));
++        ASSERT(chmod(path, 0700) == 0);
++        PASS();
++    } _test_next:;
++    return failures;
++}
++
+ static bool fe_row_at(const char *name, uint8_t op_byte, uint8_t box_byte,
+                       uint16_t port, const char *onion, int64_t now,
+                       char *out, size_t cap)
+@@ -4528,6 +4608,8 @@ int test_fleet_enrol(void)
+     failures += test_fe_onion_refused_at_mint();
+     failures += test_fe_join_onion_from_datadir();
+     failures += test_fe_phone_state_root();
++    failures += test_fe_machines_absent();
++    failures += test_fe_machines_invalid_state();
+     failures += test_fe_machines_collapse();
+     failures += test_fe_machines_page();
+     failures += test_fe_render();
+diff --git a/tools/command/native_fleet_enrol_command.c b/tools/command/native_fleet_enrol_command.c
+index 88f5593a4c0a51510d5b78cca87997e4c63ebdeb..4ec71da50a0cc69a098d20d2f69f2d51327e8dc6 100644
+--- a/tools/command/native_fleet_enrol_command.c
++++ b/tools/command/native_fleet_enrol_command.c
+@@ -1368,46 +1368,65 @@ static void fe_machines_anchor(const struct zcl_command_request *request,
+     fe_anchor_render(reply, &anchor, false);
+ }
+ 
+-static void fe_machines(const struct zcl_command_request *request,
+-                        struct zcl_command_reply *reply)
++static bool fe_inventory_read(struct zcl_command_reply *reply,
++                              uint8_t operator_pubkey[FLEET_ENROL_PUBKEY_BYTES],
++                              bool *joined, bool *own_present,
++                              struct fe_collect *collect, struct fleet_roster_scan *scan)
+ {
+-    uint8_t operator_pubkey[FLEET_ENROL_PUBKEY_BYTES];
+-    uint8_t seed[FLEET_ENROL_SEED_BYTES], own[FLEET_ENROL_PUBKEY_BYTES];
+-    char hex[FLEET_ENROL_PUBKEY_HEX];
+-    struct json_value array;
+-    struct fe_page page = {0};
+-    struct fe_collect collect = {0};
+-    struct fe_list list = {0};
+-    struct fleet_roster_scan scan = {0};
++    uint8_t seed[FLEET_ENROL_SEED_BYTES];
+     const char *why = NULL;
+-    bool joined = false, own_present = false;
+-    if (!fe_machines_page(request, &page, reply))
+-        return;
+-    list.skip = page.offset;
+-    list.limit = page.limit;
++    bool present;
++    if (!fleet_enrol_directory_present(&present)) {
++        fe_fail(reply, "FLEET_OPERATOR_UNREADABLE", "resolve",
++                "this box cannot read its private fleet state directory.",
++                FLEET_ENROL_WHY_STATE_ROOT);
++        return false;
++    }
++    if (!present) return true;
+     /* Whose roster is this? On a box that joined a fleet, the operator is
+      * the key the owner pasted; on the manager, it is this box's own key.
+      * A box that has done neither has no roster, which is a state, not an
+      * error. */
+-    if (!fleet_enrol_operator_read(operator_pubkey, &joined, &why)) {
++    if (!fleet_enrol_operator_read_existing(operator_pubkey, joined, &why)) {
+         fe_fail(reply, "FLEET_OPERATOR_UNREADABLE", "resolve",
+                 "this box has a recorded fleet operator key it cannot read.",
+                 why);
+-        return;
++        return false;
+     }
+-    if (!joined) {
+-        if (!fleet_enrol_key_load(seed, own, false, &own_present, &why)) {
++    if (!*joined) {
++        bool ok = fleet_enrol_key_read_existing(seed, operator_pubkey, own_present, &why);
++        memory_cleanse(seed, sizeof(seed));
++        if (!ok) {
+             fe_fail(reply, "FLEET_KEY_UNAVAILABLE", "resolve",
+                     "this box cannot read its own fleet key.", why);
+-            return;
++            return false;
+         }
+-        memcpy(operator_pubkey, own, FLEET_ENROL_PUBKEY_BYTES);
+     }
+-    if (!fleet_roster_each(operator_pubkey, fe_collect_row, &collect, &scan,
+-                           &why)) {
+-        free(collect.entries);
++    if (!fleet_roster_each_existing(operator_pubkey, fe_collect_row, collect, scan, &why)) {
+         fe_fail(reply, "FLEET_ROSTER_UNREADABLE", "resolve",
+                 "this box cannot read its machine roster.", why);
++        return false;
++    }
++    return true;
++}
++
++static void fe_machines(const struct zcl_command_request *request,
++                        struct zcl_command_reply *reply)
++{
++    uint8_t operator_pubkey[FLEET_ENROL_PUBKEY_BYTES] = {0};
++    char hex[FLEET_ENROL_PUBKEY_HEX];
++    struct json_value array;
++    struct fe_page page = {0};
++    struct fe_collect collect = {0};
++    struct fe_list list = {0};
++    struct fleet_roster_scan scan = {0};
++    bool joined = false, own_present = false;
++    if (!fe_machines_page(request, &page, reply))
++        return;
++    list.skip = page.offset;
++    list.limit = page.limit;
++    if (!fe_inventory_read(reply, operator_pubkey, &joined, &own_present, &collect, &scan)) {
++        free(collect.entries);
+         return;
+     }
+     if (collect.oom) {
+diff --git a/tools/dev/fleet_enrol.h b/tools/dev/fleet_enrol.h
+index 8d2e96ecc75344b8f1bf1b8343377bc29236fdf8..7d3bef3d562af96bc93ba4c53ac5ff2384e49d00 100644
+--- a/tools/dev/fleet_enrol.h
++++ b/tools/dev/fleet_enrol.h
+@@ -412,6 +412,9 @@ bool fleet_head_revokes(const struct fleet_head *head,
+ /* Absolute path of one leaf inside platform_state_root()/fleet/, creating
+  * the private directory. `leaf` is a compiled-in constant, never input. */
+ bool fleet_enrol_state_path(const char *leaf, char *out, size_t cap);
++/* Inspect the private state hierarchy. An absent component is a successful
++ * lookup with present=false. Refused lookups return false. */
++bool fleet_enrol_directory_present(bool *present);
+ /* Resolve only an existing owner-private fleet directory; never create it. */
+ bool fleet_enrol_state_path_existing(const char *leaf, char *out, size_t cap);
+ 
+diff --git a/tools/dev/fleet_enrol_key.c b/tools/dev/fleet_enrol_key.c
+index e7f2c64886c1e94a0d7bb7e026b95a205d28de6c..9975ca956d8d4df86ecf19bc6be734a6bc5207cc 100644
+--- a/tools/dev/fleet_enrol_key.c
++++ b/tools/dev/fleet_enrol_key.c
+@@ -53,26 +53,40 @@ bool fleet_enrol_state_path(const char *leaf, char *out, size_t cap)
+     return n > 0 && (size_t)n < cap;
+ }
+ 
+-bool fleet_enrol_state_path_existing(const char *leaf, char *out, size_t cap)
++static bool fe_existing_directory(char *dir, size_t cap, bool *absent)
+ {
+     char root[FLEET_ENROL_PATH_MAX];
+-    char dir[FLEET_ENROL_PATH_MAX];
+     uintptr_t handle;
+-    if (!out || !leaf || !platform_state_root_existing(root, sizeof(root)))
+-        return false;
+-    int n = snprintf(dir, sizeof(dir), "%s/%s", root, FLEET_DIR_LEAF);
+-    if (n <= 0 || (size_t)n >= sizeof(dir) ||
+-        !platform_private_directory_open_validated_traverse(dir, &handle))
++    if (!platform_state_root_lookup(root, sizeof(root), absent)) return false;
++    int n = snprintf(dir, cap, "%s/%s", root, FLEET_DIR_LEAF);
++    if (n <= 0 || (size_t)n >= cap) return false;
++    if (!platform_private_directory_open_validated_traverse(dir, &handle)) {
++        *absent = platform_private_path_absent(dir);
+         return false;
++    }
+     platform_private_directory_close(handle);
+-    n = snprintf(out, cap, "%s/%s", dir, leaf);
++    return true;
++}
++
++bool fleet_enrol_directory_present(bool *present)
++{
++    char dir[FLEET_ENROL_PATH_MAX];
++    bool absent = false;
++    *present = fe_existing_directory(dir, sizeof(dir), &absent);
++    return *present || absent;
++}
++
++bool fleet_enrol_state_path_existing(const char *leaf, char *out, size_t cap)
++{
++    char dir[FLEET_ENROL_PATH_MAX];
++    bool absent = false;
++    if (!out || !leaf || !fe_existing_directory(dir, sizeof(dir), &absent))
++        return false;
++    int n = snprintf(out, cap, "%s/%s", dir, leaf);
+     return n > 0 && (size_t)n < cap;
+ }
+ 
+-/* Read the seed. A path that will not open at all reports ABSENT so a
+- * caller that only verifies concludes "no key here" rather than "broken";
+- * a file that opens but is not a private 32-byte regular file is the
+- * wrong-mode, wrong-size and truncated-write case, and is UNREADABLE. */
++/* Only a genuinely absent seed may be created by an enrollment command. */
+ enum fe_seed_state { FE_SEED_OK = 0, FE_SEED_ABSENT, FE_SEED_UNREADABLE };
+ 
+ static enum fe_seed_state fe_seed_read(const char *path,
+@@ -83,7 +97,7 @@ static enum fe_seed_state fe_seed_read(const char *path,
+     platform_positioned_file_init(&file);
+     memset(seed, 0, FLEET_ENROL_SEED_BYTES);
+     if (!platform_positioned_file_open(&file, path))
+-        return FE_SEED_ABSENT;
++        return platform_private_path_absent(path) ? FE_SEED_ABSENT : FE_SEED_UNREADABLE;
+     bool ok = platform_positioned_file_is_current_user_only(&file) &&
+               platform_positioned_file_size(&file, &size) &&
+               size == (uint64_t)FLEET_ENROL_SEED_BYTES &&
+diff --git a/tools/dev/fleet_enrol_store.c b/tools/dev/fleet_enrol_store.c
+index 4c7fbce36f4bc737e2f2145ac6137b4551485ae0..a1d9b9d02700e6ebdcef84d0fe9bda0cfbe51894 100644
+--- a/tools/dev/fleet_enrol_store.c
++++ b/tools/dev/fleet_enrol_store.c
+@@ -73,8 +73,11 @@ static bool fe_slurp_mode(const char *leaf, char *buf, size_t cap, size_t *len,
+         return false;
+     }
+     platform_positioned_file_init(&file);
+-    if (!platform_positioned_file_open(&file, path))
+-        return true;
++    if (!platform_positioned_file_open(&file, path)) {
++        if (!readonly || platform_private_path_absent(path)) return true;
++        fe_why(why, FLEET_ENROL_WHY_ROSTER_UNREADABLE);
++        return false;
++    }
+     bool ok = platform_positioned_file_size(&file, &size) && size < cap;
+     if (ok && size)
+         ok = platform_positioned_file_read(&file, buf, (size_t)size, 0) ==

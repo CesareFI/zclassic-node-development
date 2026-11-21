@@ -1,0 +1,14 @@
+devbuild: z23 lane 1, CPUs 2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47, memory 24G
+make: Entering directory '/home/z23dev/work/fleet-inventory-20261121'
+agent-verify: check-file-size-ceiling rc=0 secs=6
+agent-verify: check-cyclomatic-complexity rc=0 secs=8
+agent-verify: dev-bin rc=0 secs=10
+agent-verify: selection exact groups=119 reason=impact-plan detail=- base=0b8cc3e070afce122015dc5d3896c102aa5af432 select_secs=9
+agent-verify: t-fast-exact rc=0 secs=680
+SUITE VERDICT mode=cached groups_total=1620 groups_ran=49 groups_cached=70 groups_gated=1501 groups_failed=0 self_skips=2 env_unobserved=0 load_flaky=0 toolkey=a3038e00deb4
+agent-verify: check-capability-closure rc=0 secs=23
+agent-verify: proof-lint-prebuild rc=0 secs=12
+agent-verify: lint-fast rc=0 secs=88
+agent-verify: total secs=836
+agent-verify: OK
+make: Leaving directory '/home/z23dev/work/fleet-inventory-20261121'

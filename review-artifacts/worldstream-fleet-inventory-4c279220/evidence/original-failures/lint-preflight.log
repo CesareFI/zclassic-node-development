@@ -1,0 +1,173 @@
+devbuild: z23 lane 1, CPUs 2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47, memory 24G
+/home/z23dev/work/fleet-inventory-20261121/build/bin/zcc cc -std=c23 -O2 -Wall -Wextra -Werror -pedantic \
+     \
+    -Iplatform/modules/json/include -Iplatform/modules/base/include \
+    -o build/bin/z23-toolgen tools/toolgen.c tools/toolgen_util.c tools/toolgen_lex.c tools/toolgen_manifest.c tools/toolgen_emit.c tools/toolgen_blocks.c tools/toolgen_world.c tools/toolgen_gather.c platform/modules/json/src/json.c platform/modules/base/src/safe_alloc.c platform/modules/base/src/cleanse.c -lm
+/home/z23dev/work/fleet-inventory-20261121/build/bin/zcc cc -std=c23 -D_POSIX_C_SOURCE=200809L  \
+    -O2 -Wall -Wextra -Werror \
+    -pedantic -Icognition/modules/codeindex/include -Icognition/modules/codeindex/src \
+    -Iplatform/modules/base/include -Iplatform/modules/util/include -Iplatform/modules/sha3/include \
+    -Icore/modules/crypto/include -Iplatform/modules/platform/include \
+    -o build/bin/gen_capability_inventory tools/gen_capability_inventory.c cognition/modules/codeindex/src/codeindex_inventory.c cognition/modules/codeindex/src/codeindex_inventory_scan.c cognition/modules/codeindex/src/codeindex_inventory_render.c cognition/modules/codeindex/src/codeindex_inventory_body.c cognition/modules/codeindex/src/codeindex_inventory_evidence.c cognition/modules/codeindex/src/codeindex_scan.c cognition/modules/codeindex/src/codeindex_scan_doc.c platform/modules/base/src/safe_alloc.c platform/modules/base/src/log_level.c platform/modules/sha3/src/sha3.c  
+build-epoch-session: acquired profile=dev-v2 epoch=695d5e48c5c75308c946cae71e81d0eef05554f549262ce73cb56ce139f7f8ac lease=build/dev-obj/epochs/695d5e48c5c75308c946cae71e81d0eef05554f549262ce73cb56ce139f7f8ac/.leases/c2e82fd4195c818b50e101ab3d4220a4f2f8c1ddfd08dc712fdb095a76cebd26 build_system_id=7c364de9f34a53b572025a21474e4d627e5ded3917246cb283b4fdea199db2cd
+publish-build-alias: build/bin/z23.dev <= epoch 695d5e48c5c75308c946cae71e81d0eef05554f549262ce73cb56ce139f7f8ac sha256=b35ee7cdf14b71616b0fed0363725ca39eff24792114babfd8819f66d52e4ba5
+dev: build/bin/z23.dev <= build/bin/dev/epochs/695d5e48c5c75308c946cae71e81d0eef05554f549262ce73cb56ce139f7f8ac/zclassic23-dev (non-LTO, -g1, unstripped; not for release/deploy)
+dev-bin: build/bin/z23-dev <= build/bin/z23.dev (hard-link watch-loop alias of unsippable z23.dev; regular file for O_NOFOLLOW proof open)
+z23-lint run: note — table gate 'check-toolchain' not in this run's gate list
+z23-lint run: note — table gate 'check-fortify-masked-decls' not in this run's gate list
+z23-lint run: note — table gate 'check-dev-linker-threads' not in this run's gate list
+z23-lint run: note — table gate 'check-fuzz-artifact-ledger' not in this run's gate list
+z23-lint run: note — table gate 'check-build-epoch-integrity' not in this run's gate list
+z23-lint run: note — table gate 'check-checkout-lock' not in this run's gate list
+z23-lint run: note — table gate 'check-land-preflight' not in this run's gate list
+z23-lint run: note — table gate 'check-host-gc-selftest' not in this run's gate list
+z23-lint run: note — table gate 'check-commons-journey-ordering' not in this run's gate list
+z23-lint run: note — table gate 'check-zcc-cache' not in this run's gate list
+z23-lint run: note — table gate 'check-git-hooks-installed' not in this run's gate list
+z23-lint run: note — table gate 'check-hotswap-eligible-scope' not in this run's gate list
+z23-lint run: note — table gate 'check-hotswap-denied-leaves' not in this run's gate list
+z23-lint run: note — table gate 'check-determinism-ratchet' not in this run's gate list
+z23-lint run: note — table gate 'check-hotswap-static-state' not in this run's gate list
+z23-lint run: note — table gate 'check-hotswap-service-islands' not in this run's gate list
+z23-lint run: note — table gate 'check-hotswap-swappable-shape' not in this run's gate list
+z23-lint run: note — table gate 'check-hotswap-package-receipt-is-not-authority' not in this run's gate list
+z23-lint run: note — table gate 'check-hotswap-module-imports' not in this run's gate list
+z23-lint run: note — table gate 'check-stable-publish-contained' not in this run's gate list
+z23-lint run: note — table gate 'check-raw-malloc' not in this run's gate list
+z23-lint run: note — table gate 'check-json-value-init' not in this run's gate list
+z23-lint run: note — table gate 'check-coins-lookup-nullcheck' not in this run's gate list
+z23-lint run: note — table gate 'check-observability-pairing' not in this run's gate list
+z23-lint run: note — table gate 'check-no-hardlink-seeding' not in this run's gate list
+z23-lint run: note — table gate 'check-silent-errors-services' not in this run's gate list
+z23-lint run: note — table gate 'check-silent-errors-controllers' not in this run's gate list
+z23-lint run: note — table gate 'check-silent-errors-jobs' not in this run's gate list
+z23-lint run: note — table gate 'check-silent-errors-conditions' not in this run's gate list
+z23-lint run: note — table gate 'check-silent-errors-bool' not in this run's gate list
+z23-lint run: note — table gate 'check-wallet-raw-prepare-log' not in this run's gate list
+z23-lint run: note — table gate 'check-wallet-log-privacy' not in this run's gate list
+z23-lint run: note — table gate 'check-model-ar-lifecycle' not in this run's gate list
+z23-lint run: note — table gate 'check-long-functions' not in this run's gate list
+z23-lint run: note — table gate 'check-lib-layering' not in this run's gate list
+z23-lint run: note — table gate 'check-shape-include-direction' not in this run's gate list
+z23-lint run: note — table gate 'check-domain-purity' not in this run's gate list
+z23-lint run: note — table gate 'check-core-seal' not in this run's gate list
+z23-lint run: note — table gate 'check-no-adx-overclaim' not in this run's gate list
+z23-lint run: note — table gate 'check-supervisor-registration' not in this run's gate list
+z23-lint run: note — table gate 'check-test-registration' not in this run's gate list
+z23-lint run: note — table gate 'check-blocker-escape-registered' not in this run's gate list
+z23-lint run: note — table gate 'check-blocker-remedy' not in this run's gate list
+z23-lint run: note — table gate 'check-blocker-handoff-declared' not in this run's gate list
+z23-lint run: note — table gate 'check-ship-remote-transaction' not in this run's gate list
+z23-lint run: note — table gate 'check-z23-release-install' not in this run's gate list
+z23-lint run: note — table gate 'check-published-platforms' not in this run's gate list
+z23-lint run: note — table gate 'check-shell-host-assumptions' not in this run's gate list
+z23-lint run: note — table gate 'check-framework-shape' not in this run's gate list
+z23-lint run: note — table gate 'check-fleet-source-status' not in this run's gate list
+z23-lint run: note — table gate 'check-platform-header-guards' not in this run's gate list
+z23-lint run: note — table gate 'check-no-raw-sqlite-in-controllers' not in this run's gate list
+z23-lint run: note — table gate 'check-model-column-drift' not in this run's gate list
+z23-lint run: note — table gate 'check-file-purpose' not in this run's gate list
+z23-lint run: note — table gate 'check-group-purpose' not in this run's gate list
+z23-lint run: note — table gate 'check-retrieval-historical-evidence' not in this run's gate list
+z23-lint run: note — table gate 'check-no-orphan-placement' not in this run's gate list
+z23-lint run: note — table gate 'check-file-size-ceiling' not in this run's gate list
+z23-lint run: note — table gate 'check-operator-needed-sink' not in this run's gate list
+z23-lint run: note — table gate 'check-systemd-memory-budget' not in this run's gate list
+z23-lint run: note — table gate 'check-no-stale-pinned-facts' not in this run's gate list
+z23-lint run: note — table gate 'check-no-uncited-victory' not in this run's gate list
+z23-lint run: note — table gate 'check-doc-claims' not in this run's gate list
+z23-lint run: note — table gate 'check-describe-budget' not in this run's gate list
+z23-lint run: note — table gate 'check-markdown-links' not in this run's gate list
+z23-lint run: note — table gate 'check-one-result-type' not in this run's gate list
+z23-lint run: note — table gate 'check-no-secret-printf' not in this run's gate list
+z23-lint run: note — table gate 'check-service-result-convergence' not in this run's gate list
+z23-lint run: note — table gate 'check-shape-includes-header' not in this run's gate list
+z23-lint run: note — table gate 'check-projections-pure' not in this run's gate list
+z23-lint run: note — table gate 'check-one-write-path' not in this run's gate list
+z23-lint run: note — table gate 'check-frontier-single-writer' not in this run's gate list
+z23-lint run: note — table gate 'check-dumper-never-blocks' not in this run's gate list
+z23-lint run: note — table gate 'check-no-authoritative-ram-state' not in this run's gate list
+z23-lint run: note — table gate 'check-no-dev-history-in-contracts' not in this run's gate list
+z23-lint run: note — table gate 'check-stage-advances-or-blocks' not in this run's gate list
+z23-lint run: note — table gate 'check-honest-witness' not in this run's gate list
+z23-lint run: note — table gate 'check-consensus-parity' not in this run's gate list
+z23-lint run: note — table gate 'check-no-new-repair-rung' not in this run's gate list
+z23-lint run: note — table gate 'check-object-reproducible' not in this run's gate list
+z23-lint run: note — table gate 'check-riscv64-universal' not in this run's gate list
+z23-lint run: note — table gate 'check-lint-gate-wiring' not in this run's gate list
+z23-lint run: note — table gate 'check-no-new-borrowed-seed' not in this run's gate list
+z23-lint run: note — table gate 'check-no-new-coin-backfill-caller' not in this run's gate list
+z23-lint run: note — table gate 'check-route-command-parity' not in this run's gate list
+z23-lint run: note — table gate 'check-doc-no-false-deleted' not in this run's gate list
+z23-lint run: note — table gate 'check-zclassicd-reach-allowlist' not in this run's gate list
+z23-lint run: note — table gate 'check-no-csr-lock-on-finalize-drive' not in this run's gate list
+z23-lint run: note — table gate 'check-mint-skip-crypto-offline-only' not in this run's gate list
+z23-lint run: note — table gate 'check-vcs-no-sha1' not in this run's gate list
+z23-lint run: note — table gate 'check-vendor-provenance' not in this run's gate list
+z23-lint run: note — table gate 'check-no-snapshot-struct-memcmp' not in this run's gate list
+z23-lint run: note — table gate 'check-no-warning-suppression' not in this run's gate list
+z23-lint run: note — table gate 'check-result-discard' not in this run's gate list
+PASS check-capability-inventory-generated         10670 ms
+PASS check-toolgen                                  122 ms
+PASS check-posix-ere-only                           411 ms
+PASS check-api-reference-generated                 2771 ms
+PASS check-no-wallclock-assertion                  4275 ms
+PASS check-command-input-keys                      5325 ms
+PASS check-hex-codec-single                        5563 ms
+FAIL check-capability-closure                     12577 ms (rc=2)
+── lint timing: 8 gates, wall 23247 ms, jobs 8 ──
+    12577 ms  check-capability-closure
+    10670 ms  check-capability-inventory-generated
+     5563 ms  check-hex-codec-single
+     5325 ms  check-command-input-keys
+     4275 ms  check-no-wallclock-assertion
+     2771 ms  check-api-reference-generated
+      411 ms  check-posix-ere-only
+      122 ms  check-toolgen
+
+══ LINT: 1 of 8 gates FAILED ══
+  ✗ check-capability-closure
+
+──── FAIL log: check-capability-closure ────────────────────────────
+z23-lint: cannot open /home/z23dev/work/fleet-inventory-evidence-20261121/tmp/capclosure-selftest.KsXtFR/t/fixture_src/raw_user.c: Permission denied
+z23-lint: read failed: /home/z23dev/work/fleet-inventory-evidence-20261121/tmp/capclosure-selftest.KsXtFR/u: Is a directory
+== check_capability_closure selftest ==
+  selftest ok: A: undeclared strong-undefined reach to a classified symbol (rc=1)
+  selftest ok: B: declared CAP_NETWORK never used by the object (rc=1)
+  selftest ok: C: undeclared WEAK-undefined reach to a classified symbol (regression) (rc=1)
+  selftest ok: D: a correctly declared fixture passes without allocating a line for ordinary source
+  selftest ok: E: an epoch below the object floor is UNPROVEN, exit 2, never 0
+  selftest ok: F: a partial epoch missing a declared file (above the coverage baseline) is UNPROVEN, exit 2, never 0 or 1
+  selftest ok: G: a coverage baseline held above the true (improved) unobserved count is a VIOLATION, exit 1, not silently tolerated
+  selftest ok: H: Windows drive-letter nm records preserve the full object path
+  selftest ok: I: MinGW import and wrapper decorations inherit the base symbol class
+  selftest ok: J: Windows exact CAP_NONE override replaces portable reach and skips only the named Linux arm
+  selftest ok: K: Linux exact CAP_NONE override replaces portable cross-target reach
+  selftest ok: L: coverage follows exact host-source selection and retains the two standalone rows
+  selftest ok: M: a symbol-free object is present coverage evidence
+  selftest ok: N1: a declaration behind a guard this build never defines is UNOBSERVED, exit 0, never a VIOLATION
+  selftest ok: N2: a guard this build DOES define is not compiled-out — genuine overdeclaration still VIOLATIONs (rc=1)
+  selftest ok: O: flags load once per check and changed flags still reject overdeclaration
+  selftest ok: P1: source-owned declaration closes the compiled object
+  selftest ok: P2: misplaced source-owned declaration refuses (rc=2)
+  selftest ok: P3: central and source-owned duplicate refuses (rc=2)
+  selftest ok: Q: source fallback skips the top-level build tree but grades nested build sources (rc=1)
+  selftest ok: R: an unpaired object is reported without claiming provenance
+  selftest ok: S: an unopenable object subdirectory is FATAL, never an empty one
+  selftest ok: T: an unreadable source cannot escape the raw syscall ban
+  selftest ok: U: lc_each_line fails a read after a successful open (rc=2, EISDIR, no callback)
+  selftest ok: V: all trap forms after embedded NULs are found at the original line numbers (rc=1)
+  selftest ok: W: an object older than its source is UNPROVEN, never graded
+  selftest ok: X: objects newer than their sources grade as before, not stale
+  selftest ok: source stat: an unresolved source is never graded fresh
+  selftest ok: spaced union closes both actual reaches
+  selftest ok: unknown capability does not close actual reaches (rc=1)
+  selftest ok: Y1: the headless state keeps the unconditional fallback exact (exit 0)
+  selftest ok: Y2: the gtk state selects its arm and closes the reach it built (exit 0)
+  selftest ok: Y3: flags naming a state the epoch did not build stay an overdeclaration, never a pass (rc=1)
+  selftest ok: Y4: two applicable arms of equal specificity are FATAL, never graded
+== selftest: PASS (31/31) ==
+check_capability_closure: UNPROVEN — 1 object(s) under /home/z23dev/work/fleet-inventory-20261121/build/dev-obj/epochs/695d5e48c5c75308c946cae71e81d0eef05554f549262ce73cb56ce139f7f8ac are older than their sources
+  (a stale build; run 'make dev-bin' and re-run). Never graded as pass or fail. First 5:
+    platform/modules/platform/src/state_root.o
+make: *** [Makefile:7605: lint-preflight] Error 1

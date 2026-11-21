@@ -1,0 +1,9 @@
+test_parallel: private state retained=/dev/shm/z23-scratch/efd1d92a.TeVWL4/runner-state-818ff9f147605b1e00
+=== fleet_gateway shard=4 pid=555638 state=/dev/shm/z23-scratch/efd1d92a.TeVWL4/fleet_gateway_555638_iso_s04/state ===
+compat: pass outcome completes the ref with the exact row... FAIL at tests/harness/src/test_fleet_gateway.c:3493 (gw_poll_match(receipt, "verdict", 150))
+[fleet-gateway-case] shard=4 name=gw_t_compat_pass ms=15571 failures=1
+compat: failed and cancelled never read completed... FAIL at tests/harness/src/test_fleet_gateway.c:3538 (gw_poll_match(receipt, "verdict", 150))
+[fleet-gateway-case] shard=4 name=gw_t_compat_terminal ms=15614 failures=1
+compat: result row plus outcome row complete the journey... FAIL at tests/harness/src/test_fleet_gateway.c:3788 (gw_poll_match(receipt, "verdict", 150))
+[fleet-gateway-case] shard=4 name=gw_t_compat_result ms=15577 failures=1
+test_fleet_gateway shard=4: 3 FAILED

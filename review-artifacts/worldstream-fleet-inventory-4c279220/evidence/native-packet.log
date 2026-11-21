@@ -1,0 +1,10 @@
+devbuild: z23 lane 2, CPUs 2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47, memory 24G
+/home/z23dev/work/fleet-inventory-evidence-20261121/fleet-inventory-4c279220.bundle is okay
+The bundle contains this ref:
+4c27922080702f0c6b305e9222b5c98d8d865d0e refs/z23-send/worldstream-noncreating-fleet-inventory-4c2792208070
+The bundle requires this ref:
+0b8cc3e070afce122015dc5d3896c102aa5af432 
+The bundle uses this hash algorithm: sha1
+4c27922080702f0c6b305e9222b5c98d8d865d0e refs/z23-send/worldstream-noncreating-fleet-inventory-4c2792208070
+b6555d8670382a037d39d2f975d25f9805d2860821cbe5c28ec88b44373d83ba  /home/z23dev/work/fleet-inventory-evidence-20261121/fleet-inventory-4c279220.bundle
+5599 bytes

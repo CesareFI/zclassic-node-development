@@ -1,0 +1,14 @@
+test_parallel: private state retained=/dev/shm/z23-scratch/efd1d92a.TeVWL4/runner-state-342f48d688d99b9c00
+shard partition: every sub-suite is owned by exactly one registered shard of the umbrella... OK
+zcode work start: missing package config names init; local build output is ignored... 2026-11-21T16:30:35Z INFO [codeindex] cognition/modules/codeindex/src/codeindex_build.c:763 rebuild_report(): index: rebuilt (8 ms)
+OK
+[zcode-package-dev-case] shard=2 name=zpd_row_work_start_package_bounds ms=396 failures=0
+zcode work: one admitted candidate reads identically from run and status... 2026-11-21T16:30:36Z INFO [codeindex] cognition/modules/codeindex/src/codeindex_build.c:763 rebuild_report(): index: rebuilt (7 ms)
+FAIL at tests/harness/src/test_zcode_package_dev.c:6262 (reply.status == ZCL_COMMAND_STATUS_PASSED)
+[zcode-package-dev-case] shard=2 name=zpd_row_admitted_single_interpretation ms=29 failures=1
+zcode work: a candidate cannot edit the acceptance tests it is judged by... 2026-11-21T16:30:36Z INFO [codeindex] cognition/modules/codeindex/src/codeindex_build.c:763 rebuild_report(): index: rebuilt (6 ms)
+FAIL at tests/harness/src/test_zcode_package_dev.c:6686 (reply.status == ZCL_COMMAND_STATUS_PASSED)
+[zcode-package-dev-case] shard=2 name=zpd_row_candidate_cannot_edit_acceptance_tests ms=27 failures=1
+zcode work start: goal and profile compose existing task owners... FAIL at tests/harness/src/test_zcode_package_dev.c:4602 (zpd_fixture(ws->root, false))
+[zcode-package-dev-case] shard=2 name=zpd_row_work_start ms=0 failures=1
+zcode_package_dev: ran 4 of 19 sub-suites (one shard), 3 failed

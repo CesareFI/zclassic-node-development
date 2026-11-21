@@ -1,0 +1,9 @@
+fixture=/home/z23dev/work/fleet-inventory-evidence-20261121/baseline-state.8x5eQi7B
+before:
+{"schema":"zcl.result.v1","command":"fleet.machines","ok":true,"status":"passed","request_id":"local-0000000000000001","elapsed_us":689,"budget_ms":250,"elapsed_ms":0,"budget_exceeded":false,"authority":{"policy":"exempt","agent_session":"none (local operator)"},"data_schema":"zcl.fleet.machines.v1","data":{"schema":"zcl.fleet.machines.v1","operator_pubkey":"","joined":false,"total":0,"offset":0,"limit":64,"returned":0,"next_offset":-1,"truncated":false,"unverifiable":0,"machines":[]},"next":[{"command":"fleet.invite","input":{"name":"<box>"},"reason":"no machine has enrolled here yet; mint an invite to add one"}]}
+
+exit=0
+after:
+z23 d 700
+z23/dev d 700
+z23/dev/fleet d 700

@@ -1,0 +1,1 @@
+Snapshot comparison passed after the typed refusal. State base absent. MCP did not execute the inventory handler.

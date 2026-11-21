@@ -1,0 +1,5 @@
+SUITE VERDICT mode=cached groups_total=1620 groups_ran=49 groups_cached=70 groups_gated=1501 groups_failed=0 self_skips=2 env_unobserved=0 load_flaky=0 toolkey=a3038e00deb4
+ALL TESTS PASSED (CACHED) — 0/119 groups failed, 2 skipped (412.5s wall, 4 workers) [--exact filtered]
+Skipped coverage (self-skipped groups — most need ZCL_STRESS_TESTS=1 + an isolated run):
+  - test_fleet_board: 1 skip marker(s)
+  - test_os_sandbox: 1 skip marker(s)

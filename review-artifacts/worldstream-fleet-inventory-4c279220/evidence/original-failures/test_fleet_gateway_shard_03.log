@@ -1,0 +1,11 @@
+test_parallel: private state retained=/dev/shm/z23-scratch/efd1d92a.TeVWL4/runner-state-78709ef8519c496700
+=== fleet_gateway shard=3 pid=555518 state=/dev/shm/z23-scratch/efd1d92a.TeVWL4/fleet_gateway_555518_iso_s03/state ===
+gateway: a node that fails after answering is not a success... OK
+[fleet-gateway-case] shard=3 name=gw_t_child_status ms=143 failures=0
+lifecycle: send queues, brief holds queued until the ack... OK
+[fleet-gateway-case] shard=3 name=gw_t_life_send_ack ms=122 failures=0
+lifecycle: real queue outcome completes the ref, evidence exact... FAIL at tests/harness/src/test_fleet_gateway.c:2748 (gw_poll_match(receipt, "verdict", 150))
+[fleet-gateway-case] shard=3 name=gw_t_life_complete ms=15524 failures=1
+lifecycle: restart keeps completed, idempotent, revoke-safe... FAIL at tests/harness/src/test_fleet_gateway.c:2811 (gw_body_has(b, "\"state\\\":\\\"completed\\\""))
+[fleet-gateway-case] shard=3 name=gw_t_life_restart ms=32 failures=1
+test_fleet_gateway shard=3: 2 FAILED

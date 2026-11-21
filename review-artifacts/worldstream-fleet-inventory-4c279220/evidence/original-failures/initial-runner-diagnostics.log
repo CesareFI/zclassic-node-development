@@ -1,0 +1,130 @@
+  first| L1: test_parallel: private state retained=/dev/shm/z23-scratch/efd1d92a.TeVWL4/runner-state-1f656bb7212df22200
+  first| L2: === fleet_gateway shard=3 pid=552352 state=/dev/shm/z23-scratch/efd1d92a.TeVWL4/fleet_gateway_552352_iso_s03/state ===
+  first| L3: gateway: a node that fails after answering is not a success... OK
+  first| L4: [fleet-gateway-case] shard=3 name=gw_t_child_status ms=169 failures=0
+  first| L5: lifecycle: send queues, brief holds queued until the ack... OK
+  first| L6: [fleet-gateway-case] shard=3 name=gw_t_life_send_ack ms=203 failures=0
+  first| L7: lifecycle: real queue outcome completes the ref, evidence exact... FAIL at tests/harness/src/test_fleet_gateway.c:2748 (gw_poll_match(receipt, "verdict", 150))
+  first| L8: [fleet-gateway-case] shard=3 name=gw_t_life_complete ms=15314 failures=1
+  first| L9: lifecycle: restart keeps completed, idempotent, revoke-safe... FAIL at tests/harness/src/test_fleet_gateway.c:2811 (gw_body_has(b, "\"state\\\":\\\"completed\\\""))
+  first| L10: [fleet-gateway-case] shard=3 name=gw_t_life_restart ms=29 failures=1
+  first| L11: test_fleet_gateway shard=3: 2 FAILED
+[rerun-alone] [340] test_fleet_gateway_shard_03 — first attempt FAILED under the shared pool; retrying alone with the pool idle (at most once)
+  first| L1: test_parallel: private state retained=/dev/shm/z23-scratch/efd1d92a.TeVWL4/runner-state-86446672f34fa9d600
+  first| L2: === fleet_gateway shard=4 pid=552571 state=/dev/shm/z23-scratch/efd1d92a.TeVWL4/fleet_gateway_552571_iso_s04/state ===
+  first| L3: compat: pass outcome completes the ref with the exact row... FAIL at tests/harness/src/test_fleet_gateway.c:3493 (gw_poll_match(receipt, "verdict", 150))
+  first| L4: [fleet-gateway-case] shard=4 name=gw_t_compat_pass ms=15366 failures=1
+  first| L5: compat: failed and cancelled never read completed... FAIL at tests/harness/src/test_fleet_gateway.c:3538 (gw_poll_match(receipt, "verdict", 150))
+  first| L6: [fleet-gateway-case] shard=4 name=gw_t_compat_terminal ms=15389 failures=1
+  first| L7: compat: result row plus outcome row complete the journey... FAIL at tests/harness/src/test_fleet_gateway.c:3788 (gw_poll_match(receipt, "verdict", 150))
+  first| L8: [fleet-gateway-case] shard=4 name=gw_t_compat_result ms=15359 failures=1
+  first| L9: test_fleet_gateway shard=4: 3 FAILED
+[rerun-alone] [341] test_fleet_gateway_shard_04 — first attempt FAILED under the shared pool; retrying alone with the pool idle (at most once)
+  first| L1: test_parallel: private state retained=/dev/shm/z23-scratch/efd1d92a.TeVWL4/runner-state-145b5a7249f0c13200
+  first| L2: === fleet_gateway shard=5 pid=552698 state=/dev/shm/z23-scratch/efd1d92a.TeVWL4/fleet_gateway_552698_iso_s05/state ===
+  first| L3: compat: crash stays incomplete, resume on attempt 2 completes... FAIL at tests/harness/src/test_fleet_gateway.c:3601 (gw_poll_match(receipt, "rc=", 60))
+  first| L4: [fleet-gateway-case] shard=5 name=gw_t_compat_crash ms=6277 failures=1
+  first| L5: compat: case variants and unknown verdicts never complete... FAIL at tests/harness/src/test_fleet_gateway.c:3661 (gw_poll_match(receipt, "verdict", 150))
+  first| L6: [fleet-gateway-case] shard=5 name=gw_t_compat_case ms=15414 failures=1
+  first| L7: test_fleet_gateway shard=5: 2 FAILED
+[rerun-alone] [342] test_fleet_gateway_shard_05 — first attempt FAILED under the shared pool; retrying alone with the pool idle (at most once)
+  first| L1: test_parallel: private state retained=/dev/shm/z23-scratch/efd1d92a.TeVWL4/runner-state-e9f0c4df971b2d7200
+  first| L2: === fleet_gateway shard=6 pid=552733 state=/dev/shm/z23-scratch/efd1d92a.TeVWL4/fleet_gateway_552733_iso_s06/state ===
+  first| L3: compat: arbitrary verdicts and dirty pass exits never complete... FAIL at tests/harness/src/test_fleet_gateway.c:3725 (gw_poll_match(receipt, "verdict", 150))
+  first| L4: [fleet-gateway-case] shard=6 name=gw_t_compat_rc ms=15360 failures=1
+  first| L5: compat: cancel stops queued work, refuses live rows... FAIL at tests/harness/src/test_fleet_gateway.c:3867 (gw_worker_poll(adir, "held", "held"))
+  first| L6: cancel fixture gw-compat-cancela cleanup: release=1 finish=1 terminal=0 PASS=0 free=1
+  first| L7: [fleet-gateway-case] shard=6 name=gw_t_compat_cancelq ms=30533 failures=2
+  first| L8: gateway: steer_brief schema admits a resume token for since... OK
+  first| L9: gateway: a token since carries a lower-seq row exactly once... OK
+  first| L10: gateway: a stale token refuses typed and replays from the start... OK
+  first| L11: gateway: a wrong-sender same-ref row never acknowledges... OK
+  first| L12: [fleet-gateway-case] shard=6 name=gw_t_brief_token ms=693 failures=0
+  first| L13: test_fleet_gateway shard=6: 3 FAILED
+[rerun-alone] [343] test_fleet_gateway_shard_06 — first attempt FAILED under the shared pool; retrying alone with the pool idle (at most once)
+  first| L1: test_parallel: private state retained=/dev/shm/z23-scratch/efd1d92a.TeVWL4/runner-state-e5016e4a7b6d7c0900
+  first| L2: dev.job: unknown liveness stays nonterminal until rc... OK
+  first| L3: {"schema":"zcl.result.v1","command":"dev.fleet.job","ok":false,"status":"blocked","request_id":"local-0000000000000001","elapsed_us":7,"budget_ms":750,"elapsed_ms":0,"budget_exceeded":false,"authority":{"policy":"exempt","agent_session":"none (local operator)"},"error":{"code":"COMMAND_COMPAT_ONLY","error_code":"COMMAND_COMPAT_ONLY","message":"canonical adapter is not executable yet","phase":"disp [truncated]
+  first| L4: {"schema":"zcl.result.v1","command":"dev.fleet.job","ok":false,"status":"failed","request_id":"local-cli","elapsed_us":0,"error":{"code":"INVALID_INPUT","error_code":"INVALID_INPUT","message":"invalid type or range for input key 'no_cache'; accepted input keys: operation,peer,peer_binary,cwd,expected_head,task,group,job_id,timeout_s,no_cache; `--help` prints this command's input schema","phase":"n [truncated]
+  first| L5: dev.android: plan accepts spaces and rejects shell metacharacters... Android verify fixture requires /usr/bin/7z
+  first| L6: FAIL at tests/harness/src/test_dev_job.c:867 (dj_android_fixture(lane, sizeof(lane)))
+  first| L7: dev.fleet.job: unsafe peer is rejected before SSH... OK
+  first| L8: dev.fleet.job: unknown group refuses before execution... OK
+  first| L9: dev.fleet.job: local registered test constructs the admitted job... OK
+  first| L10: dev.job: argv[0] outside the allowlist is refused... OK
+  first| L11: dev.job: a cwd that is not a registered worktree is refused... OK
+  first| L12: dev.job: linked worktree check excludes primary and foreign paths... OK
+  first| L13: dev.job: a scratch git repo that lists itself is refused as cwd... OK
+  first| L14: dev.job: start returns in under 1 s; wait 1 s reports running... OK
+  first| L15: dev.job: a duplicate start attaches to the running job... OK
+  first| L16: dev.job: wait after exit returns the exact rc and tail... OK
+  first| L17: dev.job: timeout_s=9999 is clamped to 230 and reported... OK
+  first| L18: dev.job: a failing job reports failed, its rc and its error lines... OK
+  first| L19: dev.job: the tail never exceeds its line and byte caps... OK
+  first| L20: dev.job: a child that vanished with no rc line reports lost... OK
+  first| L21: dev.job: wait follows an external log ending in an rc= line... OK
+  first| L22: dev.job: only a complete terminal decimal rc marker completes a log... OK
+  first| L23: dev.job: wait refuses an external log outside the allowed roots... OK
+[rerun-alone] [442] test_dev_job — first attempt FAILED under the shared pool; retrying alone with the pool idle (at most once)
+  first| L1: test_parallel: private state retained=/dev/shm/z23-scratch/efd1d92a.TeVWL4/runner-state-4a77b3339035f55300
+  first| L2: shard partition: every sub-suite is owned by exactly one registered shard of the umbrella... OK
+  first| L3: zcode development benchmark: 12 frozen tasks across 3 projects... 2026-11-21T16:24:05Z INFO [codeindex] cognition/modules/codeindex/src/codeindex_build.c:763 rebuild_report(): index: rebuilt (7 ms)
+  first| L4: benchmark case 0 handoff: HANDOFF_REFUSED isolated candidate workspace could not be created
+  first| L5: FAIL at tests/harness/src/test_zcode_package_dev.c:2003 (cs->reply.status == ZCL_COMMAND_STATUS_PASSED)
+  first| L6: [zcode-package-dev-case] shard=1 name=zpd_row_twelve_task_benchmark ms=413 failures=1
+  first| L7: zcode_package_dev: ran 1 of 19 sub-suites (one shard), 1 failed
+[rerun-alone] [957] test_zcode_package_dev_shard_01 — first attempt FAILED under the shared pool; retrying alone with the pool idle (at most once)
+  first| L1: test_parallel: private state retained=/dev/shm/z23-scratch/efd1d92a.TeVWL4/runner-state-4f4d97bebc26779d00
+  first| L2: shard partition: every sub-suite is owned by exactly one registered shard of the umbrella... OK
+  first| L3: zcode work start: missing package config names init; local build output is ignored... 2026-11-21T16:22:36Z INFO [codeindex] cognition/modules/codeindex/src/codeindex_build.c:763 rebuild_report(): index: rebuilt (14 ms)
+  first| L4: OK
+  first| L5: [zcode-package-dev-case] shard=2 name=zpd_row_work_start_package_bounds ms=592 failures=0
+  first| L6: zcode work: one admitted candidate reads identically from run and status... 2026-11-21T16:22:37Z INFO [codeindex] cognition/modules/codeindex/src/codeindex_build.c:763 rebuild_report(): index: rebuilt (7 ms)
+  first| L7: FAIL at tests/harness/src/test_zcode_package_dev.c:6262 (reply.status == ZCL_COMMAND_STATUS_PASSED)
+  first| L8: [zcode-package-dev-case] shard=2 name=zpd_row_admitted_single_interpretation ms=38 failures=1
+  first| L9: zcode work: a candidate cannot edit the acceptance tests it is judged by... 2026-11-21T16:22:37Z INFO [codeindex] cognition/modules/codeindex/src/codeindex_build.c:763 rebuild_report(): index: rebuilt (6 ms)
+  first| L10: FAIL at tests/harness/src/test_zcode_package_dev.c:6686 (reply.status == ZCL_COMMAND_STATUS_PASSED)
+  first| L11: [zcode-package-dev-case] shard=2 name=zpd_row_candidate_cannot_edit_acceptance_tests ms=37 failures=1
+  first| L12: zcode work start: goal and profile compose existing task owners... FAIL at tests/harness/src/test_zcode_package_dev.c:4602 (zpd_fixture(ws->root, false))
+  first| L13: [zcode-package-dev-case] shard=2 name=zpd_row_work_start ms=0 failures=1
+  first| L14: zcode_package_dev: ran 4 of 19 sub-suites (one shard), 3 failed
+[rerun-alone] [958] test_zcode_package_dev_shard_02 — first attempt FAILED under the shared pool; retrying alone with the pool idle (at most once)
+  first| L1: test_parallel: private state retained=/dev/shm/z23-scratch/efd1d92a.TeVWL4/runner-state-47f3466b418b906600
+  first| L2: shard partition: every sub-suite is owned by exactly one registered shard of the umbrella... OK
+  first| L3: zcode package dev prepare: base tree derives all canonical roots... base package root: a4de0ccb82fd5e4d708e6624dd1fc529a5cb4b226caf1bf27bc196b9d99a9d11
+  first| L4: sha3 package root: ee1f8432a62e15de875a1cf5b45a5c13c4b6c53e754f3eb8f12f1c952baec603
+  first| L5: OK
+  first| L6: [zcode-package-dev-case] shard=3 name=zpd_row_base ms=15 failures=0
+  first| L7: zcode package dev prepare: local control stores do not alter package roots... OK
+  first| L8: [zcode-package-dev-case] shard=3 name=zpd_row_control_stores ms=1 failures=0
+  first| L9: zcode package dev prepare: an unstated chain_id is the active chain... OK
+  first| L10: [zcode-package-dev-case] shard=3 name=zpd_row_default_chain_id ms=0 failures=0
+  first| L11: zcode package dev prepare: exact file selection is closed and root-bound... OK
+  first| L12: [zcode-package-dev-case] shard=3 name=zpd_row_exact_file_selection ms=1 failures=0
+  first| L13: zcode package dev prepare: symlink, special and unknown fields fail closed... OK
+  first| L14: [zcode-package-dev-case] shard=3 name=zpd_row_fail_closed ms=1 failures=0
+  first| L15: zcode package dev prepare: programs are declared, never inferred... OK
+  first| L16: [zcode-package-dev-case] shard=3 name=zpd_row_prepare_programs ms=2 failures=0
+  first| L17: zcode project inspect: human summary is read-only and root-free by default... OK
+  first| L18: [zcode-package-dev-case] shard=3 name=zpd_row_project_inspect ms=1 failures=0
+  first| L19: zcode project init: plan is read-only and commit is exact and exclusive... OK
+  first| L20: [zcode-package-dev-case] shard=3 name=zpd_row_project_init ms=4 failures=0
+  first| L21: zcode reuse plan: exact, partial, absent, incompatible and conflict... OK
+  first| L22: [zcode-package-dev-case] shard=3 name=zpd_row_reuse_plan ms=0 failures=0
+  first| L23: zcode work start: exact SPDX filter selects one root-bound reuse... OK
+  first| L24: [zcode-package-dev-case] shard=3 name=zpd_row_work_start_license_filter ms=4 failures=0
+  first| L25: zcode work start: license filter cannot hand off a superseded root... 2026-11-21T16:26:42Z INFO [codeindex] cognition/modules/codeindex/src/codeindex_build.c:763 rebuild_report(): index: rebuilt (7 ms)
+  first| L26: OK
+  first| L27: [zcode-package-dev-case] shard=3 name=zpd_row_work_start_license_lifecycle ms=428 failures=0
+  first| L28: zcode work toolchain: names capsule and whether this binary can prove... OK
+  first| L29: zcode work toolchain: package hosting alone does not prove a restart will enable compile work... OK
+  first| L30: zcode work toolchain: join next names this datadir... OK
+  first| L31: [zcode-package-dev-case] shard=3 name=zpd_row_work_toolchain ms=186 failures=0
+  first| L32: commons join posture is the same on toolchain, offered, and guide... OK
+  first| L33: [zcode-package-dev-case] shard=3 name=zpd_row_commons_join_front_doors ms=75 failures=0
+  first| L34: zcode work standard: warning-fatal sanitizer evidence reaches acceptance... 2026-11-21T16:26:42Z INFO [codeindex] cognition/modules/codeindex/src/codeindex_build.c:763 rebuild_report(): index: rebuilt (14 ms)
+  first| L35: standard admission failed: HANDOFF_REFUSED: isolated candidate workspace could not be created
+  first| L36: FAIL at tests/harness/src/test_zcode_package_dev.c:6125 (reply.status == ZCL_COMMAND_STATUS_PASSED)
+  first| L37: [zcode-package-dev-case] shard=3 name=zpd_row_standard_profile ms=69 failures=1
+  first| L38: zcode_package_dev: ran 14 of 19 sub-suites (one shard), 1 failed
+[rerun-alone] [959] test_zcode_package_dev_shard_03 — first attempt FAILED under the shared pool; retrying alone with the pool idle (at most once)

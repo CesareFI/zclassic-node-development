@@ -1,0 +1,18 @@
+agent-verify: check-file-size-ceiling rc=0 secs=6
+agent-verify: check-cyclomatic-complexity rc=0 secs=8
+agent-verify: dev-bin rc=0 secs=611
+agent-verify: selection exact groups=119 reason=impact-plan detail=- base=0b8cc3e070afce122015dc5d3896c102aa5af432 select_secs=24
+agent-verify: t-fast-exact rc=2 secs=1299
+SUITE VERDICT mode=cold groups_total=1620 groups_ran=119 groups_cached=0 groups_gated=1501 groups_failed=8 self_skips=2 env_unobserved=0 load_flaky=0 toolkey=8c010ddd6c9e
+  first| L7: lifecycle: real queue outcome completes the ref, evidence exact... FAIL at tests/harness/src/test_fleet_gateway.c:2748 (gw_poll_match(receipt, "verdict", 150))
+  first| L9: lifecycle: restart keeps completed, idempotent, revoke-safe... FAIL at tests/harness/src/test_fleet_gateway.c:2811 (gw_body_has(b, "\"state\\\":\\\"completed\\\""))
+  first| L3: compat: pass outcome completes the ref with the exact row... FAIL at tests/harness/src/test_fleet_gateway.c:3493 (gw_poll_match(receipt, "verdict", 150))
+  first| L5: compat: failed and cancelled never read completed... FAIL at tests/harness/src/test_fleet_gateway.c:3538 (gw_poll_match(receipt, "verdict", 150))
+  first| L7: compat: result row plus outcome row complete the journey... FAIL at tests/harness/src/test_fleet_gateway.c:3788 (gw_poll_match(receipt, "verdict", 150))
+agent-verify: check-capability-closure rc=0 secs=29
+agent-verify: proof-lint-prebuild rc=2 secs=25
+collect2: error: ld returned 1 exit status
+make[1]: *** [Makefile:17844: proof-lint-prebuild] Error 2
+agent-verify: lint-fast rc=0 secs=271
+agent-verify: total secs=2296
+agent-verify: FAILED (t-fast-exact proof-lint-prebuild)

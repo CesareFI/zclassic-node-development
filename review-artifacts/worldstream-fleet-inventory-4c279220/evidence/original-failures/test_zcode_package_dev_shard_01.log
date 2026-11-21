@@ -1,0 +1,7 @@
+test_parallel: private state retained=/dev/shm/z23-scratch/efd1d92a.TeVWL4/runner-state-bff3ac529449fad000
+shard partition: every sub-suite is owned by exactly one registered shard of the umbrella... OK
+zcode development benchmark: 12 frozen tasks across 3 projects... 2026-11-21T16:30:35Z INFO [codeindex] cognition/modules/codeindex/src/codeindex_build.c:763 rebuild_report(): index: rebuilt (8 ms)
+benchmark case 0 handoff: HANDOFF_REFUSED isolated candidate workspace could not be created
+FAIL at tests/harness/src/test_zcode_package_dev.c:2003 (cs->reply.status == ZCL_COMMAND_STATUS_PASSED)
+[zcode-package-dev-case] shard=1 name=zpd_row_twelve_task_benchmark ms=424 failures=1
+zcode_package_dev: ran 1 of 19 sub-suites (one shard), 1 failed

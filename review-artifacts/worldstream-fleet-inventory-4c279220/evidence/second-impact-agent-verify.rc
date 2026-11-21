@@ -1,0 +1,14 @@
+agent-verify: check-file-size-ceiling rc=0 secs=4
+agent-verify: check-cyclomatic-complexity rc=0 secs=5
+agent-verify: dev-bin rc=0 secs=892
+agent-verify: selection exact groups=119 reason=impact-plan detail=- base=0b8cc3e070afce122015dc5d3896c102aa5af432 select_secs=9
+agent-verify: t-fast-exact rc=0 secs=1145
+SUITE VERDICT mode=cold groups_total=1620 groups_ran=119 groups_cached=0 groups_gated=1501 groups_failed=0 self_skips=2 env_unobserved=0 load_flaky=0 toolkey=a3038e00deb4
+agent-verify: check-capability-closure rc=0 secs=23
+agent-verify: proof-lint-prebuild rc=2 secs=72
+make[1]: *** [Makefile:18572: build/bin/z23kernel.bin] Error 1
+make[1]: *** Waiting for unfinished jobs....
+build-epoch-session: acquired profile=node-c23-v1 epoch=4d1b84102029168ba5bed80ffd151b09a76f1ed76d9d2ce6f3c7dcc971f5206a lease=build/node-obj/epochs/4d1b84102029168ba5bed80ffd151b09a76f1ed76d9d2ce6f3c7dcc971f5206a/.leases/7f94a1e54954ae6cdbbc9d8350c676c362afbd8f10f7fdcd1c803f053108b991 build_system_id=7c364de9f34a53b572025a21474e4d627e5ded3917246cb283b4fdea199db2cd
+agent-verify: lint-fast rc=0 secs=234
+agent-verify: total secs=2396
+agent-verify: FAILED (proof-lint-prebuild)

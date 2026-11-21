@@ -1,0 +1,7 @@
+test_parallel: private state retained=/dev/shm/z23-scratch/efd1d92a.TeVWL4/runner-state-ce71384ade4f0a5200
+=== fleet_gateway shard=5 pid=556016 state=/dev/shm/z23-scratch/efd1d92a.TeVWL4/fleet_gateway_556016_iso_s05/state ===
+compat: crash stays incomplete, resume on attempt 2 completes... FAIL at tests/harness/src/test_fleet_gateway.c:3601 (gw_poll_match(receipt, "rc=", 60))
+[fleet-gateway-case] shard=5 name=gw_t_compat_crash ms=6434 failures=1
+compat: case variants and unknown verdicts never complete... FAIL at tests/harness/src/test_fleet_gateway.c:3661 (gw_poll_match(receipt, "verdict", 150))
+[fleet-gateway-case] shard=5 name=gw_t_compat_case ms=15595 failures=1
+test_fleet_gateway shard=5: 2 FAILED

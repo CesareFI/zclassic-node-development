@@ -1,0 +1,13 @@
+test_parallel: private state retained=/dev/shm/z23-scratch/efd1d92a.TeVWL4/runner-state-058e51cff073aade00
+=== fleet_gateway shard=6 pid=556170 state=/dev/shm/z23-scratch/efd1d92a.TeVWL4/fleet_gateway_556170_iso_s06/state ===
+compat: arbitrary verdicts and dirty pass exits never complete... FAIL at tests/harness/src/test_fleet_gateway.c:3725 (gw_poll_match(receipt, "verdict", 150))
+[fleet-gateway-case] shard=6 name=gw_t_compat_rc ms=15577 failures=1
+compat: cancel stops queued work, refuses live rows... FAIL at tests/harness/src/test_fleet_gateway.c:3867 (gw_worker_poll(adir, "held", "held"))
+cancel fixture gw-compat-cancela cleanup: release=1 finish=1 terminal=0 PASS=0 free=1
+[fleet-gateway-case] shard=6 name=gw_t_compat_cancelq ms=30850 failures=2
+gateway: steer_brief schema admits a resume token for since... OK
+gateway: a token since carries a lower-seq row exactly once... OK
+gateway: a stale token refuses typed and replays from the start... OK
+gateway: a wrong-sender same-ref row never acknowledges... OK
+[fleet-gateway-case] shard=6 name=gw_t_brief_token ms=372 failures=0
+test_fleet_gateway shard=6: 3 FAILED

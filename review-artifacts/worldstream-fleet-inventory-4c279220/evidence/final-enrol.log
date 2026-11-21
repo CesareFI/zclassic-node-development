@@ -1,0 +1,1073 @@
+devbuild: z23 lane 1, CPUs 2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47, memory 24G
+t-fast-exact: ONLY='test_fleet_enrol' resolves to exact set test_fleet_enrol
+/home/z23dev/work/fleet-inventory-20261121/build/bin/zcc cc -std=c23 -O2 -Wall -Wextra -Werror -pedantic -Wundef -Wstrict-prototypes -Wdouble-promotion -Wduplicated-cond -Wduplicated-branches -Wshift-overflow=2 -Wattribute-alias=2 -Walloca -Wvla -Wtrampolines -Wflex-array-member-not-at-end -fstack-protector-strong -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 -fcf-protection=full -fPIE -D_POSIX_C_SOURCE=200809L  -ffunction-sections -fdata-sections -Itools/dev -Iplatform/modules/base/include -Iplatform/modules/sha3/include -Iplatform/modules/platform/include -Iplatform/modules/support/include -Iplatform/modules/util/include -Icore/modules/crypto/include  -o build/bin/z23-git-hook tools/dev/z23_git_hook.c tools/dev/dev_proof_coverage.c tools/dev/dev_proof_observation_walk.c tools/dev/dev_proof_receipt.c tools/dev/dev_proof_signer.c core/modules/crypto/src/ed25519.c core/modules/crypto/src/sha512.c platform/modules/sha3/src/sha3.c platform/modules/base/src/cleanse.c platform/modules/base/src/log_level.c platform/modules/base/src/safe_alloc.c platform/modules/platform/src/directory_compat.c platform/modules/platform/src/positioned_file.c platform/modules/platform/src/private_directory.c platform/modules/platform/src/private_file.c platform/modules/platform/src/rng.c platform/modules/platform/src/state_root.c \
+	-pie -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack -fcf-protection=full -Wl,--gc-sections 
+build-epoch-session: acquired profile=test-fast-v2 epoch=b28fddcbd87b7f7356c28ccf080f84239700a74a53f366f0b4bd00231e5f5f05 lease=build/test-obj/epochs/b28fddcbd87b7f7356c28ccf080f84239700a74a53f366f0b4bd00231e5f5f05/.leases/d4ee370bfa21461c7da3575f030ff52cd69fe2c4733aca305e9df412f2a73e60 build_system_id=7c364de9f34a53b572025a21474e4d627e5ded3917246cb283b4fdea199db2cd
+test_parallel: 1620 groups, 4 workers, 300s per-group timeout (workers: cpus)
+test_parallel: dispatch longest-expected-first, 213 weighted groups from tools/dev/test_group_weights.tsv
+test_parallel: exclusive pass done groups=0
+test_parallel: quiet-lint phase done groups=0 makespan_s=0.0
+test_parallel: attempt group=test_fleet_enrol retained_state=/dev/shm/z23-scratch/efd1d92a.7u466j/runner-state-c5a560532d28ea1000
+test_parallel: general phase done groups=1 makespan_s=4.2
+
+==================== test_fleet_enrol (PASS, 4.174s) ====================
+test_parallel: private state retained=/dev/shm/z23-scratch/efd1d92a.7u466j/runner-state-c5a560532d28ea1000
+fleet enrol: an invite this box minted parses back to the same fields and verifies against the key inside it... OK
+fleet preview verifies invitations without creating fleet state... 2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [acme] core/modules/net/src/acme_b64url.c:129 acme_b64url_decode(): refusing non-canonical base64url pad bits
+OK
+fleet preview preserves existing operator and box keys... 2026-11-21T15:57:57Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=a7b0b78b5b8dcf880ca026103b5c135c0b9f3073cf1378f56d79dbf1185b435c path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_preview-existing/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+OK
+fleet machine preview is advisory and observes later revocation... 2026-11-21T15:57:57Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=eeb8ae71ef7051eafe67859e9a30fb61bab3eace4c281ba2ee46055d601b649a path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_preview-row/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+2026-11-21T15:57:57Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:1046 fe_row_head_gate(): fleet_box_revoked: the roster head revokes this box; its row is not imported
+2026-11-21T15:57:57Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:1046 fe_row_head_gate(): fleet_box_revoked: the roster head revokes this box; its row is not imported
+OK
+fleet preview rejects ambiguous input and does not create state... OK
+fleet preview refuses name conflicts and a different pinned root... 2026-11-21T15:57:57Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=85cc97e770ac519358a9a6b4b4d57297887979b61664312044ba3795d0e17a12 path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_preview-conflicts/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+2026-11-21T15:57:57Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:570 fe_pin_gate(): fleet_root_changed: this import is sealed by an operator key other than the one this box pinned; pass confirm_operator_change=yes to re-pin
+OK
+fleet enrol: one changed byte anywhere in an invite is refused, including the operator key an attacker would swap in... 2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=84) origin=ed25519.c:317
+OK
+fleet enrol: the human name is required, unique in spelling, and the invite lifetime is bounded at both ends... OK
+fleet invite: ttl_hours takes whole hours from 1 to 168, and a refusal names that range... OK
+fleet enrol: a receipt carries the box's own signature over its own facts, and an edited fact is refused... 2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=359) origin=ed25519.c:317
+OK
+fleet enrol: a roster line is only this fleet's row when this operator key sealed it... 2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=409) origin=ed25519.c:317
+OK
+fleet enrol: a name belongs to one box, a box keeps its port, and a line this key did not seal is counted but never listed... 2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=411) origin=ed25519.c:317
+2026-11-21T15:57:57Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:214 fe_roster_walk(): fleet roster carries 1 line(s) this operator key did not seal; they are counted, never listed
+OK
+fleet enrol: a roster line is imported only after the operator key this box trusts verifies it; a forged line and a wrong operator key leave the roster untouched... 2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=409) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=409) origin=ed25519.c:317
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=409) origin=ed25519.c:317
+OK
+fleet enrol: an invite nonce is spendable exactly once... OK
+fleet enrol: every invite carries its own random nonce, drawn by the mint and never inherited from the caller's memory... OK
+fleet enrol: one manager admits a second machine — two invites, two unspent nonces, two rows on the roster... OK
+fleet enrol: the bridge line is one restricted loopback forward, byte for byte, and adding it twice adds one line... OK
+fleet enrol: a NUL before or after a bridge grant refuses unchanged... 2026-11-21T15:57:57Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:1422 fleet_bridge_authorize(): cannot append the restricted bridge line
+2026-11-21T15:57:57Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:1422 fleet_bridge_authorize(): cannot append the restricted bridge line
+2026-11-21T15:57:57Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:1422 fleet_bridge_authorize(): cannot append the restricted bridge line
+OK
+fleet enrol: the dedicated key consumes one complete measured record... OK
+fleet enrol: the onion column accepts a v3 locator and empty, and refuses everything a reader could mistake for one... OK
+fleet enrol: the persisted onion hostname fills the receipt and a missing or invalid file leaves it empty... OK
+fleet enrol: a receipt is refused by name when its onion is not a v3 locator... OK
+fleet join: the receipt records the onion of the bound datadir; an explicit --onion wins; a missing or invalid hostname leaves the column empty... 2026-11-21T15:57:57Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=f7e1bc5967174eaf3e7f998c426de1b4b4a2f70ff9788f90881577197b08d17f path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_join-onion/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+OK
+fleet on a phone: with the app's files directory as the only state root and no HOME, a box that never joined is unarmed and counts nothing unverifiable; through a link the root is unverifiable; after `fleet join` the root is read and the status lists the fleet's machines and their agreement... [boot]   sqlite.preflight_prelease    0ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   0ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              1ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               3ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           1ms
+[boot]   sqlite.create_schema         5ms (attempt=initial result=ok)
+db: current schema version 1
+db: applied 91 migration(s), now at version 92
+[boot]   sqlite.migrate               138ms (attempt=initial result=ok)
+2026-11-21T15:57:57Z WARN [fleet.roster] engine/composition/src/boot_fleet_roster.c:227 roster_root_read(): the recorded fleet root cannot be read: no fleet-scope relay until it can
+2026-11-21T15:57:57Z WARN [fleet.roster] engine/composition/src/boot_fleet_roster.c:658 snap_log_transition(): fleet roster is unverifiable: no fleet-scope relay until the root and the roster notes can be read
+2026-11-21T15:57:57Z WARN [fleet.roster] engine/composition/src/boot_fleet_roster.c:227 roster_root_read(): the recorded fleet root cannot be read: no fleet-scope relay until it can
+2026-11-21T15:57:57Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=68dc3869d32b955887b61a6af52a9dc27383a08c59bb1abfe64c6761b3b40c13 path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_phone/data/files/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+2026-11-21T15:57:57Z WARN [fleet.roster] engine/composition/src/boot_fleet_roster.c:652 snap_log_transition(): fleet roster lapsed to unarmed (no sealed roster row is held; the notes expired or were never republished): fleet-scope carriage is pairing plus role again
+OK
+fleet machines keeps missing and empty state unchanged on repeated reads... OK
+fleet machines distinguishes invalid private state and leaves from absence... 2026-11-21T15:57:57Z WARN [fleet-enrol] tools/dev/fleet_enrol_key.c:158 fe_key_load_mode(): the fleet key must be a private 32-byte regular file: path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_machines-invalid/state/z23/dev/fleet/box.ed25519
+2026-11-21T15:57:57Z WARN [fleet-enrol] tools/dev/fleet_enrol_key.c:158 fe_key_load_mode(): the fleet key must be a private 32-byte regular file: path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_machines-invalid/state/z23/dev/fleet/box.ed25519
+2026-11-21T15:57:57Z WARN [fleet-enrol] tools/dev/fleet_enrol_key.c:239 fe_operator_read_mode(): the recorded fleet operator key is not 64 lowercase hex digits: path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_machines-invalid/state/z23/dev/fleet/operator.pub
+OK
+fleet machines: one entry per box key, the latest enrolment wins and rows counts the lines it stands for... OK
+fleet machines: offset and limit page verified rows past the render cap, and an unverifiable line does not take a slot... 2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=411) origin=ed25519.c:317
+2026-11-21T15:57:57Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:214 fe_roster_walk(): fleet roster carries 1 line(s) this operator key did not seal; they are counted, never listed
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=411) origin=ed25519.c:317
+2026-11-21T15:57:57Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:214 fe_roster_walk(): fleet roster carries 1 line(s) this operator key did not seal; they are counted, never listed
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=411) origin=ed25519.c:317
+2026-11-21T15:57:57Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:214 fe_roster_walk(): fleet roster carries 1 line(s) this operator key did not seal; they are counted, never listed
+2026-11-21T15:57:57Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=411) origin=ed25519.c:317
+2026-11-21T15:57:57Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:214 fe_roster_walk(): fleet roster carries 1 line(s) this operator key did not seal; they are counted, never listed
+OK
+fleet enrol: what the operator attested and what the box claimed are rendered as two objects that never merge... OK
+fleet doctor: an empty datadir and no node is blocked at the node and names an existing command for every gap... OK
+fleet doctor: hybrid peers are counted from the peer list, and a pairing under 24h warns while a distant one does not... [boot]   sqlite.preflight_prelease    0ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   0ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               1ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           0ms
+[boot]   sqlite.create_schema         5ms (attempt=initial result=ok)
+db: current schema version 1
+db: applied 91 migration(s), now at version 92
+[boot]   sqlite.migrate               137ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_prelease    0ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   0ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               0ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           0ms
+[boot]   sqlite.create_schema         5ms (attempt=initial result=ok)
+db: current schema version 1
+db: applied 91 migration(s), now at version 92
+[boot]   sqlite.migrate               137ms (attempt=initial result=ok)
+OK
+fleet doctor: more than 64 machines or pairings never grow the answer past 64 rows... [boot]   sqlite.preflight_prelease    0ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   0ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               1ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           0ms
+[boot]   sqlite.create_schema         4ms (attempt=initial result=ok)
+db: current schema version 1
+db: applied 91 migration(s), now at version 92
+[boot]   sqlite.migrate               138ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_prelease    0ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   0ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               0ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           1ms
+[boot]   sqlite.create_schema         4ms (attempt=initial result=ok)
+db: current schema version 1
+db: applied 91 migration(s), now at version 92
+[boot]   sqlite.migrate               137ms (attempt=initial result=ok)
+OK
+fleet doctor: neither the box's fleet seed nor a private field in the node's capsule reaches the answer... 2026-11-21T15:57:58Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=2ef28c5cb1aa461cb711f512900648b69171e0c0de0140f90fb8cc4fa8bb49c6 path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_doctor-secret/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+[boot]   sqlite.preflight_prelease    0ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   0ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               0ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           0ms
+[boot]   sqlite.create_schema         5ms (attempt=initial result=ok)
+db: current schema version 1
+db: applied 91 migration(s), now at version 92
+[boot]   sqlite.migrate               138ms (attempt=initial result=ok)
+OK
+fleet doctor: a pairing store that is not a database is refused by name, not reported as missing... 2026-11-21T15:57:58Z ERROR [cmd] tools/command/native_node_db_ro.c:446 zcl_ro_attach(): present but not a readable database: /dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_doctor-junk-dd/node.db: file is not a database
+OK
+fleet enrol: a required fleet root passes only as an ACTIVE ZID anchor; an optional one never refuses; a forged seal is refused whatever the chain says... 2026-11-21T15:57:58Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=409) origin=ed25519.c:317
+2026-11-21T15:57:58Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=409) origin=ed25519.c:317
+2026-11-21T15:57:58Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=409) origin=ed25519.c:317
+OK
+fleet enrol: an enrolment made before the operator anchored its key still lists and imports, and its anchor state is reported, not rejected... 2026-11-21T15:57:58Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=41da520862425fd54d525f204cde2a7b7394f35f839a33532796888d8772ce91 path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_anchor-reported/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+[boot]   sqlite.preflight_prelease    0ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   0ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               0ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           1ms
+[boot]   sqlite.create_schema         4ms (attempt=initial result=ok)
+db: current schema version 1
+db: applied 91 migration(s), now at version 92
+[boot]   sqlite.migrate               137ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_prelease    0ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   0ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               1ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           0ms
+[boot]   sqlite.create_schema         4ms (attempt=initial result=ok)
+db: current schema version 1
+db: applied 91 migration(s), now at version 92
+[boot]   sqlite.migrate               137ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_prelease    2ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   2ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               2ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           1ms
+[boot]   sqlite.create_schema         1ms (attempt=initial result=ok)
+db: current schema version 92
+[boot]   sqlite.migrate               0ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_prelease    0ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   0ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               0ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           1ms
+[boot]   sqlite.create_schema         4ms (attempt=initial result=ok)
+db: current schema version 1
+db: applied 91 migration(s), now at version 92
+[boot]   sqlite.migrate               137ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_prelease    2ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   1ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               2ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           2ms
+[boot]   sqlite.create_schema         0ms (attempt=initial result=ok)
+db: current schema version 92
+[boot]   sqlite.migrate               0ms (attempt=initial result=ok)
+OK
+fleet admit --require_anchor: a missing, wrong, rotated or revoked anchor refuses before anything is spent; an active one admits; without the flag an unanchored manager still admits... 2026-11-21T15:57:59Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=323b38d6627e760cfe3be71dd390e19786c7a4c18afcfa4fcd88a0fa6c83fc26 path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_admit-anchor/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+[boot]   sqlite.preflight_prelease    0ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   0ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               1ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           0ms
+[boot]   sqlite.create_schema         4ms (attempt=initial result=ok)
+db: current schema version 1
+db: applied 91 migration(s), now at version 92
+[boot]   sqlite.migrate               138ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_prelease    2ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   2ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               2ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           1ms
+[boot]   sqlite.create_schema         1ms (attempt=initial result=ok)
+db: current schema version 92
+[boot]   sqlite.migrate               0ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_prelease    2ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   2ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               2ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           1ms
+[boot]   sqlite.create_schema         1ms (attempt=initial result=ok)
+db: current schema version 92
+[boot]   sqlite.migrate               0ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_prelease    2ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   1ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               2ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           2ms
+[boot]   sqlite.create_schema         0ms (attempt=initial result=ok)
+db: current schema version 92
+[boot]   sqlite.migrate               0ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_prelease    2ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   2ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               2ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           2ms
+[boot]   sqlite.create_schema         0ms (attempt=initial result=ok)
+db: current schema version 92
+[boot]   sqlite.migrate               0ms (attempt=initial result=ok)
+OK
+fleet import --require_anchor: a line the operator sealed is refused unless the operator is an active anchor; a forged line is refused as unsealed whatever the chain says... 2026-11-21T15:57:59Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=550d864b6360c7f837ecbd04e76e73f8e45af49fd2c66295596b82ba3cd755e8 path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_import-anchor/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+[boot]   sqlite.preflight_prelease    0ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   0ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               0ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           0ms
+[boot]   sqlite.create_schema         5ms (attempt=initial result=ok)
+db: current schema version 1
+db: applied 91 migration(s), now at version 92
+[boot]   sqlite.migrate               137ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_prelease    2ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   2ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               2ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           1ms
+[boot]   sqlite.create_schema         1ms (attempt=initial result=ok)
+db: current schema version 92
+[boot]   sqlite.migrate               0ms (attempt=initial result=ok)
+2026-11-21T15:57:59Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=409) origin=ed25519.c:317
+2026-11-21T15:57:59Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=409) origin=ed25519.c:317
+OK
+fleet admit/import: any require_anchor value but no/false/0 requires the anchor, so a typo fails closed; no/false/0 do not... 2026-11-21T15:57:59Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=3baf6ceb8a7ce7ada819ddf3620880194f73ed795e3b85ef4b49b86a03a334ea path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_require-spelling/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+[boot]   sqlite.preflight_prelease    0ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   0ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               0ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           0ms
+[boot]   sqlite.create_schema         5ms (attempt=initial result=ok)
+db: current schema version 1
+db: applied 91 migration(s), now at version 92
+[boot]   sqlite.migrate               137ms (attempt=initial result=ok)
+OK
+fleet admit returns the exact signed machine row... 2026-11-21T15:57:59Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=b43ce6becb06126dc5bf99b60a53dc9dd4eef415a91d240a3a0be28bf52c3019 path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_admitted-machine-line/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+[boot]   sqlite.preflight_prelease    0ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   0ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              1ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               0ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           0ms
+[boot]   sqlite.create_schema         5ms (attempt=initial result=ok)
+db: current schema version 1
+db: applied 91 migration(s), now at version 92
+[boot]   sqlite.migrate               137ms (attempt=initial result=ok)
+OK
+fleet admit append refusal returns no machine code and leaves invite usable... 2026-11-21T15:58:00Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=863b3cc9202f43940f89883a0a856f7be7eeaddefe6bec5891e9b143e4bcaf25 path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_admit-append-refusal/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+OK
+fleet admit --require_anchor: a corrupt node.db and an unknown status both read UNREADABLE and refuse as unverifiable... 2026-11-21T15:58:00Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=925bd0d587db2b261e08efeeda93d7330d9937870a93e86b0f44ab1bbf9189dc path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_anchor-unreadable/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+2026-11-21T15:58:00Z ERROR [cmd] tools/command/native_node_db_ro.c:446 zcl_ro_attach(): present but not a readable database: /dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_anchor-garbage/node.db: file is not a database
+2026-11-21T15:58:00Z ERROR [cmd] tools/command/native_node_db_ro.c:446 zcl_ro_attach(): present but not a readable database: /dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_anchor-garbage/node.db: file is not a database
+[boot]   sqlite.preflight_prelease    0ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   0ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               1ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           0ms
+[boot]   sqlite.create_schema         5ms (attempt=initial result=ok)
+db: current schema version 1
+db: applied 91 migration(s), now at version 92
+[boot]   sqlite.migrate               137ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_prelease    2ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   2ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               2ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           2ms
+[boot]   sqlite.create_schema         0ms (attempt=initial result=ok)
+db: current schema version 92
+[boot]   sqlite.migrate               0ms (attempt=initial result=ok)
+OK
+fleet import reports a rotation's successor and height exactly; fleet invite reports an active anchor... 2026-11-21T15:58:00Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=c373f647a0390a4db0b261d5144ee71a2d2e128e42d2c47a68b3516cb5ff79ed path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_anchor-rotation/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+[boot]   sqlite.preflight_prelease    0ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   0ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               0ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           0ms
+[boot]   sqlite.create_schema         5ms (attempt=initial result=ok)
+db: current schema version 1
+db: applied 91 migration(s), now at version 92
+[boot]   sqlite.migrate               137ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_prelease    2ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   2ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               2ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           1ms
+[boot]   sqlite.create_schema         1ms (attempt=initial result=ok)
+db: current schema version 92
+[boot]   sqlite.migrate               0ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_prelease    1ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   2ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               2ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           2ms
+[boot]   sqlite.create_schema         0ms (attempt=initial result=ok)
+db: current schema version 92
+[boot]   sqlite.migrate               0ms (attempt=initial result=ok)
+OK
+fleet roster gate: the provider names the root this box trusts, verifies a line only if the root sealed it, and obeys the root's chain state... 2026-11-21T15:58:00Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=505) origin=ed25519.c:317
+2026-11-21T15:58:00Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=505) origin=ed25519.c:317
+2026-11-21T15:58:00Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=a0834f9cc3b20b08df840435464096772611b1c88e693d836d1bf3bb5c4ccee4 path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_roster-gate-manager/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+OK
+fleet head: the sealed set is canonical (sorted, unique), a 256-key head round-trips, and a forged, truncated or non-head line is refused... 2026-11-21T15:58:00Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:278 ed25519_verify(): pubkey decompression (unpackneg) failed origin=ed25519.c:278
+OK
+fleet head import: a lower sequence is stale, the same bytes are idempotent, the same sequence with other bytes conflicts, a higher sequence replaces... 2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:786 fe_head_stale(): fleet_head_stale: held seq=5, offered seq=4
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:805 fe_head_rule_held(): fleet_head_conflict: two different heads carry the same sequence
+OK
+fleet head import: two imports cannot interleave between the sequence check and the write, so a lower head never overwrites a higher one... 2026-11-21T15:58:00Z ERROR [fleet-enrol] tools/dev/fleet_enrol_store.c:391 fe_state_lock_take(): fleet_state_locked: cannot take the fleet state lock; refusing rather than racing
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:786 fe_head_stale(): fleet_head_stale: held seq=7, offered seq=6
+OK
+fleet head import: a corrupted held head cannot be replaced by an older valid head; a higher one repairs it; a missing or damaged sequence record fails closed... 2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_torn: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_torn: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_torn: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:786 fe_head_stale(): fleet_head_stale: held seq=6, offered seq=4
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_torn: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_torn: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_hwm_unreadable: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_hwm_unreadable: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_hwm_unreadable: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+OK
+fleet head import: a crash between the sequence record and the head leaves a torn state that admits nobody; the same head or a higher one repairs it and an older one is refused... 2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_torn: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_torn: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:786 fe_head_stale(): fleet_head_stale: held seq=6, offered seq=4
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_torn: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:786 fe_head_stale(): fleet_head_stale: held seq=6, offered seq=5
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_torn: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_torn: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_torn: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_torn: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:786 fe_head_stale(): fleet_head_stale: held seq=8, offered seq=6
+OK
+fleet import: when the pin or sequence record moved and the rest did not finish, the reply says mutated with the partial state named; a failure before any change says mutated false... 2026-11-21T15:58:00Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=30c646229b75964e45f78df5550694f3ab94aac8814d7b09182332de37f8326a path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_import-partial/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+[boot]   sqlite.preflight_prelease    0ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   0ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               0ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           0ms
+[boot]   sqlite.create_schema         5ms (attempt=initial result=ok)
+db: current schema version 1
+db: applied 91 migration(s), now at version 92
+[boot]   sqlite.migrate               138ms (attempt=initial result=ok)
+2026-11-21T15:58:00Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=d4c5d9aa976dabdac7c0d598301b5ec52f1b6da116e7c91c3d995db6ebb361ce path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_import-flush/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+2026-11-21T15:58:00Z ERROR [fleet-enrol] tools/dev/fleet_enrol_store.c:499 fe_replace_leaf(): cannot replace one fleet state file: leaf=operator.pin
+2026-11-21T15:58:00Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=48bef6d328a2b289a152dc2e0cd2b50cb122676c75aaf3b5b8c2588bf5077011 path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_import-partial-row/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+OK
+fleet roster head: minting a revocation also names the box's signer key from the operator's own row, refuses a box it holds no row for, and the import refuses a row whose signer is revoked... 2026-11-21T15:58:00Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=52ef30652c79685e999e46f2c9abe1dc0b36c006ad306d158b209562a4fd86d1 path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_head-signer/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:1046 fe_row_head_gate(): fleet_box_revoked: the roster head revokes this box; its row is not imported
+OK
+fleet head import: a sequence record naming another operator refuses every import, and a lowered record cannot admit an older head while an intact newer signed head is on disk... 2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_hwm_unreadable: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_hwm_unreadable: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_torn: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_torn: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:786 fe_head_stale(): fleet_head_stale: held seq=9, offered seq=5
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_torn: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:889 fe_head_rule_torn_checked(): fleet_head_unreadable: the stored head's sequence could not be assessed; refusing the import
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_torn: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+OK
+fleet roster head: a revoked box that rotated signers has every signer its rows bound revoked with it; a re-enrolment of that box under a new signer is refused; a box-only head still refuses the box... 2026-11-21T15:58:00Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=f9a0453396216dc2e1de8f2419a231293a34121a01ad3d64b071b0db3f0d7d37 path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_head-signers/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:1046 fe_row_head_gate(): fleet_box_revoked: the roster head revokes this box; its row is not imported
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:1046 fe_row_head_gate(): fleet_box_revoked: the roster head revokes this box; its row is not imported
+OK
+fleet import: a machine row for a revoked box is refused, another box still imports, and with no head file nothing is revoked... 2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:1046 fe_row_head_gate(): fleet_box_revoked: the roster head revokes this box; its row is not imported
+OK
+fleet head: an empty, corrupt or foreign-sealed head file is never read as nothing-revoked; import and the gate provider both fail closed by name... 2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_torn: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_torn: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_torn: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_torn: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_torn: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_torn: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_torn: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_torn: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_torn: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+OK
+fleet import: the first import pins the operator; a different operator is fleet_root_changed until confirm_operator_change re-pins; a head from an operator this box does not trust never lands... 2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:986 fe_head_import_locked(): fleet_root_changed: this head is sealed by an operator key other than the one this box trusts
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:986 fe_head_import_locked(): fleet_root_changed: this head is sealed by an operator key other than the one this box trusts
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:570 fe_pin_gate(): fleet_root_changed: this import is sealed by an operator key other than the one this box pinned; pass confirm_operator_change=yes to re-pin
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:570 fe_pin_gate(): fleet_root_changed: this import is sealed by an operator key other than the one this box pinned; pass confirm_operator_change=yes to re-pin
+2026-11-21T15:58:00Z ERROR [ed25519] core/modules/crypto/src/ed25519.c:317 ed25519_verify(): signature verify: [S]B - [h]A != R (signature mismatch, msg_len=409) origin=ed25519.c:317
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:214 fe_roster_walk(): fleet roster carries 1 line(s) this operator key did not seal; they are counted, never listed
+2026-11-21T15:58:00Z ERROR [fleet-enrol] tools/dev/fleet_enrol_store.c:530 fe_pin_read(): the recorded fleet operator pin is not 64 lowercase hex digits; refusing rather than pinning over it
+OK
+fleet roster head / fleet import through the shipped leaves: mint a head, import it, then the revoked box's row is refused by code... 2026-11-21T15:58:00Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=6f9805cb6c64758ac374614b07953725cb1328280bada6120b6ac4898c49081b path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_head-leaves/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:1046 fe_row_head_gate(): fleet_box_revoked: the roster head revokes this box; its row is not imported
+OK
+fleet roster revoke: an unknown key, a bad key, no confirm word, a box without the operator key and an untrusted head each refuse by name and change nothing... 2026-11-21T15:58:00Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=e919c83d81c1c4fcec0900fa4bc1d9d626173a4e7ad633e4c97139a557c09efc path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_revoke-not-operator/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+2026-11-21T15:58:00Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=07962d221585910caae5f75f729a223d185a4ca7fa8f0c28439ce26e5c080faa path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_revoke-refusals/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_hwm_unreadable: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+OK
+fleet gate: an operator pin with no read permission closes the gate and the peer is refused... [boot]   sqlite.preflight_prelease    0ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   0ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               0ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           1ms
+[boot]   sqlite.create_schema         4ms (attempt=initial result=ok)
+db: current schema version 1
+db: applied 91 migration(s), now at version 92
+[boot]   sqlite.migrate               137ms (attempt=initial result=ok)
+2026-11-21T15:58:00Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=f3f77a213e296837e4da8194a3c4c33904066675bf135f9729ee45a3ee13a31a path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_operator-mode/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+[boot]   sqlite.preflight_prelease    1ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   2ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               2ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           2ms
+[boot]   sqlite.create_schema         0ms (attempt=initial result=ok)
+db: current schema version 92
+[boot]   sqlite.migrate               0ms (attempt=initial result=ok)
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_key.c:224 fe_operator_read_mode(): the recorded fleet operator key cannot be opened: path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_operator-mode/state/z23/dev/fleet/operator.pub
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_key.c:224 fe_operator_read_mode(): the recorded fleet operator key cannot be opened: path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_operator-mode/state/z23/dev/fleet/operator.pub
+2026-11-21T15:58:00Z WARN [fleet-enrol] tools/dev/fleet_enrol_key.c:224 fe_operator_read_mode(): the recorded fleet operator key cannot be opened: path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_operator-mode/state/z23/dev/fleet/operator.pub
+2026-11-21T15:58:00Z WARN [fleet.roster] engine/composition/src/boot_fleet_roster.c:227 roster_root_read(): the recorded fleet root cannot be read: no fleet-scope relay until it can
+2026-11-21T15:58:00Z WARN [fleet.roster] engine/composition/src/boot_fleet_roster.c:658 snap_log_transition(): fleet roster is unverifiable: no fleet-scope relay until the root and the roster notes can be read
+OK
+fleet gate: an operator pin that is a symlink to a valid pin closes the gate and the peer is refused... [boot]   sqlite.preflight_prelease    0ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   0ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               0ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           0ms
+[boot]   sqlite.create_schema         5ms (attempt=initial result=ok)
+db: current schema version 1
+db: applied 91 migration(s), now at version 92
+[boot]   sqlite.migrate               137ms (attempt=initial result=ok)
+2026-11-21T15:58:01Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=82c369791f0311a477a67968367eb562ef2c4594e8ae75c8c09bd092d73f5632 path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_operator-link/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+[boot]   sqlite.preflight_prelease    2ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   2ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               2ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           1ms
+[boot]   sqlite.create_schema         1ms (attempt=initial result=ok)
+db: current schema version 92
+[boot]   sqlite.migrate               0ms (attempt=initial result=ok)
+2026-11-21T15:58:01Z WARN [fleet-enrol] tools/dev/fleet_enrol_key.c:224 fe_operator_read_mode(): the recorded fleet operator key cannot be opened: path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_operator-link/state/z23/dev/fleet/operator.pub
+2026-11-21T15:58:01Z WARN [fleet-enrol] tools/dev/fleet_enrol_key.c:224 fe_operator_read_mode(): the recorded fleet operator key cannot be opened: path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_operator-link/state/z23/dev/fleet/operator.pub
+2026-11-21T15:58:01Z WARN [fleet-enrol] tools/dev/fleet_enrol_key.c:224 fe_operator_read_mode(): the recorded fleet operator key cannot be opened: path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_operator-link/state/z23/dev/fleet/operator.pub
+2026-11-21T15:58:01Z WARN [fleet.roster] engine/composition/src/boot_fleet_roster.c:227 roster_root_read(): the recorded fleet root cannot be read: no fleet-scope relay until it can
+2026-11-21T15:58:01Z WARN [fleet.roster] engine/composition/src/boot_fleet_roster.c:658 snap_log_transition(): fleet roster is unverifiable: no fleet-scope relay until the root and the roster notes can be read
+OK
+fleet roster head: a higher head naming only B keeps A revoked; only the named drop_revoked switch lets A back, and the reply names the key it dropped... 2026-11-21T15:58:01Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=a598f3ef21d0fb453830f94b0a3738a10c29c9c7597dd6d6fae353a70f77940c path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_head-keeps/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+OK
+fleet roster head: boxes A and C name the same signer key S; dropping A leaves S revoked because C still is, and dropping both lets S go... 2026-11-21T15:58:01Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=28c0b31ec95dad1df6d0b7c5c0f424ea441396b076ef4e81cfdb4c7c01745b27 path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_head-shared-signer/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+OK
+fleet roster revoke: the gate refuses the machine's new posts and peer, its row stays readable, a restart keeps it, running it twice is one revocation, and a higher head without it lets it back... 2026-11-21T15:58:01Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=becfae41400963fce61bbebc00e7ad304afd75d8cdfae65a9827ac4ebcce8687 path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_revoke-gate/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+[boot]   sqlite.preflight_prelease    0ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   0ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               1ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           0ms
+[boot]   sqlite.create_schema         4ms (attempt=initial result=ok)
+db: current schema version 1
+db: applied 91 migration(s), now at version 92
+[boot]   sqlite.migrate               138ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_prelease    2ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   2ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               2ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           1ms
+[boot]   sqlite.create_schema         1ms (attempt=initial result=ok)
+db: current schema version 92
+[boot]   sqlite.migrate               0ms (attempt=initial result=ok)
+2026-11-21T15:58:01Z WARN [fleet.roster] engine/composition/src/boot_fleet_roster.c:636 snap_log_transition(): the fleet roster gate is switched off on this box (-fleetrostergate=0): fleet-scope carriage follows pairing and role only
+[boot]   sqlite.preflight_prelease    2ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   2ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               2ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           1ms
+[boot]   sqlite.create_schema         1ms (attempt=initial result=ok)
+db: current schema version 92
+[boot]   sqlite.migrate               0ms (attempt=initial result=ok)
+OK
+fleet admit: a machine this box revoked, or a new box under its signer key, is refused by name and adds no row; an untrusted head refuses every admit... 2026-11-21T15:58:01Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=14919be02f0d7f8b1761821222feae89be0a860c21b78869e1e5829b44767818 path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_revoke-admit/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+[boot]   sqlite.preflight_prelease    0ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   0ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               0ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           0ms
+[boot]   sqlite.create_schema         5ms (attempt=initial result=ok)
+db: current schema version 1
+db: applied 91 migration(s), now at version 92
+[boot]   sqlite.migrate               137ms (attempt=initial result=ok)
+2026-11-21T15:58:01Z WARN [fleet-enrol] tools/dev/fleet_enrol_store.c:725 fe_head_load_text(): fleet_head_torn: the roster head or its sequence record is missing, corrupt, torn, or not sealed by this fleet's operator key; failing closed
+OK
+fleet doctor: fleet scope with the roster gate off warns, an enforcing gate or no fleet scope does not, and the row never moves the top-level state or next... [boot]   sqlite.preflight_prelease    0ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   0ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               0ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           0ms
+[boot]   sqlite.create_schema         5ms (attempt=initial result=ok)
+db: current schema version 1
+db: applied 91 migration(s), now at version 92
+[boot]   sqlite.migrate               137ms (attempt=initial result=ok)
+OK
+fleet status: a fleet root with no sealed row reports the gate not enforcing, and -fleetrostergate=0 reports off... 2026-11-21T15:58:01Z INFO [fleet-enrol] tools/dev/fleet_enrol_key.c:179 fe_key_load_mode(): fleet_key_created pubkey=c0f8c43750a705e74620b15cb6eb5cad203d7492ae7503b0f37528d927f6cd31 path=/dev/shm/z23-scratch/efd1d92a.7u466j/fleet_enrol_200403_status-gate/state/z23/dev/fleet/box.ed25519 — this is the identity this box enrols and signs invites with
+[boot]   sqlite.preflight_prelease    0ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   0ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               1ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           0ms
+[boot]   sqlite.create_schema         5ms (attempt=initial result=ok)
+db: current schema version 1
+db: applied 91 migration(s), now at version 92
+[boot]   sqlite.migrate               136ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_prelease    2ms (attempt=initial result=ok)
+[boot]   sqlite.preflight_postlease   2ms (attempt=initial result=ok)
+[boot]   sqlite.raw_open              0ms (attempt=initial result=ok)
+[boot]   sqlite.pragmas               2ms (attempt=initial result=returned)
+[boot]   sqlite.quick_check           1ms
+[boot]   sqlite.create_schema         1ms (attempt=initial result=ok)
+db: current schema version 92
+[boot]   sqlite.migrate               0ms (attempt=initial result=ok)
+2026-11-21T15:58:01Z WARN [fleet.roster] engine/composition/src/boot_fleet_roster.c:636 snap_log_transition(): the fleet roster gate is switched off on this box (-fleetrostergate=0): fleet-scope carriage follows pairing and role only
+OK
+{"schema":"zcl.test_phase_receipt.v1","startup_ms":0,"test_body_ms":4176}
+
+SUITE VERDICT mode=cold groups_total=1620 groups_ran=1 groups_cached=0 groups_gated=1619 groups_failed=0 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=4f7d53d009fa
+ALL TESTS PASSED — 0/1 groups failed, 0 skipped (4.2s wall, 4 workers) [--exact filtered]

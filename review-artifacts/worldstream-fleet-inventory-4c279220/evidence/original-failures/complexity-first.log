@@ -1,0 +1,40 @@
+══ LINT: cyclomatic complexity cap 15 per function ══
+check_cyclomatic_complexity selftest: the next z23-lint line is expected
+z23-lint: st.c:3: preprocessor branches end at different brace, paren or bracket depths; balance the branches so the complexity gate can attribute the code after the #endif
+check_cyclomatic_complexity selftest: the next bracket mismatch is expected
+z23-lint: st.c:2: preprocessor branches end at different brace, paren or bracket depths; balance the branches so the complexity gate can attribute the code after the #endif
+z23-lint: cannot resolve executable path
+check-cyclomatic-complexity: --changed-files cannot be used with --report or baseline updates
+check-cyclomatic-complexity: --changed-files cannot be used with --report or baseline updates
+check-cyclomatic-complexity: --changed-files cannot be used with --report or baseline updates
+z23-lint: ZCL_LINT_REPO_ROOT must be an absolute directory
+check_cyclomatic_complexity: wrote 8 pin(s) to /home/z23dev/work/fleet-inventory-evidence-20261121/tmp/z23-lint-cyc-scope-RZEchB/generated.txt (14 functions scanned in 8 files)
+examined-files: 1
+scan-floor: 0
+check_cyclomatic_complexity: wrote 1 pin(s) to /home/z23dev/work/fleet-inventory-evidence-20261121/tmp/z23-lint-cyc-7p0brU/gen_baseline.txt (2 functions scanned in 1 files)
+examined-files: 0
+scan-floor: 0
+examined-files: 1
+scan-floor: 0
+examined-files: 1
+scan-floor: 0
+examined-files: 1
+scan-floor: 0
+examined-files: 1
+scan-floor: 0
+examined-files: 1
+scan-floor: 0
+examined-files: 1
+scan-floor: 0
+examined-files: 0
+scan-floor: 0
+examined-files: 1
+scan-floor: 0
+check_cyclomatic_complexity selftest: OK
+[check-cyclomatic-complexity] FAIL — 1 complexity violation(s) at cap 15 (mode: RATCHET)
+platform/modules/platform/src/state_root.c:198: state_root_resolve M=16 exceeds cap 15 and is not pinned in the baseline
+  Fix: split the function under the cap. To re-pin at the CURRENT M, regenerate the baseline:
+  build/bin/z23-lint check-cyclomatic-complexity --write-baseline
+  (tools/lint/cyclomatic_complexity_baseline.txt — shrink-only ratchet: a pin may never rise, and a
+  function that got simpler must be re-pinned lower.)
+make[1]: *** [Makefile:15402: check-cyclomatic-complexity] Error 1

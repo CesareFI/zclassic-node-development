@@ -1,0 +1,13 @@
+uid=1001 fixture=/home/z23dev/work/fleet-inventory-evidence-20261121/after-state.KJtLziST
+missing-first rc=0 result=OK elapsed_us=29625 response_bytes=623
+missing-repeat rc=0 result=OK elapsed_us=29958 response_bytes=623
+empty-base-first rc=0 result=OK elapsed_us=29260 response_bytes=623
+empty-base-repeat rc=0 result=OK elapsed_us=28518 response_bytes=623
+dangling-ancestor rc=2 result=FLEET_OPERATOR_UNREADABLE elapsed_us=29017 response_bytes=771
+inaccessible-ancestor rc=2 result=FLEET_OPERATOR_UNREADABLE elapsed_us=27902 response_bytes=771
+enroll-invite rc=0 result=OK elapsed_us=34456 response_bytes=1153
+valid-manager rc=0 result=OK elapsed_us=31059 response_bytes=828
+invalid-roster rc=2 result=FLEET_ROSTER_UNREADABLE elapsed_us=30025 response_bytes=741
+malformed-pin rc=2 result=FLEET_OPERATOR_UNREADABLE elapsed_us=29738 response_bytes=774
+inaccessible-key rc=2 result=FLEET_KEY_UNAVAILABLE elapsed_us=29824 response_bytes=737
+passed=11 failed=0 skipped=0

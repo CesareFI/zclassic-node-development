@@ -1,0 +1,8 @@
+patch applied to base 0b8cc3e070afce122015dc5d3896c102aa5af432, result tree 01ffa712462d0aa0d49855ecadac88db01dc0689 matches commit 4c27922080702f0c6b305e9222b5c98d8d865d0e
+/home/z23dev/work/fleet-inventory-evidence-20261121/review-package-4c279220/repair.bundle is okay
+The bundle contains this ref:
+4c27922080702f0c6b305e9222b5c98d8d865d0e refs/z23-send/worldstream-noncreating-fleet-inventory-4c2792208070
+The bundle requires this ref:
+0b8cc3e070afce122015dc5d3896c102aa5af432 
+The bundle uses this hash algorithm: sha1
+4c27922080702f0c6b305e9222b5c98d8d865d0e refs/z23-send/worldstream-noncreating-fleet-inventory-4c2792208070
