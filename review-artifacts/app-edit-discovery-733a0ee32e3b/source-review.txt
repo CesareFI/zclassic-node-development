@@ -1,0 +1,8 @@
+Independent contributor source review
+Reviewer: GPT-6.1 Terra, independent of the author
+Commit: 733a0ee32e3b48a4514533cb0f42e6f410e776a1
+Base: b4a985e14e93251f6f9953204ca1a962e497511b
+
+No findings or blockers. The allows_empty flag is set only for app.edit.content. The projected minimum is zero and the maximum remains 1048576 bytes. Removing the transport-required flag agrees with the validator and handler. Other scalar strings, array items and alternative string forms keep their existing minima. The validator's UTF-8/type/byte checks, handler and permissions are unchanged.
+
+The regression covers the rendered content and adjacent path bounds, handler refusal for a missing field, invalid UTF-8 and value types, boundary lengths and rejection of an empty content field on a different leaf. This review was by source inspection. The reviewer did not run the registered checks. R1 owns acceptance.

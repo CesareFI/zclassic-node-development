@@ -1,0 +1,71 @@
+AI discovery contract for app.edit.content | local contributor qualification
+No-card contributor route. Native file lease story app-edit-content-discovery, scoped response SHA-256 3cdf95419e4893fb46ac46731c1f0a6454292adf7141cd0819426687767affe0. Lease renewed before edit and commit.
+Verified upstream main and parent b4a985e14e93251f6f9953204ca1a962e497511b
+Candidate 733a0ee32e3b48a4514533cb0f42e6f410e776a1
+Tree 837f03f2679190dfbc36f3669a7a56b58b6a123c
+
+Changed paths
+engine/modules/kernel/include/kernel/command_registry.h
+engine/modules/kernel/src/command_registry_input_types.c
+tools/command/native_command.c
+tests/harness/src/test_app_customize.c
+tests/harness/src/test_native_api_contract.c
+
+Observed with each revision's own make -j4 dev-bin binary
+build/bin/z23-dev discover schema app.edit --side=input
+Before {"represented":true,"type":"string","min_bytes":1,"max_bytes":1048576,"required_by_transport":true}
+After  {"represented":true,"type":"string","min_bytes":0,"max_bytes":1048576}
+The complete before and after documents compare equal when replacing that field's object. The app.edit path minimum remains 1 byte. Missing content passes the transport checks and the edit handler returns BAD_INPUT with mutated=false. No edit-handler, validator or authorization code changed. Tests cover empty text, UTF-8, non-string JSON types, limit-1/limit/limit+1, plan binding, handler presence and a different leaf's nonempty content rule.
+
+Kimi contributor checks, four CPUs, four build jobs, one harness worker, sequential admission
+Base make -j4 dev-bin and registered app_edit passed. The base fixture verifies acceptance of empty content and the quoted discover command reproduced the incorrect minimum on the same base. The following registered groups and gates ran on the committed candidate. Times marked scheduler wall include compilation, setup and harness overhead.
+
+Registered group
+make -j4 t-fast-exact ONLY=command_input_bounds T_FAST_EXACT_ARGS=--no-cache --jobs=1
+exit 0
+real 87.39
+SUITE VERDICT mode=cold groups_total=1620 groups_ran=1 groups_cached=0 groups_gated=1619 groups_failed=0 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=e7d25afe9e47
+ALL TESTS PASSED — 0/1 groups failed, 0 skipped (0.0s wall, 1 workers) [--exact filtered]
+Registered group
+make -j4 t-fast-exact ONLY=native_api_contract T_FAST_EXACT_ARGS=--no-cache --jobs=1
+exit 0
+real 15.11
+SUITE VERDICT mode=cold groups_total=1620 groups_ran=1 groups_cached=0 groups_gated=1619 groups_failed=0 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=e7d25afe9e47
+ALL TESTS PASSED — 0/1 groups failed, 0 skipped (10.9s wall, 1 workers) [--exact filtered]
+Registered group
+make -j4 t-fast-exact ONLY=app_edit T_FAST_EXACT_ARGS=--no-cache --jobs=1
+exit 0
+real 4.51
+SUITE VERDICT mode=cold groups_total=1620 groups_ran=1 groups_cached=0 groups_gated=1619 groups_failed=0 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=e7d25afe9e47
+ALL TESTS PASSED — 0/1 groups failed, 0 skipped (0.4s wall, 1 workers) [--exact filtered]
+
+Commands and results for gates
+make -j4 lint-fast-preflight
+exit 0
+make -j4 -f Makefile -f explicit-base.mk discovery-precheck
+exit 0
+make -j4 check-core-seal
+exit 0
+PASS check-file-size-ceiling                         71 ms
+── lint timing: 60 gates, wall 30533 ms, jobs 4 ──
+lint-fast: precheck skipped: git merge-base HEAD origin/main failed
+lint-fast-preflight: OK
+{"summary":{"gates":153,"new":0,"unbuilt":0,"skipped":63}}
+core_seal: OK — 581 sealed file(s) match ROOT f31d8e1f23e1bddcdc77d717c16bf5fba1457b137974ce8d39f0e7bdc265c52b
+core_seal: OK — 80 section(s) match TREE 4c84662bf6a1c9ad9f4f2ed08b113249ba0a6d20b013832583977cde5a25ca48
+
+Source log identities (bytes / SHA-256 / filename)
+39150 65831c640f413e5ad777d195a31561578e32f0ec6b1593c34e94d81738dd3a09  bounds.log
+17053 542eadd6f0bbdd89b08fb83425e48db710e992c621846796237048636b17264f  contract.log
+36551 77693b6b52ec2c27f4f9ffdc3523e9a11172f98b695e4cebc50357f6b17bd91c  app-edit.log
+17955 4c03549fa0116660eb1aa5d2a9b41911bd9c4cfea0613ed66edca94de74847f8  gates.log
+40498 89a9cf5375e303684af196ce08169382ccd2cb0f3ff157dc2296f51d10b8685c  differential.log
+1068 9ae381619ff716397ccca0a4362cc42f4a1729e706c6e0aeeea23af56fd37e3a  seal.log
+765 1fa39ac9bfac3ab94981ba7d963ad40963cb8e6519574ee4336eb6c6a1cd30db  before.json
+736 a69a201cb974453919db416d4371f85dc8f1cde97a6799b81699a61ac0fea2ae  after.json
+
+Combined fast lint and preflight passed all 60 selected gates. Its automatic differential leg skipped because this shared checkout's fork origin/main has no merge base with the candidate. The supplemental native precheck ran with the identical combined target selection and the explicit, clean canonical base. It exited 0 across 153 selected gates, reporting zero new failures, 13 pre-existing, 132 PASS and 8 FIXED verdicts. The configured selector omitted 63 gates. These are comparison verdicts for the two workspaces. The 8 FIXED verdicts are not attributed to this source change.
+Sender precheck ran five gates. Its first refusal identified a missing z23-lint in the canonical packaging checkout. The exact candidate was checked out there and make -j4 check-capability-inventory-generated built the prerequisite and passed. The native send then succeeded. Its receipt lists check-file-size-ceiling and check-core-seal as skipped and canonical land proof history unavailable. Independently, check-file-size-ceiling passed in the combined gates and make -j4 check-core-seal passed on the candidate.
+Independent contributor source review found no blocker. git diff --check and git bundle verify passed. The bundle carries exactly one commit above its stated prerequisite. R1 full lint and formal land proof are NOT RUN in this contribution. Receiver verification, maintainer acceptance and landing are pending.
+Bundle 2333 bytes, SHA-256 23ebd79ea6cf4988d5ef772efc25f42b6e62ec31f89d00630be3f2f865cd9492
+Native offer root 027d5cc9a2867d771bc85eb35231380828235182ffea915f0f743cb5604d01d6, pinned and announced once.
