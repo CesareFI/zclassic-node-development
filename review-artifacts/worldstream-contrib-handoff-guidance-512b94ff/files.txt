@@ -1,0 +1,2 @@
+tests/harness/src/test_dev_land_remote.c
+tools/command/native_dev_land_remote.c

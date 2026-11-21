@@ -1,0 +1,10 @@
+devbuild: z23 lane 1, CPUs 2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47, memory 24G
+/home/z23dev/work/contrib-handoff-guidance-evidence-20261121/guidance.bundle is okay
+The bundle contains this ref:
+512b94ff0c1b27c5586f55565f8e7a08b9e0fa1e refs/z23-send/worldstream-contrib-handoff-guidance-512b94ff0c1b
+The bundle requires this ref:
+4c1487a1034ed0c88fcbe800c0d8fce4d1678b71 
+The bundle uses this hash algorithm: sha1
+512b94ff0c1b27c5586f55565f8e7a08b9e0fa1e refs/z23-send/worldstream-contrib-handoff-guidance-512b94ff0c1b
+14355 /home/z23dev/work/contrib-handoff-guidance-evidence-20261121/guidance.bundle
+e346583525a3c1c85508e41ca895b1df9582dca2fc56522981053ec3ba823b73  /home/z23dev/work/contrib-handoff-guidance-evidence-20261121/guidance.bundle

@@ -1,0 +1,2 @@
+test_parallel: private state retained=/dev/shm/z23-scratch/6db1293a.Cd3slt/runner-state-b176e93fe08d750100
+dev.proof.remote: missing assignment refuses before placement... FAIL at tests/harness/src/test_dev_proof_remote_command.c:1005 (rc > 0)

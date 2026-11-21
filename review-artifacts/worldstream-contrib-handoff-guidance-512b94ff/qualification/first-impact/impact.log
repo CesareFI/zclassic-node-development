@@ -1,0 +1,18 @@
+devbuild: z23 lane 1, CPUs 2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47, memory 24G
+agent-verify: check-file-size-ceiling rc=0 secs=4
+agent-verify: check-cyclomatic-complexity rc=0 secs=5
+agent-verify: dev-bin rc=0 secs=20
+agent-verify: selection exact groups=45 reason=impact-plan detail=- base=4c1487a1034ed0c88fcbe800c0d8fce4d1678b71 select_secs=24
+agent-verify: t-fast-exact rc=2 secs=300
+SUITE VERDICT mode=cold groups_total=1620 groups_ran=45 groups_cached=0 groups_gated=1575 groups_failed=2 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=1780a13b422a
+  first| L2: dev.proof.remote: missing assignment refuses before placement... FAIL at tests/harness/src/test_dev_proof_remote_command.c:1005 (rc > 0)
+dev.proof.remote: missing assignment refuses before placement... FAIL at tests/harness/src/test_dev_proof_remote_command.c:1005 (rc > 0)
+wallet security refuses without overwriting mutation flags... 2026-11-21T21:26:55Z ERROR [native.wallet] contexts/wallet/controllers/src/wallet_native_handlers.c:142 wnh_call_rpc_common(): RPC walletl
+2026-11-21T21:26:55Z ERROR [native.wallet] contexts/wallet/controllers/src/wallet_native_handlers.c:142 wnh_call_rpc_common(): RPC walletunlock reported an error: cannot read RPC auth cookie origin=wa
+2026-11-21T21:26:55Z ERROR [native.wallet] contexts/wallet/controllers/src/wallet_native_handlers.c:142 wnh_call_rpc_common(): RPC walletencrypt reported an error: cannot read RPC auth cookie origin=w
+agent-verify: check-capability-closure rc=0 secs=22
+agent-verify: proof-lint-prebuild rc=0 secs=343
+agent-verify: lint-fast rc=0 secs=254
+agent-verify: total secs=977
+agent-verify: FAILED (t-fast-exact)
+make: *** [Makefile:18268: agent-verify] Error 1

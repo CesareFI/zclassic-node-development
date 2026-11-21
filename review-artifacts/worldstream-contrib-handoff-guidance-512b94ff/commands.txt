@@ -1,0 +1,26 @@
+All project commands ran as the z23dev account in the admitted development scheduler with CPU affinity 2-5 and make -j4. The usability participant read two supplied packets without executing the operations it proposed.
+
+Starting main (4c1487a1034ed0c88fcbe800c0d8fce4d1678b71):
+make -j4 worktree-prime SRC=/home/z23dev/work/mcp-read-guidance-20261121
+make -j4 build/bin/z23-dev
+bash capture.sh EVIDENCE_DIRECTORY ABSOLUTE_SENDER_BINARY before 0
+
+Reviewed commit (512b94ff0c1b27c5586f55565f8e7a08b9e0fa1e):
+make -j4 build/bin/z23-dev
+make -j4 t-list
+make -j4 t-fast-exact ONLY=test_dev_land_remote T_FAST_EXACT_ARGS=--no-cache ZCL_TEST_WERROR=1
+bash capture.sh EVIDENCE_DIRECTORY ABSOLUTE_SENDER_BINARY normal 0
+bash capture.sh EVIDENCE_DIRECTORY ABSOLUTE_SENDER_BINARY compact 1250
+make -j4 agent-verify ONLY=@changed AGENT_VERIFY_BASE=4c1487a1034ed0c88fcbe800c0d8fce4d1678b71 Z23KERNEL_CC=/usr/bin/clang-20 Z23KERNEL_LD=/usr/bin/ld.lld-20 Z23KERNEL_OBJCOPY=/usr/bin/llvm-objcopy-20
+make -j4 lint-preflight
+
+Fixture setup for capture.sh: below EVIDENCE_DIRECTORY create fixture/example as a Git repository on main, make one base commit and clone it locally to fixture/origin.git as a bare repo. In fixture/example set origin to ../origin.git, fetch main, and create branch lane/shared-example with one additional commit. Pass a new output-directory name on each run. The script constrains Git transports to file and uses the supported precheck=skip for the synthetic fixture. The registered sender suite builds its own isolated fixtures.
+
+Preparation of the actual reviewed artifact runs with the default precheck:
+build/bin/z23-dev dev land send --lane=worldstream-contrib-handoff-guidance --commit=512b94ff0c1b27c5586f55565f8e7a08b9e0fa1e --bundle_out=ABSOLUTE_PATH_TO_guidance.bundle
+git bundle verify ABSOLUTE_PATH_TO_guidance.bundle
+git bundle list-heads ABSOLUTE_PATH_TO_guidance.bundle
+
+The recovery check that exercises both affected groups cold:
+make -j4 t-fast-exact ONLY=test_dev_proof_remote_command,test_dev_proof_remote_placement T_FAST_EXACT_ARGS=--no-cache ZCL_TEST_WERROR=1
+Both the initial and final impact runs use the agent-verify command and exact base listed above. For the delegated runs the scheduler holds the project lane while a temporary service in its development slice supplies real, bounded cgroup v2 memory delegation. The service records its own resource usage.

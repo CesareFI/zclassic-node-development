@@ -1,0 +1,174 @@
+From 512b94ff0c1b27c5586f55565f8e7a08b9e0fa1e Mon Sep 17 00:00:00 2001
+From: Worldstream Development <development@example.invalid>
+Date: Sat, 21 Nov 2026 22:09:23 +0100
+Subject: [PATCH] Distinguish public and fleet handoffs in offline land send
+ guidance
+
+Describe the public contrib need and existing fleet intake or queue receive alternatives in both forms of next_action. Cover short and long bundle paths in the sender fixture.
+
+Co-Authored-By: GPT-6 <noreply@openai.com>
+---
+ tests/harness/src/test_dev_land_remote.c | 61 ++++++++++++++++++++++--
+ tools/command/native_dev_land_remote.c   | 39 ++++++++-------
+ 2 files changed, 81 insertions(+), 19 deletions(-)
+
+diff --git a/tests/harness/src/test_dev_land_remote.c b/tests/harness/src/test_dev_land_remote.c
+index 4e83ca46c734ad8708691db62cea8cffc82265ed..f57e0b9bccb52977005649e4c5a0501334d44257 100644
+--- a/tests/harness/src/test_dev_land_remote.c
++++ b/tests/harness/src/test_dev_land_remote.c
+@@ -552,6 +552,38 @@ _test_next:;
+     return failures;
+ }
+ 
++static bool dlt_handoff_terms(const char *start, const char *end,
++                              const char *const *terms, size_t count)
++{
++    for (size_t i = 0; i < count; i++) {
++        const char *found = strstr(start, terms[i]);
++        if (!found || (end && found >= end)) return false;
++    }
++    return true;
++}
++
++static bool dlt_handoff_routes(const char *text, const char *commit,
++                               const char *hash)
++{
++    if (!text) return false;
++    const char *pub = strstr(text, "Public contributor:");
++    const char *fleet = strstr(text, "Internal fleet:");
++    if (!pub || !fleet || fleet <= pub) return false;
++    const char *const public_terms[] = {
++        "public room contrib", commit, "card id or no card", "root=<offer root>",
++        hash, "size=", "serving node onion name", "acceptance",
++        "result line labelled local"
++    };
++    const char *const fleet_terms[] = {
++        "READY sha256=", hash, "root=<offer root>", "size=",
++        "z23-dev dev land receive", "--lane=mac"
++    };
++    return dlt_handoff_terms(pub, fleet, public_terms,
++                             sizeof(public_terms) / sizeof(public_terms[0])) &&
++           dlt_handoff_terms(fleet, NULL, fleet_terms,
++                             sizeof(fleet_terms) / sizeof(fleet_terms[0]));
++}
++
+ static int dlt_single_cases(void)
+ {
+     int failures = 0;
+@@ -624,7 +656,7 @@ static int dlt_single_cases(void)
+     TEST("land.send --bundle_out: writes the bundle and its sha256 with no "
+          "ssh or scp") {
+         char b[900];
+-        (void)snprintf(b, sizeof(b), "%s/out.bundle", r.base);
++        (void)snprintf(b, sizeof(b), "%s/out space.bundle", r.base);
+         (void)remove(r.log);
+         dlt_send_x(&c, &r, one, b, false);
+         ASSERT(c.reply.status == ZCL_COMMAND_STATUS_PASSED);
+@@ -642,8 +674,10 @@ static int dlt_single_cases(void)
+             const char *next = json_get_str(json_get(&c.reply.data, "next_action"));
+             const char *ready = json_get_str(json_get(&c.reply.data, "ready"));
+             ASSERT(next != NULL && ready != NULL);
++            ASSERT(dlt_handoff_routes(next, one, hex));
+             ASSERT(strstr(next, "fleet bundle offer") != NULL);
+-            ASSERT(strstr(next, "--file=") != NULL);
++            ASSERT(strstr(next, "--file=\"") != NULL);
++            ASSERT(strstr(next, b) != NULL);
+             ASSERT(strstr(next, "root=") != NULL);
+             ASSERT(strstr(next, "size=") != NULL);
+             ASSERT(strstr(next, hex) != NULL);
+@@ -656,6 +690,27 @@ static int dlt_single_cases(void)
+         PASS();
+     }
+ 
++    TEST("land.send --bundle_out: long path retains both compact routes") {
++        char b[2000];
++        size_t len = strlen(r.base);
++        ASSERT(len + 1200 + sizeof("/space name.bundle") < sizeof(b));
++        memcpy(b, r.base, len);
++        for (int i = 0; i < 600; i++) {
++            b[len++] = '/';
++            b[len++] = '.';
++        }
++        memcpy(b + len, "/space name.bundle", sizeof("/space name.bundle"));
++        dlt_send_x(&c, &r, one, b, false);
++        ASSERT(c.reply.status == ZCL_COMMAND_STATUS_PASSED);
++        const char *next = json_get_str(json_get(&c.reply.data, "next_action"));
++        ASSERT(next != NULL);
++        ASSERT(dlt_sha_file(b, hex));
++        ASSERT(strstr(next, "<substitute data.bundle value>") != NULL);
++        ASSERT(dlt_handoff_routes(next, one, hex));
++        dlt_end(&c);
++        PASS();
++    }
++
+     TEST("land.send: no lane on branch lane/<x> sends as lane <x>; a branch "
+          "that is no lane name refuses naming it") {
+         char b[900];
+@@ -688,7 +743,7 @@ static int dlt_single_cases(void)
+     }
+ 
+     TEST("land.send --bundle_out: an existing path refuses SEND_BUNDLE_EXISTS") {
+-        (void)snprintf(path, sizeof(path), "%s/out.bundle", r.base);
++        (void)snprintf(path, sizeof(path), "%s/out space.bundle", r.base);
+         dlt_send_x(&c, &r, one, path, false);
+         ASSERT(dlt_refused(&c, "SEND_BUNDLE_EXISTS"));
+         dlt_end(&c);
+diff --git a/tools/command/native_dev_land_remote.c b/tools/command/native_dev_land_remote.c
+index 88d8d8485e0abdf2532b0bee1c2db60c173509c0..c9dd9788a22db5b85898e79c3831d2c42a4d1c47 100644
+--- a/tools/command/native_dev_land_remote.c
++++ b/tools/command/native_dev_land_remote.c
+@@ -972,28 +972,35 @@ static bool dlr_send_offer(struct dlr_send *s, struct zcl_command_reply *reply)
+     return ok;
+ }
+ 
+-/* The next step after --bundle_out. The READY line below names the commit and
+- * the bundle hash only; the intake leaf needs root= and size= too, and root
+- * exists only after the bundle is offered on the swarm. */
++/* Both routes share one formatter so the compact fallback cannot omit fields. */
++static int dlr_send_action_text(char *text, size_t cap, const struct dlr_send *s,
++                                const char *path, const char *size)
++{
++    return snprintf(text, cap,
++        "For a board handoff, on an authorized package-hosting node run "
++        "`z23 fleet bundle offer --file=\"%s\"` once. "
++        "Public contributor: post a need in public room contrib with card id "
++        "or no card, commit=%s, root=<offer root>, sha256=%s, size=%s, "
++        "serving node onion name if available, and the literal acceptance "
++        "command and result line labelled local. "
++        "Internal fleet: post `READY sha256=%s root=<offer root> size=%s` "
++        "in fleet; or transfer the bundle directly to the authorized queue host "
++        "and run `z23-dev dev land receive --bundle=\"<receiver-local bundle path>\" "
++        "--lane=%s` there.",
++        path, s->sha, s->bsha, size, s->bsha, size, s->lane);
++}
++
+ static void dlr_send_next_action(const struct dlr_send *s,
+                                  struct zcl_command_reply *reply)
+ {
+-    char text[2 * DLR_PATH + 640], size[24] = "<bytes>";
++    char text[1200], size[24] = "<bytes>";
+     struct stat st;
+     if (stat(s->out, &st) == 0 && st.st_size >= 0)
+         (void)snprintf(size, sizeof(size), "%lld", (long long)st.st_size);
+-    if (snprintf(text, sizeof(text),
+-                 "run `z23 fleet bundle offer --file=%s`, then post "
+-                 "`READY sha256=%s root=<root from the offer> size=%s` in "
+-                 "room fleet; or carry the file to the queue host and run "
+-                 "`dev land receive --bundle=%s --lane=%s` there",
+-                 s->out, s->bsha, size, s->out, s->lane) >= (int)sizeof(text))
+-        (void)snprintf(text, sizeof(text),
+-                       "run `z23 fleet bundle offer --file=<bundle_out>`, "
+-                       "then post `READY sha256=<bundle_sha256> root=<root "
+-                       "from the offer> size=<bytes>` in room fleet; or "
+-                       "carry the file to the queue host and use `dev land "
+-                       "receive --bundle`");
++    int n = dlr_send_action_text(text, sizeof(text), s, s->out, size);
++    if (n < 0 || (size_t)n >= sizeof(text))
++        (void)dlr_send_action_text(text, sizeof(text), s,
++                                   "<substitute data.bundle value>", size);
+     (void)json_push_kv_str(&reply->data, "next_action", text);
+ }
+ 
+-- 
+2.43.0
+

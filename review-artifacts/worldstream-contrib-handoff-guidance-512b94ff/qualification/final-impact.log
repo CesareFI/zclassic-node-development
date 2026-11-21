@@ -1,0 +1,15 @@
+devbuild: z23 lane 1, CPUs 2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47, memory 24G
+scheduler holds /user.slice/user-0.slice/user@0.service/development.slice/devbuild-2265985-1795297614702979112.scope
+uid=1001 cpus=2-5 delegated=memory cgroup=/sys/fs/cgroup/user.slice/user-0.slice/user@0.service/development.slice/worldstream-guidance-2266009-1795297614750867560.service/worker/payload
+agent-verify: check-file-size-ceiling rc=0 secs=7
+agent-verify: check-cyclomatic-complexity rc=0 secs=7
+agent-verify: dev-bin rc=0 secs=11
+agent-verify: selection exact groups=45 reason=impact-plan detail=- base=4c1487a1034ed0c88fcbe800c0d8fce4d1678b71 select_secs=1
+agent-verify: t-fast-exact rc=0 secs=297
+SUITE VERDICT mode=cached groups_total=1620 groups_ran=26 groups_cached=19 groups_gated=1575 groups_failed=0 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=1780a13b422a
+agent-verify: check-capability-closure rc=0 secs=23
+agent-verify: proof-lint-prebuild rc=0 secs=12
+agent-verify: lint-fast rc=0 secs=69
+agent-verify: total secs=427
+agent-verify: OK
+delegated job receipt rc=0 elapsed_s=434 memory_limit=25769803776 swap_limit=0 memory_peak=2549366784 usage_usec 1010615663

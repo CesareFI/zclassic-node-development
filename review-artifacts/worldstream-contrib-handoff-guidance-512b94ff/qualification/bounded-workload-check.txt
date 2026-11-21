@@ -1,0 +1,4 @@
+devbuild: z23 lane 1, CPUs 2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47, memory 24G
+scheduler holds /user.slice/user-0.slice/user@0.service/development.slice/devbuild-2256675-1795297536522222166.scope
+uid=1001 cpus=2-5 delegated=memory cgroup=/sys/fs/cgroup/user.slice/user-0.slice/user@0.service/development.slice/worldstream-guidance-2256698-1795297536571113729.service/worker/payload
+delegated job receipt rc=0 elapsed_s=0 memory_limit=25769803776 swap_limit=0 memory_peak=3252224 usage_usec 63261

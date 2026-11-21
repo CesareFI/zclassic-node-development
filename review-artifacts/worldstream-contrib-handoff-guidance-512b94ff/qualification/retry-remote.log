@@ -1,0 +1,49 @@
+devbuild: z23 lane 1, CPUs 2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47, memory 24G
+scheduler=z23 uid=1001 cpus=2-5
+0::/user.slice/user-0.slice/user@0.service/development.slice/devbuild-2246720-1795297046964622390.scope
+t-fast-exact: ONLY='test_dev_proof_remote_command' resolves to exact set test_dev_proof_remote_command
+build-epoch-session: acquired profile=test-fast-v2 epoch=6d4ba114d1bd91a6396d82a0794671e3f7dafd394953818577ce6e329b74ecd5 lease=build/test-obj/epochs/6d4ba114d1bd91a6396d82a0794671e3f7dafd394953818577ce6e329b74ecd5/.leases/7cebd546973814d8ec4caed12aa82ed3b81e0ca867525bb25858ff69d5f34f60 build_system_id=d7b39ddd9ab3976b2734a65dea63fffb94085a155b7b8b783e3672b8a3b62e10
+build-epoch-session: acquired profile=dev-v2 epoch=aae3b80f7961d2e78d659e93b3ed6dc2ec41ce9de89252f97ebbd32360496157 lease=build/dev-obj/epochs/aae3b80f7961d2e78d659e93b3ed6dc2ec41ce9de89252f97ebbd32360496157/.leases/43335039071b65c3ec3ced7f5913283e18e95d10c2b2e02276d1445188738c8d build_system_id=d7b39ddd9ab3976b2734a65dea63fffb94085a155b7b8b783e3672b8a3b62e10
+build-epoch-session: acquired profile=test-fast-v2 epoch=6d4ba114d1bd91a6396d82a0794671e3f7dafd394953818577ce6e329b74ecd5 lease=build/test-obj/epochs/6d4ba114d1bd91a6396d82a0794671e3f7dafd394953818577ce6e329b74ecd5/.leases/43335039071b65c3ec3ced7f5913283e18e95d10c2b2e02276d1445188738c8d build_system_id=d7b39ddd9ab3976b2734a65dea63fffb94085a155b7b8b783e3672b8a3b62e10
+publish-build-alias: build/bin/z23.dev <= epoch aae3b80f7961d2e78d659e93b3ed6dc2ec41ce9de89252f97ebbd32360496157 sha256=4ecf3a7af49c9fb0dc427d22d0c2eacbad438eab26a62a1b94b23cc0948839b4
+dev: build/bin/z23.dev <= build/bin/dev/epochs/aae3b80f7961d2e78d659e93b3ed6dc2ec41ce9de89252f97ebbd32360496157/zclassic23-dev (non-LTO, -g1, unstripped; not for release/deploy)
+dev-bin: build/bin/z23-dev <= build/bin/z23.dev (hard-link watch-loop alias of unsippable z23.dev; regular file for O_NOFOLLOW proof open)
+test_parallel: 1620 groups, 4 workers, 300s per-group timeout (workers: cpus)
+test_parallel: dispatch longest-expected-first, 213 weighted groups from tools/dev/test_group_weights.tsv
+test_parallel: exclusive pass done groups=0
+test_parallel: quiet-lint phase done groups=0 makespan_s=0.0
+test_parallel: attempt group=test_dev_proof_remote_command retained_state=/dev/shm/z23-scratch/6db1293a.6rAzls/runner-state-e5eca18a7fc3a7a700
+test_parallel: provisional pooled failure group=test_dev_proof_remote_command outcome=exit code=1 elapsed=2.955s
+test_parallel: general phase done groups=1 makespan_s=3.0
+LOAD-FLAKY-FIRST test_dev_proof_remote_command: failure lines and last 40 lines of the contended attempt:
+  first| L1: test_parallel: private state retained=/dev/shm/z23-scratch/6db1293a.6rAzls/runner-state-e5eca18a7fc3a7a700
+  first| L2: dev.proof.remote: missing assignment refuses before placement... OK
+  first| L3: dev.proof.remote: foreign destination refuses before placement... OK
+  first| L4: dev.proof.remote: duplicate pin refuses before placement... OK
+  first| L5: dev.proof.remote: primary checkout is refused and linked busy is reported... OK
+  first| L6: dev.proof.remote: producer mismatch retains actionable recovery evidence... remote recovery fixture rc=1 output={"schema":"zcl.result.v1","command":"dev.proof.remote","ok":false,"status":"failed","request_id":"local-0000000000000001","elapsed_us":1362170,"budget_ms":750,"elapsed_ms":1362,"budget_exceeded":true,"authority":{"policy":"exempt","agent_session":"none (local operator)"},"error":{"code": [truncated]
+  first| L7: 
+  first| L8: FAIL at tests/harness/src/test_dev_proof_remote_command.c:1087 (WIFEXITED(status) && WEXITSTATUS(status) == 0)
+RETRY-FIRST-PRESERVED test_dev_proof_remote_command first_log=./test-tmp/test_parallel_2251247_394.log.first
+[rerun-alone] [394] test_dev_proof_remote_command — first attempt FAILED under the shared pool; retrying alone with the pool idle (at most once)
+test_parallel: attempt group=test_dev_proof_remote_command retained_state=/dev/shm/z23-scratch/6db1293a.6rAzls/runner-state-51ff88232b74171a00
+
+==================== test_dev_proof_remote_command (FAIL, 3.001s) ====================
+test_parallel: private state retained=/dev/shm/z23-scratch/6db1293a.6rAzls/runner-state-51ff88232b74171a00
+dev.proof.remote: missing assignment refuses before placement... OK
+dev.proof.remote: foreign destination refuses before placement... OK
+dev.proof.remote: duplicate pin refuses before placement... OK
+dev.proof.remote: primary checkout is refused and linked busy is reported... OK
+dev.proof.remote: producer mismatch retains actionable recovery evidence... remote recovery fixture rc=1 output={"schema":"zcl.result.v1","command":"dev.proof.remote","ok":false,"status":"failed","request_id":"local-0000000000000001","elapsed_us":1355957,"budget_ms":750,"elapsed_ms":1355,"budget_exceeded":true,"authority":{"policy":"exempt","agent_session":"none (local operator)"},"error":{"code":"REMOTE_PROOF_REFUSED","error_code":"REMOTE_PROOF_REFUSED","message":"remote proof did not produce an independently verified PASS","phase":"execute","current_state":"REQUEST_FAILED","retryable":false,"human_action_required":false,"next_action":"follow the first next command","mutated":true,"evidence":"proof_host_memory_scope_unqualified:run_the_step_in_a_user_manager_scope","blockers":[],"facts":{"local_commit":"2ff9b14faba80c1b7da470736397417aee23f91d","remote_base":"00477d171452acbf8b2745602c10836a8e5144a4","retained_input_observation":"/dev/shm/z23-scratch/6db1293a.6rAzls/dev_proof_remote_placement_2251881_real-git/linked/.cache/zcl-dev-proof/remote-proof-inputs-6f4c847b1b69882500","receipt_path":"/dev/shm/z23-scratch/6db1293a.6rAzls/dev_proof_remote_placement_2251881_real-git/linked/.cache/zcl-dev-proof/receipts/2ff9b14faba80c1b7da470736397417aee23f91d-00477d171452acbf8b2745602c10836a8e5144a4.receipt","log_dir":"/dev/shm/z23-scratch/6db1293a.6rAzls/dev_proof_remote_placement_2251881_real-git/linked/.cache/zcl-dev-proof/attempts/2ff9b14faba80c1b7da470736397417aee23f91d-00477d171452acbf8b2745602c10836a8e5144a4.daCDIa/logs"}},"next":[{"command":"discover.describe","input":{"path":"dev.proof.remote"},"reason":"inspect this command's contract and availability"}]}
+
+FAIL at tests/harness/src/test_dev_proof_remote_command.c:1087 (WIFEXITED(status) && WEXITSTATUS(status) == 0)
+{"schema":"zcl.test_phase_receipt.v1","startup_ms":0,"test_body_ms":5958}
+
+SUITE VERDICT mode=cold groups_total=1620 groups_ran=1 groups_cached=0 groups_gated=1619 groups_failed=1 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=1780a13b422a
+SOME TESTS FAILED — 1/1 groups failed, 0 skipped (6.0s wall, 4 workers) [--exact filtered]
+Failed groups:
+  - test_dev_proof_remote_command: exit code=1 log=./test-tmp/test_parallel_2251247_394.log
+      repro: make t-fast ONLY=test_dev_proof_remote_command
+test_parallel: retained tmpfs root=/dev/shm/z23-scratch/6db1293a.6rAzls
+make[1]: *** [Makefile:5774: t-fast-exact-locked] Error 1
+make: *** [Makefile:5764: t-fast-exact] Error 2

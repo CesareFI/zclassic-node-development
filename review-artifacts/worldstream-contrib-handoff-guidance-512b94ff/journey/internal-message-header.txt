@@ -1,0 +1,4 @@
+Message Type: NEW_TASK
+Task name: /root/handoff_reader
+Sender: /root
+Payload:

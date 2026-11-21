@@ -1,0 +1,6 @@
+/home/z23dev/work/contrib-handoff-guidance-evidence-20261121/normal/example change.bundle is okay
+The bundle contains this ref:
+e0298eb9fa32a9489f928203bc0556b6dab5b453 refs/z23-send/shared-example-e0298eb9fa32
+The bundle requires this ref:
+19447e8cdfe12e90da6d75300a03db46bff64e77 
+The bundle uses this hash algorithm: sha1

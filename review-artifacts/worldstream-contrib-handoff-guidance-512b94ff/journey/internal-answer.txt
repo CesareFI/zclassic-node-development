@@ -1,0 +1,19 @@
+For the normal handoff, offer the bundle once on the authorized package-hosting node, with `packagehost=1`. The repeated `./` components in the supplied path refer to the same location, so the command can use the shortened path:
+
+```bash
+z23 fleet bundle offer --file="/home/z23dev/work/contrib-handoff-guidance-evidence-20261121/compact/example change.bundle"
+```
+
+Post the following message in the team coordination board’s `fleet` room for the receiving service:
+
+```text
+READY sha256=748d326b5a00fb15916f2437616899254b81dc1763941d937271d6b773e20cf6 root=b1def4c59f835577cf8c4b231d824b045f45744cfe344372f5e076ccb8d372b4 size=448
+```
+
+If the board cannot be used, deliver the bundle to the authorized receiving host at the stated path, then run this command on that host:
+
+```bash
+z23-dev dev land receive --bundle="/srv/intake/example change.bundle" --lane=shared-example
+```
+
+File/tool calls: 1. Retries: 0.

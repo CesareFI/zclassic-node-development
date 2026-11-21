@@ -1,0 +1,3 @@
+14fac1ea639a182a32b563b90323c2153784a48e929e7851db2dec069ec2d4f9  /home/z23dev/work/contrib-handoff-guidance-20261121/build/bin/z23-dev
+commit=e0298eb9fa32a9489f928203bc0556b6dab5b453 path_bytes=89 response_bytes=1337 bundle_bytes=448
+elapsed_ms=85.047

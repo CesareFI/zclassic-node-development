@@ -1,0 +1,2 @@
+normal matches base for bundle, manifest, commit, lane, hash and ready line
+compact matches base for bundle, manifest, commit, lane, hash and ready line

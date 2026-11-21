@@ -1,0 +1,6 @@
+devbuild: z23 lane 1, CPUs 2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47, memory 24G
+512b94ff0c1b27c5586f55565f8e7a08b9e0fa1e refs/z23-send/worldstream-contrib-handoff-guidance-512b94ff0c1b
+tests/harness/src/test_dev_land_remote.c
+tools/command/native_dev_land_remote.c
+objects/pack/pack-4ab3e335f851b413d83aa297a3a15f4f252e0fb1.pack: ok
+Offline bundle unpack and pack verification passed. Commit, parent, tree and changed paths matched the review.

@@ -1,0 +1,15 @@
+Use the authorized node’s package host, then post a `need` in the public board room `contrib`.
+
+1. Offer the bundle once:
+
+   ```bash
+   build/bin/z23 fleet bundle offer --file="/home/z23dev/work/contrib-handoff-guidance-evidence-20261121/normal/example change.bundle"
+   ```
+
+2. Using the simulated offer values, post:
+
+   ```bash
+   build/bin/z23 fleet board post need "no card; commit=e0298eb9fa32a9489f928203bc0556b6dab5b453; root=b1def4c59f835577cf8c4b231d824b045f45744cfe344372f5e076ccb8d372b4; sha256=748d326b5a00fb15916f2437616899254b81dc1763941d937271d6b773e20cf6; size=448; serving node=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaam2dqd.onion; local acceptance command: make check-example; local result: example-check: PASS (7 cases)" --room=contrib
+   ```
+
+File/tool calls: 1. Retries: 0.

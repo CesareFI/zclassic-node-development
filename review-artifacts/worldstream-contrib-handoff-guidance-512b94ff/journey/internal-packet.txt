@@ -1,0 +1,65 @@
+Offline exercise. All scenario facts and offer values below are illustrative; no operation is to be executed.
+You are an operator sending a completed change to your established team. Its receiving service watches the team coordination board, and your node is authorized to serve the bundle. Describe the normal handoff. Also explain how to complete the handoff if the board cannot be used and you can instead deliver the file to the authorized receiving host as "/srv/intake/example change.bundle".
+If you use your package host, the simulated offer returns root=b1def4c59f835577cf8c4b231d824b045f45744cfe344372f5e076ccb8d372b4 sha256=748d326b5a00fb15916f2437616899254b81dc1763941d937271d6b773e20cf6 size=448. Its onion name is aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaam2dqd.onion.
+
+The packaging command printed these response fields:
+{
+  "bundle": "/home/z23dev/work/contrib-handoff-guidance-evidence-20261121/compact/./././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././././example change.bundle",
+  "commit": "e0298eb9fa32a9489f928203bc0556b6dab5b453",
+  "bundle_sha256": "748d326b5a00fb15916f2437616899254b81dc1763941d937271d6b773e20cf6",
+  "lane": "shared-example",
+  "ready": "READY shared-example e0298eb9fa32a9489f928203bc0556b6dab5b453 bundle_sha256=748d326b5a00fb15916f2437616899254b81dc1763941d937271d6b773e20cf6",
+  "next_action": "For a board handoff, on an authorized package-hosting node run `z23 fleet bundle offer --file=\"<substitute data.bundle value>\"` once. Public contributor: post a need in public room contrib with card id or no card, commit=e0298eb9fa32a9489f928203bc0556b6dab5b453, root=<offer root>, sha256=748d326b5a00fb15916f2437616899254b81dc1763941d937271d6b773e20cf6, size=448, serving node onion name if available, and the literal acceptance command and result line labelled local. Internal fleet: post `READY sha256=748d326b5a00fb15916f2437616899254b81dc1763941d937271d6b773e20cf6 root=<offer root> size=448` in fleet; or transfer the bundle directly to the authorized queue host and run `z23-dev dev land receive --bundle=\"<receiver-local bundle path>\" --lane=shared-example` there."
+}
+
+Repository reference excerpt, .github/CONTRIBUTING.md, Submit
+## Submit
+
+The newcomer path is the steps on the wiki start page,
+<https://z23.sh/wiki/start>: it walks you from a built node to a posted
+change. The full bundle procedure below is the same path in detail and stays
+as written. r1 (defined at the top) reviews, gates and lands what you send.
+
+Send each change as one commit on top of `origin/main`, carried as a git
+bundle over the Z23 swarm. Do not push a branch: the repository's pre-push hook
+refuses every ref except `main`, and only the maintainers' land queue publishes
+`main`.
+
+1. Make the change exactly one commit ahead of `origin/main` (rebase and squash
+   first if needed).
+2. Write the bundle. This runs no ssh and pushes nothing:
+
+   ```bash
+   make dev-bin
+   build/bin/z23-dev dev land send --commit=<sha> --bundle_out=<absolute path>
+   ```
+
+   It refuses `SEND_NOT_SINGLE` when `origin/main..<sha>` is more than one
+   commit, and prints the bundle's `sha256`.
+3. On your running node, with package hosting on (`packagehost=1`), offer the
+   bundle (5 MiB at most): `build/bin/z23 fleet bundle offer --file=<absolute
+   path>`. The reply names `root`, `sha256` and `size`.
+4. Post a `need` in the public board room `contrib`:
+   `build/bin/z23 fleet board post need "<text>" --room=contrib`. The text
+   names the card id (or `no card`), the commit sha, `root`, `sha256`, `size`,
+   your node's onion name if it has one, and the acceptance command with its
+   result line,
+   copied literally. Label your own results as local.
+
+
+Repository reference excerpt, docs/dev/DEVELOPING.md
+A machine with no ssh to the queue host passes `--bundle_out=<absolute path>`
+instead. `send` writes the bundle there (refusing `SEND_BUNDLE_EXISTS` when the
+path exists), runs no `ssh` or `scp`, needs no `--host`, and returns
+`data.bundle`, `data.bundle_sha256`, `data.commit` and `data.lane`, a
+`data.ready` line `READY <lane> <commit> bundle_sha256=<hex>` that names no local path,
+and `data.next_action`. The `ready` line alone is not enough for `dev land
+intake`: it must also carry `root=` and `size=`, which come from `z23 fleet
+bundle offer --file=<bundle_out>` (post `READY sha256=<hex> root=<root>
+size=<bytes>` in room fleet; intake reads `bundle_sha256=` as `sha256=`). A
+post without them is refused `no_bundle`, and its `operator_step` names the
+three tokens. Or carry the file to the queue host and run
+`dev land receive --bundle=PATH --lane=NAME` there.
+
+
+What would you do next in this scenario? Give the proposed destination, operations, and message or receive details concretely enough for your replacement to carry them out.

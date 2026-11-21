@@ -1,0 +1,88 @@
+devbuild: z23 lane 1, CPUs 2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47, memory 24G
+scheduler holds /user.slice/user-0.slice/user@0.service/development.slice/devbuild-2256843-1795297549252862935.scope
+uid=1001 cpus=2-5 delegated=memory cgroup=/sys/fs/cgroup/user.slice/user-0.slice/user@0.service/development.slice/worldstream-guidance-2256865-1795297549321470596.service/worker/payload
+t-fast-exact: ONLY='test_dev_proof_remote_command,test_dev_proof_remote_placement' resolves to exact set test_dev_proof_remote_command,test_dev_proof_remote_placement
+build-epoch-session: acquired profile=test-fast-v2 epoch=6d4ba114d1bd91a6396d82a0794671e3f7dafd394953818577ce6e329b74ecd5 lease=build/test-obj/epochs/6d4ba114d1bd91a6396d82a0794671e3f7dafd394953818577ce6e329b74ecd5/.leases/f91e8c2ef86e2042176d0521bab000280f8d22556dbc1b510d134fd79fdce450 build_system_id=d7b39ddd9ab3976b2734a65dea63fffb94085a155b7b8b783e3672b8a3b62e10
+build-epoch-session: acquired profile=test-fast-v2 epoch=6d4ba114d1bd91a6396d82a0794671e3f7dafd394953818577ce6e329b74ecd5 lease=build/test-obj/epochs/6d4ba114d1bd91a6396d82a0794671e3f7dafd394953818577ce6e329b74ecd5/.leases/bae33ec69551753a7d9cec8610ba72bf5e29321d5c1812fced09377cebe808a4 build_system_id=d7b39ddd9ab3976b2734a65dea63fffb94085a155b7b8b783e3672b8a3b62e10
+build-epoch-session: acquired profile=dev-v2 epoch=aae3b80f7961d2e78d659e93b3ed6dc2ec41ce9de89252f97ebbd32360496157 lease=build/dev-obj/epochs/aae3b80f7961d2e78d659e93b3ed6dc2ec41ce9de89252f97ebbd32360496157/.leases/bae33ec69551753a7d9cec8610ba72bf5e29321d5c1812fced09377cebe808a4 build_system_id=d7b39ddd9ab3976b2734a65dea63fffb94085a155b7b8b783e3672b8a3b62e10
+publish-build-alias: build/bin/z23.dev <= epoch aae3b80f7961d2e78d659e93b3ed6dc2ec41ce9de89252f97ebbd32360496157 sha256=4ecf3a7af49c9fb0dc427d22d0c2eacbad438eab26a62a1b94b23cc0948839b4
+dev: build/bin/z23.dev <= build/bin/dev/epochs/aae3b80f7961d2e78d659e93b3ed6dc2ec41ce9de89252f97ebbd32360496157/zclassic23-dev (non-LTO, -g1, unstripped; not for release/deploy)
+dev-bin: build/bin/z23-dev <= build/bin/z23.dev (hard-link watch-loop alias of unsippable z23.dev; regular file for O_NOFOLLOW proof open)
+test_parallel: 1620 groups, 4 workers, 300s per-group timeout (workers: cpus)
+test_parallel: dispatch longest-expected-first, 213 weighted groups from tools/dev/test_group_weights.tsv
+test_parallel: exclusive pass done groups=0
+test_parallel: quiet-lint phase done groups=0 makespan_s=0.0
+test_parallel: attempt group=test_dev_proof_remote_command retained_state=/dev/shm/z23-scratch/6db1293a.6zw5IT/runner-state-d8cbe3146a79a2bd00
+test_parallel: attempt group=test_dev_proof_remote_placement retained_state=/dev/shm/z23-scratch/6db1293a.6zw5IT/runner-state-957458256aa3317c00
+test_parallel: general phase done groups=2 makespan_s=36.7
+
+==================== test_dev_proof_remote_placement (PASS, 4.933s) ====================
+test_parallel: private state retained=/dev/shm/z23-scratch/6db1293a.6zw5IT/runner-state-957458256aa3317c00
+LD_AUDIT loader marker/control: OBSERVED/REFUSED
+sparse oversized offer: REFUSED (remote_transport_bytes_mismatch)
+sparse oversized bundle: REFUSED (remote_transport_bytes_mismatch)
+placement Git status failed: exit=128 output=
+missing-object status transport control extensions.partialClone: OBSERVED
+placement Git status failed: exit=128 output=
+missing-object status transport control remote.sentinel.promisor: OBSERVED
+dev_proof_remote_placement: real bundle/checkout/source controls PASS
+
+==================== test_dev_proof_remote_command (PASS, 36.688s) ====================
+test_parallel: private state retained=/dev/shm/z23-scratch/6db1293a.6zw5IT/runner-state-d8cbe3146a79a2bd00
+dev.proof.remote: missing assignment refuses before placement... OK
+dev.proof.remote: foreign destination refuses before placement... OK
+dev.proof.remote: duplicate pin refuses before placement... OK
+dev.proof.remote: primary checkout is refused and linked busy is reported... OK
+dev.proof.remote: producer mismatch retains actionable recovery evidence... OK
+dev.proof.remote: full-source expectation uses native independent roots without executing proof... full-source expect CLI rc=0: {"schema":"zcl.result.v1","command":"dev.proof.remote","ok":true,"status":"passed","request_id":"local-0000000000000001","elapsed_us":3285704,"budget_ms":750,"elapsed_ms":3285,"budget_exceeded":true,"authority":{"policy":"exempt","agent_session":"none (local operator)"},"data_schema":"zcl.dev_proof_remote_result.v1","data":{"operation":"expect","status":"EXPECTATION_READY","proof_executed":false,"expectation":{"local_commit":"7d2533fa933f3f339d881419ad2d48d6039ed139","remote_base":"512b94ff0c1b27c5586f55565f8e7a08b9e0fa1e","git_tree":"ee1090f4af9a3818716b8ea97aa5fad421cccf3d","source_id":"534373d9dd5e23197c04f565d2504e4134f6df8d409b793c02a5a87dd825e1d0","source_cas_root":"a62a09bbe9a869bd161fda922788dad3546fe7463bfae5b18830aa097b969c45","signer_pubkey":"1111111111111111111111111111111111111111111111111111111111111111","source_root":"dae4973b0ae7b05c08b51e4cc666b85a1da988557c713f6ec2308dacbb94f888","changed_set_root":"ed7ced82f252d83c3c683dfbe53e833cda792abb5f8b1c0615221eb7f1601ee5","impact_policy_root":"d4ee85375a70cb87df435a81acdb829ce0a04ddcac9698cf12fb979f6045d93f"}},"next":[]}
+
+expectation control caller PATH sentinel: PASS
+expectation control configured Git refusal: PASS
+expectation control capture-time drift: PASS
+expectation control admission and operation: PASS
+expectation control empty change and dirty generation: PASS
+OK
+dev.proof.remote: requester CLI admits pinned receipts with real cold identity and no state writes... 2026-11-21T21:46:36Z INFO [dev-proof-signer] tools/dev/dev_proof_signer.c:189 signer_seed_load(): signer_key_created pubkey=37a571341e942033d9080687b5006e9623b3a4342f5f44422a16d9cfdadadd8e path=/dev/shm/z23-scratch/6db1293a.6zw5IT/remote_verify_cli_2265270_native/state-0/z23/dev/proof-signer/signer.ed25519 — copy this key into signers.allow on any box that must trust this one's push proofs
+2026-11-21T21:46:36Z INFO [dev-proof-signer] tools/dev/dev_proof_signer.c:189 signer_seed_load(): signer_key_created pubkey=10a7c1cdb2bef4688b27559dc0bdeb1a98912d11b658531801d995a939b1755e path=/dev/shm/z23-scratch/6db1293a.6zw5IT/remote_verify_cli_2265270_native/state-1/z23/dev/proof-signer/signer.ed25519 — copy this key into signers.allow on any box that must trust this one's push proofs
+2026-11-21T21:46:36Z INFO [dev-proof-signer] tools/dev/dev_proof_signer.c:189 signer_seed_load(): signer_key_created pubkey=15b512c7e20712b18ff19ebaf3752b752fbfd162e67920e6be478c5ad6a4953d path=/dev/shm/z23-scratch/6db1293a.6zw5IT/remote_verify_cli_2265270_native/state-2/z23/dev/proof-signer/signer.ed25519 — copy this key into signers.allow on any box that must trust this one's push proofs
+2026-11-21T21:46:36Z INFO [dev-proof-signer] tools/dev/dev_proof_signer.c:189 signer_seed_load(): signer_key_created pubkey=14a682e3b61b6e039cac1cb95ddc552ea348e19df82cfb308e6b3d657a3b3a96 path=/dev/shm/z23-scratch/6db1293a.6zw5IT/remote_verify_cli_2265270_native/state-3/z23/dev/proof-signer/signer.ed25519 — copy this key into signers.allow on any box that must trust this one's push proofs
+verify CLI trusted distinct signer: PASS rc=0
+verify CLI remote_signer_mismatch: PASS rc=1
+verify CLI remote_source_root_mismatch: PASS rc=1
+verify CLI remote_source_cas_root_mismatch: PASS rc=1
+verify CLI remote_changed_set_root_mismatch: PASS rc=1
+verify CLI remote_impact_policy_root_mismatch: PASS rc=1
+verify CLI pair mismatch: PASS rc=1
+verify CLI admission required: PASS rc=1
+verify CLI redirect environment: PASS rc=1
+verify CLI qualified PATH excludes sentinel: PASS rc=0
+verify CLI untrusted signer: PASS rc=1
+verify CLI modified signature: PASS rc=1
+verify CLI unsafe mode: PASS rc=1
+verify CLI FIFO refuses: PASS rc=1
+verify CLI truncated wire: PASS rc=1
+verify CLI trailing wire: PASS rc=1
+verify CLI symlink refuses: PASS rc=1
+verify CLI outside receipt: PASS rc=1
+verify CLI old policy: PASS rc=1
+verify CLI unsigned wire: PASS rc=1
+verify CLI remote_toolchain_mismatch:compiler_root: PASS rc=1
+verify CLI remote_toolchain_mismatch:flags_root: PASS rc=1
+verify CLI remote_toolchain_mismatch:environment_root: PASS rc=1
+verify CLI remote_toolchain_mismatch:build_graph_root: PASS rc=1
+verify CLI native cold identity positive: PASS rc=0
+verify CLI missing plan refuses: PASS rc=1
+verify CLI corrupt plan refuses: PASS rc=1
+verify CLI remote_toolchain_mismatch:compiler_root: PASS rc=1
+verify CLI remote_toolchain_mismatch:flags_root: PASS rc=1
+verify CLI remote_toolchain_mismatch:environment_root: PASS rc=1
+verify CLI remote_toolchain_mismatch:build_graph_root: PASS rc=1
+verify CLI native cold identity positive: PASS rc=0
+verify CLI missing plan refuses: PASS rc=1
+verify CLI corrupt plan refuses: PASS rc=1
+OK
+{"schema":"zcl.test_phase_receipt.v1","startup_ms":0,"test_body_ms":36689}
+
+SUITE VERDICT mode=cold groups_total=1620 groups_ran=2 groups_cached=0 groups_gated=1618 groups_failed=0 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=1780a13b422a
+ALL TESTS PASSED — 0/2 groups failed, 0 skipped (36.7s wall, 4 workers) [--exact filtered]
+delegated job receipt rc=0 elapsed_s=56 memory_limit=25769803776 swap_limit=0 memory_peak=1045688320 usage_usec 65956932
