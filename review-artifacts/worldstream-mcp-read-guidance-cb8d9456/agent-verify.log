@@ -1,0 +1,12 @@
+devbuild: z23 lane 1, CPUs 2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47, memory 24G
+agent-verify: check-file-size-ceiling rc=0 secs=6
+agent-verify: check-cyclomatic-complexity rc=0 secs=8
+agent-verify: dev-bin rc=0 secs=615
+agent-verify: selection exact groups=31 reason=impact-plan detail=- base=370318378089a9f158ccdf4f363fd27c2a6427f2 select_secs=23
+agent-verify: t-fast-exact rc=0 secs=646
+SUITE VERDICT mode=cold groups_total=1620 groups_ran=31 groups_cached=0 groups_gated=1589 groups_failed=0 self_skips=2 env_unobserved=0 load_flaky=0 toolkey=1780a13b422a
+agent-verify: check-capability-closure rc=0 secs=29
+agent-verify: proof-lint-prebuild rc=0 secs=91
+agent-verify: lint-fast rc=0 secs=259
+agent-verify: total secs=1677
+agent-verify: OK

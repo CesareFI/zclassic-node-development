@@ -1,0 +1,10 @@
+devbuild: z23 lane 1, CPUs 2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47, memory 24G
+/home/z23dev/work/mcp-read-guidance-evidence-20261121/guidance.bundle is okay
+The bundle contains this ref:
+cb8d945680161307d952d8398bdb5f55d2ce221d refs/z23-send/worldstream-mcp-read-guidance-cb8d94568016
+The bundle requires this ref:
+370318378089a9f158ccdf4f363fd27c2a6427f2 
+The bundle uses this hash algorithm: sha1
+cb8d945680161307d952d8398bdb5f55d2ce221d refs/z23-send/worldstream-mcp-read-guidance-cb8d94568016
+3070 /home/z23dev/work/mcp-read-guidance-evidence-20261121/guidance.bundle
+c9d9417597657b680475a6b1b3dc82d31787afdfd0818997703f79ca8a2f7175  /home/z23dev/work/mcp-read-guidance-evidence-20261121/guidance.bundle

@@ -1,0 +1,151 @@
+/home/z23dev/work/mcp-read-guidance-20261121/build/bin/zcc cc -std=c23 -D_POSIX_C_SOURCE=200809L  \
+    -O2 -Wall -Wextra -Werror \
+    -pedantic -Icognition/modules/codeindex/include -Icognition/modules/codeindex/src \
+    -Iplatform/modules/base/include -Iplatform/modules/util/include -Iplatform/modules/sha3/include \
+    -Icore/modules/crypto/include -Iplatform/modules/platform/include \
+    -o build/bin/gen_capability_inventory tools/gen_capability_inventory.c cognition/modules/codeindex/src/codeindex_inventory.c cognition/modules/codeindex/src/codeindex_inventory_scan.c cognition/modules/codeindex/src/codeindex_inventory_render.c cognition/modules/codeindex/src/codeindex_inventory_body.c cognition/modules/codeindex/src/codeindex_inventory_evidence.c cognition/modules/codeindex/src/codeindex_scan.c cognition/modules/codeindex/src/codeindex_scan_doc.c platform/modules/base/src/safe_alloc.c platform/modules/base/src/log_level.c platform/modules/sha3/src/sha3.c  
+make[2]: warning: jobserver unavailable: using -j1.  Add '+' to parent make rule.
+tor-ready: real Tor archives already present (vendor/tor)
+z23-lint run: note — table gate 'check-toolchain' not in this run's gate list
+z23-lint run: note — table gate 'check-dev-linker-threads' not in this run's gate list
+z23-lint run: note — table gate 'check-fuzz-artifact-ledger' not in this run's gate list
+z23-lint run: note — table gate 'check-build-epoch-integrity' not in this run's gate list
+z23-lint run: note — table gate 'check-checkout-lock' not in this run's gate list
+z23-lint run: note — table gate 'check-land-preflight' not in this run's gate list
+z23-lint run: note — table gate 'check-host-gc-selftest' not in this run's gate list
+z23-lint run: note — table gate 'check-commons-journey-ordering' not in this run's gate list
+z23-lint run: note — table gate 'check-git-hooks-installed' not in this run's gate list
+z23-lint run: note — table gate 'check-hotswap-eligible-scope' not in this run's gate list
+z23-lint run: note — table gate 'check-hotswap-denied-leaves' not in this run's gate list
+z23-lint run: note — table gate 'check-determinism-ratchet' not in this run's gate list
+z23-lint run: note — table gate 'check-hotswap-static-state' not in this run's gate list
+z23-lint run: note — table gate 'check-hotswap-service-islands' not in this run's gate list
+z23-lint run: note — table gate 'check-hotswap-swappable-shape' not in this run's gate list
+z23-lint run: note — table gate 'check-hotswap-package-receipt-is-not-authority' not in this run's gate list
+z23-lint run: note — table gate 'check-hotswap-module-imports' not in this run's gate list
+z23-lint run: note — table gate 'check-stable-publish-contained' not in this run's gate list
+z23-lint run: note — table gate 'check-coins-lookup-nullcheck' not in this run's gate list
+z23-lint run: note — table gate 'check-observability-pairing' not in this run's gate list
+z23-lint run: note — table gate 'check-no-hardlink-seeding' not in this run's gate list
+z23-lint run: note — table gate 'check-long-functions' not in this run's gate list
+z23-lint run: note — table gate 'check-lib-layering' not in this run's gate list
+z23-lint run: note — table gate 'check-shape-include-direction' not in this run's gate list
+z23-lint run: note — table gate 'check-domain-purity' not in this run's gate list
+z23-lint run: note — table gate 'check-core-seal' not in this run's gate list
+z23-lint run: note — table gate 'check-no-adx-overclaim' not in this run's gate list
+z23-lint run: note — table gate 'check-test-registration' not in this run's gate list
+z23-lint run: note — table gate 'check-blocker-escape-registered' not in this run's gate list
+z23-lint run: note — table gate 'check-blocker-remedy' not in this run's gate list
+z23-lint run: note — table gate 'check-blocker-handoff-declared' not in this run's gate list
+z23-lint run: note — table gate 'check-ship-remote-transaction' not in this run's gate list
+z23-lint run: note — table gate 'check-z23-release-install' not in this run's gate list
+z23-lint run: note — table gate 'check-published-platforms' not in this run's gate list
+z23-lint run: note — table gate 'check-shell-host-assumptions' not in this run's gate list
+z23-lint run: note — table gate 'check-fleet-source-status' not in this run's gate list
+z23-lint run: note — table gate 'check-platform-header-guards' not in this run's gate list
+z23-lint run: note — table gate 'check-model-column-drift' not in this run's gate list
+z23-lint run: note — table gate 'check-group-purpose' not in this run's gate list
+z23-lint run: note — table gate 'check-retrieval-historical-evidence' not in this run's gate list
+z23-lint run: note — table gate 'check-no-orphan-placement' not in this run's gate list
+z23-lint run: note — table gate 'check-operator-needed-sink' not in this run's gate list
+z23-lint run: note — table gate 'check-systemd-memory-budget' not in this run's gate list
+z23-lint run: note — table gate 'check-no-stale-pinned-facts' not in this run's gate list
+z23-lint run: note — table gate 'check-no-uncited-victory' not in this run's gate list
+z23-lint run: note — table gate 'check-doc-claims' not in this run's gate list
+z23-lint run: note — table gate 'check-markdown-links' not in this run's gate list
+z23-lint run: note — table gate 'check-one-result-type' not in this run's gate list
+z23-lint run: note — table gate 'check-no-secret-printf' not in this run's gate list
+z23-lint run: note — table gate 'check-service-result-convergence' not in this run's gate list
+z23-lint run: note — table gate 'check-shape-includes-header' not in this run's gate list
+z23-lint run: note — table gate 'check-projections-pure' not in this run's gate list
+z23-lint run: note — table gate 'check-frontier-single-writer' not in this run's gate list
+z23-lint run: note — table gate 'check-dumper-never-blocks' not in this run's gate list
+z23-lint run: note — table gate 'check-no-authoritative-ram-state' not in this run's gate list
+z23-lint run: note — table gate 'check-no-dev-history-in-contracts' not in this run's gate list
+z23-lint run: note — table gate 'check-stage-advances-or-blocks' not in this run's gate list
+z23-lint run: note — table gate 'check-honest-witness' not in this run's gate list
+z23-lint run: note — table gate 'check-consensus-parity' not in this run's gate list
+z23-lint run: note — table gate 'check-no-new-repair-rung' not in this run's gate list
+z23-lint run: note — table gate 'check-object-reproducible' not in this run's gate list
+z23-lint run: note — table gate 'check-riscv64-universal' not in this run's gate list
+z23-lint run: note — table gate 'check-lint-gate-wiring' not in this run's gate list
+z23-lint run: note — table gate 'check-no-new-borrowed-seed' not in this run's gate list
+z23-lint run: note — table gate 'check-no-new-coin-backfill-caller' not in this run's gate list
+z23-lint run: note — table gate 'check-route-command-parity' not in this run's gate list
+z23-lint run: note — table gate 'check-doc-no-false-deleted' not in this run's gate list
+z23-lint run: note — table gate 'check-zclassicd-reach-allowlist' not in this run's gate list
+z23-lint run: note — table gate 'check-no-csr-lock-on-finalize-drive' not in this run's gate list
+z23-lint run: note — table gate 'check-mint-skip-crypto-offline-only' not in this run's gate list
+z23-lint run: note — table gate 'check-vcs-no-sha1' not in this run's gate list
+z23-lint run: note — table gate 'check-no-snapshot-struct-memcmp' not in this run's gate list
+z23-lint run: note — table gate 'check-no-warning-suppression' not in this run's gate list
+z23-lint run: note — table gate 'check-result-discard' not in this run's gate list
+PASS check-capability-inventory-generated         10514 ms
+PASS check-no-stray-root-files                       54 ms
+PASS check-no-bare-tmp-fixture                       64 ms
+PASS check-zcc-cache                                 71 ms
+PASS check-toolgen                                   96 ms
+PASS check-raw-sqlite                                58 ms
+PASS check-malloc                                    25 ms
+PASS check-architecture-tree                        139 ms
+PASS check-controller-private-headers               245 ms
+PASS check-no-stray-untracked-source                339 ms
+PASS check-file-size-ceiling                        157 ms
+PASS check-describe-budget                           15 ms
+PASS check-cyclomatic-complexity                    183 ms
+PASS check-catalog-rooms                             26 ms
+PASS check-file-purpose                             135 ms
+PASS check-json-value-init                           97 ms
+PASS check-model-validation                          56 ms
+PASS check-no-raw-sqlite-in-controllers             370 ms
+PASS check-model-ar-lifecycle                       460 ms
+PASS check-before-save-hooks                         16 ms
+PASS check-pthread-create                            20 ms
+PASS check-log-macro-return-type                     32 ms
+PASS check-hidden-return-under-lock                  41 ms
+PASS check-windows-platform-seam                   1145 ms
+PASS check-wallet-raw-prepare-log                    51 ms
+PASS check-wallet-log-privacy                        96 ms
+PASS check-dev-proof-native-fast-path                26 ms
+PASS check-equihash-params                          841 ms
+PASS check-framework-shape                           61 ms
+PASS check-one-write-path                          1482 ms
+PASS check-raw-malloc                              2012 ms
+PASS check-windows-acceptance-guard                  95 ms
+PASS check-pipefail-status-pipe                     382 ms
+PASS check-flag-registry                           2733 ms
+PASS check-zcode-package-registry                    15 ms
+PASS check-supervisor-registration                 1011 ms
+PASS check-doc-counts                               809 ms
+PASS check-orient-facts                             128 ms
+PASS check-silent-errors-services                   136 ms
+PASS check-silent-errors-controllers                 67 ms
+PASS check-silent-errors-jobs                        25 ms
+PASS check-silent-errors-conditions                  26 ms
+PASS check-silent-errors-bool                        91 ms
+PASS check-kpi-floor                                837 ms
+PASS check-no-raw-clock-outside-platform             62 ms
+PASS check-sqlite-step-row                           60 ms
+PASS check-hotfork-stories                          549 ms
+PASS check-outparam-init-before-return             4930 ms
+PASS check-hex-codec-single                        1954 ms
+PASS check-byte-order-codec-single                 1871 ms
+PASS check-no-operator-paths                       1941 ms
+PASS check-arena-view-stub                         2547 ms
+PASS check-no-live-lab-history                     5743 ms
+PASS check-fortify-masked-decls                    5353 ms
+PASS check-vendor-provenance                      21708 ms
+── lint timing: 55 gates, wall 32222 ms, jobs 8 ──
+    21708 ms  check-vendor-provenance
+    10514 ms  check-capability-inventory-generated
+     5743 ms  check-no-live-lab-history
+     5353 ms  check-fortify-masked-decls
+     4930 ms  check-outparam-init-before-return
+     2733 ms  check-flag-registry
+     2547 ms  check-arena-view-stub
+     2012 ms  check-raw-malloc
+     1954 ms  check-hex-codec-single
+     1941 ms  check-no-operator-paths
+  … (ZCL_LINT_VERBOSE=1 for the full table)
+precheck: 0 new failure(s) of 156 gates
+lint-fast: OK
