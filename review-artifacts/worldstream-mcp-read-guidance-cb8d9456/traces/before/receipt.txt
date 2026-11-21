@@ -1,0 +1,9 @@
+phase=before uid=1001 repo=/home/z23dev/work/mcp-read-guidance-20261121 head=109184469203b9589893e25924e376931a50f2c6 binary=/home/z23dev/work/mcp-read-guidance-20261121/build/bin/z23-dev
+cf7f2f5a518d5742594d5412bb6be55b7ad9757b8df42f67a7f82b337bfcb984  /home/z23dev/work/mcp-read-guidance-20261121/build/bin/z23-dev
+id=1 bytes=1520 elapsed_ms=30.560
+id=2 bytes=8503 elapsed_ms=30.157
+id=3 bytes=1004 elapsed_ms=15.086
+id=4 bytes=2292 elapsed_ms=15.031
+id=5 bytes=251 elapsed_ms=1.071
+id=6 bytes=1368 elapsed_ms=13.570
+PASS: search, describe owner/read, typed refusal and subsequent permitted discover.search on one STDIO connection.

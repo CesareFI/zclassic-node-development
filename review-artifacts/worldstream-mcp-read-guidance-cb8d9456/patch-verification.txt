@@ -1,0 +1,3 @@
+Patch applied to parent and reproduced b2d376cde075f5f92e5c1745682284c4dda8d450
+11646
+9fe0ec503dcd79898459d408ad9504249888fd4f3caded83a63542a67b37b8dd  /home/z23dev/work/mcp-read-guidance-evidence-20261121/guidance.patch

@@ -1,0 +1,4 @@
+os_sandbox: SKIP (userns unavailable on host) — degraded profile still covered by the builder tests above
+SKIP (app_receive_ui requires Linux Xvfb)
+SUITE VERDICT mode=cold groups_total=1620 groups_ran=31 groups_cached=0 groups_gated=1589 groups_failed=0 self_skips=2 env_unobserved=0 load_flaky=0 toolkey=1780a13b422a
+ALL TESTS PASSED — 0/31 groups failed, 2 skipped (134.7s wall, 4 workers) [--exact filtered]

@@ -1,0 +1,4 @@
+.claude/plugin/README.md
+docs/agent/AGENT_API.md
+tests/harness/src/test_mcp_serve.c
+tools/mcp/mcp_serve.c

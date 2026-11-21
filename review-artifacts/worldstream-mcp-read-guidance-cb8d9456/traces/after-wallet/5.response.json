@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":5,"result":{"content":[{"type":"text","text":"{\"ok\":false,\"error\":{\"code\":\"READ_REFUSED_OWNER_AUTHORITY\",\"message\":\"owner-authority commands are not available here\",\"detail\":\"fleet.machines\"}}"}],"isError":true}}

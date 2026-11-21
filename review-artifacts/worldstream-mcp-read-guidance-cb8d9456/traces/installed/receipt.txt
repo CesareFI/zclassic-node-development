@@ -1,0 +1,9 @@
+phase=before uid=1001 repo=/home/z23dev/work/fleet-inventory-20261121 head=4c27922080702f0c6b305e9222b5c98d8d865d0e binary=/home/z23dev/work/fleet-inventory-20261121/build/bin/z23-dev
+ee4593398350c9ff86c39b32b6410d1e04fa857246a7890934e917db3d9e77de  /home/z23dev/work/fleet-inventory-20261121/build/bin/z23-dev
+id=1 bytes=1520 elapsed_ms=26.520
+id=2 bytes=8503 elapsed_ms=47.087
+id=3 bytes=1004 elapsed_ms=12.703
+id=4 bytes=2292 elapsed_ms=9.213
+id=5 bytes=251 elapsed_ms=1.046
+id=6 bytes=1368 elapsed_ms=17.481
+PASS: search, describe owner/read, typed refusal and subsequent permitted discover.search on one STDIO connection.

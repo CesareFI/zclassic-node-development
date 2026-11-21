@@ -1,0 +1,13 @@
+Qualification account was z23dev. The controller scheduled project builds with devbuild --project z23 --wait, CPU affinity 2-5, four build jobs and the 24 GiB lane cap. Each scheduled command ran as z23dev in a private mount namespace with a fresh /tmp, the read-only test-tool overlay, and ZCL_QUEUE_DIRECT=1. No host package or service was installed.
+Base checkout from public main:
+make -j4 worktree-prime SRC=/home/z23dev/work/fleet-inventory-20261121
+make -j4 dev-bin
+bash journey.sh before EVIDENCE_DIRECTORY
+Final candidate cb8d945680161307d952d8398bdb5f55d2ce221d:
+make -j4 t-list
+make -j4 dev-bin
+make -j4 t-fast-exact ONLY=test_mcp_serve,test_mcp_serve_apps,test_mcp_plugin_call T_FAST_EXACT_ARGS=--no-cache
+bash journey.sh after EVIDENCE_DIRECTORY
+bash journey.sh after-wallet EVIDENCE_DIRECTORY
+make -j4 agent-verify ONLY=@changed AGENT_VERIFY_BASE=370318378089a9f158ccdf4f363fd27c2a6427f2 Z23KERNEL_CC=/usr/bin/clang-20 Z23KERNEL_LD=/usr/bin/ld.lld-20 Z23KERNEL_OBJCOPY=/usr/bin/llvm-objcopy-20
+make -j4 lint-preflight
