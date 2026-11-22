@@ -1,0 +1,18 @@
+{
+  "registry": {
+    "worker_directory": "one read-only synthetic case",
+    "interface": "default z23-dev mcp serve over STDIO",
+    "audit": "passive byte copies of stdin and stdout",
+    "local_writes": [],
+    "network": false
+  },
+  "receiver": {
+    "worker_directory": "separate read-only observation directory",
+    "inputs_each_phase": ["offer.json", "parcel.bundle", "base.git", "readback.json"],
+    "inputs_after_resume": ["checkpoint.txt"],
+    "controller_only": ["publisher checkout", "receiver repository", "hooks and invocation counters"],
+    "observation_command": ["git", "-C", "sender", "ls-remote", "--refs", "origin", "refs/heads/main"],
+    "base_repository_contents": "synthetic prerequisite and its reachable objects only",
+    "network": false
+  }
+}

@@ -1,0 +1,3 @@
+Complete the registry ticket in case.txt. Use the local recording wrapper ../tools/registry-stdio from the case directory. It starts the default Z23 STDIO service and records its traffic automatically. Communicate over the child's stdin and stdout. The audit pipes are for the recorder.
+
+Initialize the connection and inspect tools/list. Its tool names include z23_search, z23_describe and z23_run. A registry command name such as discover.search is a path supplied to a tool. Keep the process alive across the saved input, its correction, contract inspection and eligible read. Use actual responses and report the request IDs, typed error, command inputs, effect, authority and final matched command.
