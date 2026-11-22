@@ -1,0 +1,2 @@
+Makefile:5242: *** make t-fast-exact: ONLY= is required: use comma-separated exact registered groups, e.g. ONLY=dev_land,impact_composition; spaces are not separators.  Stop.
+No registered group ran with the initial invocation. Changing the selector to the documented ONLY= form selected the three exact groups.

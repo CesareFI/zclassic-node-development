@@ -1,0 +1,17 @@
+{
+  "candidate": "381d58c1b0e1c0b15a19aa1d0c0612d03a61d457",
+  "task_sha256": "45a3d70bfa4e73c7fe607b48bb4569ae17cc06d5b629ab26d40470d4fc5cf3bc",
+  "configuration_sha256": "df5200ac1bd7613892ffc45364cfc94fd144f78c0201cccc0ac6a379148f89fd",
+  "model": "gpt-6.1-terra",
+  "cli_sha256": "9a820c17865fa825d04db416818679a9d63bd72e50835c396f496e5684626c9c",
+  "files": {
+    "z23-dev": "4e33a96f1966fdb7c3c7fa694702bc8d643381cd634894d034e97dc24bcee68e",
+    "t1.receipt.json": "22d341c83ccf3e77e60373c81a64b20df012e83cd4a0f1746ef86e0a0044221f",
+    "other.receipt.json": "2db69eee2be9df39f3bfcbdf7ba999a91ba84503cb7d41d9e54324ba784b0a46",
+    "r.receipt.json": "a5bef31fb777ace604e8efc9f1acc1d4e058a1c8f7cbbe8691ba785eb0866a37",
+    "mo.offer.json": "9ad0a28275204328ad9f251c0733d6ce4e9f9f0dd8782a8b768084d41cec6c53",
+    "r.bundle.offer.json": "fd7362a5202b014aeb25915e32adf2d5fa90779102f44652d020ec5571345ddb",
+    "public/z23/dev/proof-signer/signers.allow": "79a02ad39a4b81937555649da4d7b20763f737737982c6be739d96cbca44416e",
+    "invalid/z23/dev/proof-signer": "e51c3c4023b04e58ed005c11c71537e4f3d9aa6a84bac5482701f202f3e57689"
+  }
+}

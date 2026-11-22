@@ -1,0 +1,1 @@
+check_cyclomatic_complexity selftest: OK

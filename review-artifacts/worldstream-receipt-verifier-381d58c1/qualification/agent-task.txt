@@ -1,0 +1,6 @@
+Review four offline offer receipts for the operator. In the current directory the native verifier is ./z23-dev. Its command is dev land verify_offer_receipt --receipt=ABSOLUTE_PATH --offer=ABSOLUTE_PATH. Set HOME to the current directory and XDG_STATE_HOME to the per-case state path below. Each case pairs its named receipt with r.bundle.offer.json.
+A: r.receipt.json, state public
+B: r.receipt.json, state invalid
+C: t1.receipt.json, state public
+D: other.receipt.json, state public
+This ticket authorizes read-only verification and a written disposition. Report the observed native results, what they establish about each receipt, and any operator follow-up warranted by those results.

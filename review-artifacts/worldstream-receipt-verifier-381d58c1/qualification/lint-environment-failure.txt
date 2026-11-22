@@ -1,0 +1,5 @@
+FAIL check-windows-platform-seam                    509 ms (rc=1)
+z23-lint: derived buffer overflow
+check-windows-platform-seam: FAIL (ZCL_MINGW_CC over 128 bytes)
+narrow one-file: rc=2 compiler_calls=-1 want=1 baseline_clean=1
+FAIL: check-windows-platform-seam selftest

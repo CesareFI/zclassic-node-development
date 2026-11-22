@@ -1,0 +1,11 @@
+agent-verify: check-file-size-ceiling rc=0 secs=7
+agent-verify: check-cyclomatic-complexity rc=0 secs=8
+agent-verify: dev-proof-producer rc=0 secs=7
+agent-verify: selection exact groups=60 reason=impact-plan detail=- base=64f7d70dd6a6c783648bcb8156927805a5e190ae select_secs=1
+agent-verify: t-fast-exact rc=0 secs=521
+SUITE VERDICT mode=cold groups_total=1624 groups_ran=60 groups_cached=0 groups_gated=1564 groups_failed=0 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=11c1b6ed24a6
+agent-verify: check-capability-closure rc=0 secs=23
+agent-verify: proof-lint-prebuild rc=0 secs=14
+agent-verify: lint-fast rc=0 secs=263
+agent-verify: total secs=844
+agent-verify: OK

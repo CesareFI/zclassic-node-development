@@ -1,0 +1,47 @@
+{
+  "ok": true,
+  "data": {
+    "precheck_ran": [
+      "check-file-size-ceiling",
+      "check-cyclomatic-complexity",
+      "check-arm-symbol-single",
+      "check-kpi-floor",
+      "check-describe-budget",
+      "check-hardening-ratchet"
+    ],
+    "precheck_skipped": [
+      "check-core-seal"
+    ],
+    "precheck_unproven": "proof-history: land state unavailable",
+    "precheck_timings": [
+      {
+        "gate": "check-file-size-ceiling",
+        "elapsed_ms": 112
+      },
+      {
+        "gate": "check-cyclomatic-complexity",
+        "elapsed_ms": 1435
+      },
+      {
+        "gate": "check-arm-symbol-single",
+        "elapsed_ms": 830
+      },
+      {
+        "gate": "check-kpi-floor",
+        "elapsed_ms": 539
+      },
+      {
+        "gate": "check-describe-budget",
+        "elapsed_ms": 2864
+      },
+      {
+        "gate": "check-hardening-ratchet",
+        "elapsed_ms": 1169
+      }
+    ],
+    "commit": "381d58c1b0e1c0b15a19aa1d0c0612d03a61d457",
+    "lane": "worldstream-receipt-verifier-diagnostic",
+    "bundle_sha256": "ded3c82f6fce7a1d1aa60fb2d84cf3e2539f32212a94226525d7d9fdab48d8b3"
+  },
+  "bundle_and_patch_replay": "verified commit, base, tree; applied patch produces the identical tree"
+}

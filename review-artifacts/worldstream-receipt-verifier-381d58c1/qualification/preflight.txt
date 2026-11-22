@@ -1,0 +1,9 @@
+PASS check-capability-inventory-generated         10581 ms
+PASS check-toolgen                                  104 ms
+PASS check-posix-ere-only                           638 ms
+PASS check-api-reference-generated                 2929 ms
+PASS check-no-wallclock-assertion                  4185 ms
+PASS check-hex-codec-single                        4992 ms
+PASS check-command-input-keys                      5461 ms
+PASS check-capability-closure                     15343 ms
+lint-preflight: OK

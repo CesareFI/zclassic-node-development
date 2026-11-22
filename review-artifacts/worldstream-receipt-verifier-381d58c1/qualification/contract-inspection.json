@@ -1,0 +1,14 @@
+{
+  "base": "64f7d70dd6a6c783648bcb8156927805a5e190ae",
+  "upstream_reference": "7ebdd1e103b561e0c1fa95bbaeb75ec982220830",
+  "upstream_target_files_changed": false,
+  "command": "dev.land.verify_offer_receipt",
+  "authority": "local operator read",
+  "consumers": [
+    "dlr_qual_verified propagates per-receipt tmp.error.code to data.rejected",
+    "qualify_offer retains its existing whole-call QUALIFY_SIGNER_KEY_UNREADABLE when the own-key preflight fails",
+    "live peer regression expects unknown-signer refusal",
+    "qualify and peer regression tests consume actual invalid-signature codes"
+  ],
+  "intentional_contract_change": "A lower-level signer_key_unreadable now maps to RECEIPT_VERIFIER_UNAVAILABLE; the lower-level evidence and failure envelope are retained."
+}

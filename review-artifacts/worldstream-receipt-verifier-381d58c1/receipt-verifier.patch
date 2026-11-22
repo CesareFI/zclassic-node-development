@@ -1,0 +1,146 @@
+From 381d58c1b0e1c0b15a19aa1d0c0612d03a61d457 Mon Sep 17 00:00:00 2001
+From: Worldstream Development <worldstream-dev@users.noreply.github.com>
+Date: Sun, 22 Nov 2026 13:08:56 +0100
+Subject: [PATCH] Distinguish unavailable offer receipt verification from
+ invalid signatures
+
+---
+ docs/dev/DEVELOPING.md                   | 16 +++++++++++-----
+ engine/composition/commands/dev.def      |  4 +++-
+ tests/harness/src/test_dev_land_remote.c | 13 +++++++++++++
+ tools/command/native_dev_land_offer.c    | 14 +++++++++++---
+ tools/dev/dev_proof_signer.c             |  5 +++--
+ 5 files changed, 41 insertions(+), 11 deletions(-)
+
+diff --git a/docs/dev/DEVELOPING.md b/docs/dev/DEVELOPING.md
+index bf84b72a306e06b6e8c1f5086d93a7fb85dbf667..11032da161adcee4aa39c758ff06a270c07bda59 100644
+--- a/docs/dev/DEVELOPING.md
++++ b/docs/dev/DEVELOPING.md
+@@ -2032,18 +2032,24 @@ under its owner-private development state root, created on first use by
+ whichever proof seals the first receipt and never by a verifier; the receipt
+ carries that public key and a signature over its whole sealed body, and
+ sealing fails by name rather than fall back to an unsigned record. Admission
+-verifies the signature and then asks whether it trusts the signer: this box's
++requires a trusted signer and a valid signature. This box's
+ own key is always trusted, and any other box's key is trusted only when its 64
+ hex characters appear on their own line in `signers.allow` beside the key
+ (`#` comments and blank lines are fine, malformed lines are counted and
+ skipped). To let another operator admit receipts proved here, run
+ `z23-dev dev proof signer`, which prints this box's public key, both paths and
+-the current trust counts, and paste the printed key into their `signers.allow`.
++the current trust counts. The receiving operator independently establishes the
++expected public key through their authorized trust process before listing it
++in `signers.allow`. A rejected receipt cannot authorize that change.
+ The refusals are named: `receipt_unsigned` (a record from before receipts were
+ signed — re-prove), `signature_invalid` (the record was edited after signing),
+-`signer_unknown` (a real signature from a box this one does not trust), and
+-`signer_key_unreadable` (this box has a key file that is not a private 32-byte
+-seed).
++`signer_unknown` (this box does not trust the signer), and
++`signer_key_unreadable` (local signer state could not be read).
++For `dev land verify_offer_receipt`, the last condition returns
++`RECEIPT_VERIFIER_UNAVAILABLE` and leaves the receipt unverified.
++`RECEIPT_SIGNATURE_INVALID` remains the refusal for a failed signature check.
++A verifier can use established public trust in `signers.allow` without a local
++signing key.
+ 
+ The source-identity capture that seals a proof's evidence
+ (`zcl_dev_source_cas_capture` / `zcl_dev_source_identity_capture` in
+diff --git a/engine/composition/commands/dev.def b/engine/composition/commands/dev.def
+index d452a637e81b4841e244ac3493441ec83cebd063..6b366e3ffef1d7c15d501770c7530e6595b4a0ac 100644
+--- a/engine/composition/commands/dev.def
++++ b/engine/composition/commands/dev.def
+@@ -2807,7 +2807,9 @@ ZCL_COMMAND_DEV_COMMAND(
+     "Verify a signed offer receipt, read-only",
+     "Rebuilds the signed message and verifies it with the dev proof signer: "
+     "OFFER_RECEIPT_BAD, RECEIPT_SIGNATURE_INVALID, RECEIPT_SIGNER_UNKNOWN "
+-    "(not this box's key, not on signers.allow). With offer, the receipt's "
++    "(not this box's key, not on signers.allow), RECEIPT_VERIFIER_UNAVAILABLE "
++    "(local signer state could not be read, leaving the receipt unverified). "
++    "With offer, the receipt's "
+     "commit, base and bundle_sha256 must equal it, else "
+     "RECEIPT_OFFER_MISMATCH. Returns commit, base, signer, verdict, checks.",
+     65536,
+diff --git a/tests/harness/src/test_dev_land_remote.c b/tests/harness/src/test_dev_land_remote.c
+index 4e83ca46c734ad8708691db62cea8cffc82265ed..ab7ca74ffcf4d0b5f73a5119e05c8b9c62f7cb34 100644
+--- a/tests/harness/src/test_dev_land_remote.c
++++ b/tests/harness/src/test_dev_land_remote.c
+@@ -1035,6 +1035,19 @@ static int dlt_receipt_cases(void)
+         PASS();
+     }
+ 
++    TEST("land.verify_offer_receipt: unavailable local signer state leaves "
++         "a valid receipt unverified") {
++        /* An existing regular file cannot be the verifier's state root. */
++        ASSERT(setenv("XDG_STATE_HOME", rc, 1) == 0);
++        dlt_vfy(&c, rc, o);
++        ASSERT(setenv("XDG_STATE_HOME", r.state, 1) == 0);
++        ASSERT(dlt_refused(&c, "RECEIPT_VERIFIER_UNAVAILABLE"));
++        ASSERT_STR_EQ(c.reply.error.evidence, "signer_key_unreadable");
++        ASSERT(!c.reply.error.mutated);
++        dlt_end(&c);
++        PASS();
++    }
++
+     TEST("land.verify_offer_receipt: one flipped signature digit refuses "
+          "RECEIPT_SIGNATURE_INVALID") {
+         ASSERT(dlt_tweak(rc, t1, "signature"));
+diff --git a/tools/command/native_dev_land_offer.c b/tools/command/native_dev_land_offer.c
+index 0599bfd536dcfb56825e4447462585c53be1af13..1d61c61c69a6278d1d06053d9e4db01d073c2aed 100644
+--- a/tools/command/native_dev_land_offer.c
++++ b/tools/command/native_dev_land_offer.c
+@@ -30,7 +30,8 @@
+  * verify_offer_receipt (read-only) takes --receipt and optional --offer.
+  *          OFFER_RECEIPT_BAD (not a v1 receipt), RECEIPT_SIGNATURE_INVALID
+  *          (the bytes do not verify), RECEIPT_SIGNER_UNKNOWN (neither this
+- *          box's key nor on its signers.allow), RECEIPT_OFFER_MISMATCH (with
++ *          box's key nor on its signers.allow), RECEIPT_VERIFIER_UNAVAILABLE
++ *          (local signer state could not be read), RECEIPT_OFFER_MISMATCH (with
+  *          --offer: another commit, base or bundle_sha256). Reply: data
+  *          {commit, base, signer, verdict, checks}.
+  * reverify_offer (the receiver) takes check_offer's inputs plus an optional
+@@ -96,7 +97,8 @@
+  *          skipped, not fatal: it is listed in data.rejected as
+  *          [{"receipt": path, "code": code}] with its code (OFFER_RECEIPT_BAD,
+  *          RECEIPT_SIGNATURE_INVALID, RECEIPT_SIGNER_UNKNOWN,
+- *          RECEIPT_OFFER_MISMATCH, QUALIFY_NOT_REVERIFIED, or
++ *          RECEIPT_VERIFIER_UNAVAILABLE, RECEIPT_OFFER_MISMATCH,
++ *          QUALIFY_NOT_REVERIFIED, or
+  *          QUALIFY_SIGNER_NOT_DISTINCT: a lab never vouches for itself).
+  *          A signer seen again counts once, as a duplicate. Fewer qualified
+  *          signers than required refuses QUALIFY_SHORT; its evidence and
+@@ -581,8 +583,14 @@ static bool dlr_receipt_verify(const struct dlr_receipt *t,
+     if (why && strcmp(why, ZCL_DEV_PROOF_SIGNER_WHY_SIGNER_UNKNOWN) == 0)
+         dlr_verify_fail(reply, "RECEIPT_SIGNER_UNKNOWN",
+                         "the signer is not this box's key and not on its "
+-                        "signers.allow list",
++                        "signers.allow list. Establish the expected signer "
++                        "independently through the operator's trust process.",
+                         t->signer);
++    else if (why && strcmp(why, ZCL_DEV_PROOF_SIGNER_WHY_KEY_UNREADABLE) == 0)
++        dlr_verify_fail(reply, "RECEIPT_VERIFIER_UNAVAILABLE",
++                        "cannot read local signer state. The receipt remains "
++                        "unverified.",
++                        why);
+     else
+         dlr_verify_fail(reply, "RECEIPT_SIGNATURE_INVALID",
+                         "the signature does not verify over the receipt "
+diff --git a/tools/dev/dev_proof_signer.c b/tools/dev/dev_proof_signer.c
+index 209fce245a9863e77cc3d9215e540e9f4579d93e..2351aa235decde1e6ee0d15ca5f162ae5de027e4 100644
+--- a/tools/dev/dev_proof_signer.c
++++ b/tools/dev/dev_proof_signer.c
+@@ -440,8 +440,9 @@ bool zcl_dev_proof_signer_verify(
+         zcl_hex_encode(pubkey, ZCL_DEV_PROOF_SIGNER_PUBKEY_BYTES, hex);
+         signer_why(why, WHY_UNKNOWN);
+         LOG_FAIL(SIGNER_DOMAIN,
+-                 "signer %s is not this box and is not listed in %s; add "
+-                 "that line to trust it", hex, SIGNER_ALLOW_LEAF);
++                 "signer %s is not this box and is not listed in %s. "
++                 "Establish the expected signer independently through the "
++                 "operator's trust process.", hex, SIGNER_ALLOW_LEAF);
+     }
+     if (!ed25519_verify(signature, message, message_len, pubkey)) {
+         signer_why(why, WHY_SIGNATURE);
+-- 
+2.43.0
+

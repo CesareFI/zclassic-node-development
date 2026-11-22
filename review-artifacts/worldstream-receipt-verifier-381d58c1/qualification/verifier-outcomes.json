@@ -1,0 +1,366 @@
+[
+  {
+    "phase": "baseline",
+    "fixture": "before",
+    "exit": 1,
+    "interface": "native CLI",
+    "native_stdout_bytes": 791,
+    "elapsed_ns": 106773032,
+    "contents_and_modes_unchanged": true,
+    "private_signing_key_present": false,
+    "response": {
+      "schema": "zcl.result.v1",
+      "command": "dev.land.verify_offer_receipt",
+      "ok": false,
+      "status": "failed",
+      "request_id": "local-0000000000000001",
+      "elapsed_us": 347,
+      "budget_ms": 250,
+      "elapsed_ms": 0,
+      "budget_exceeded": false,
+      "authority": {
+        "policy": "exempt",
+        "agent_session": "none (local operator)"
+      },
+      "error": {
+        "code": "RECEIPT_SIGNATURE_INVALID",
+        "error_code": "RECEIPT_SIGNATURE_INVALID",
+        "message": "the signature does not verify over the receipt fields",
+        "phase": "receipt",
+        "current_state": "REQUEST_FAILED",
+        "retryable": false,
+        "human_action_required": true,
+        "next_action": "follow the first next command",
+        "mutated": false,
+        "evidence": "signer_key_unreadable",
+        "blockers": []
+      },
+      "next": [
+        {
+          "command": "discover.describe",
+          "input": {
+            "path": "dev.land.verify_offer_receipt"
+          },
+          "reason": "inspect this command's contract and availability"
+        }
+      ]
+    }
+  },
+  {
+    "phase": "candidate",
+    "fixture": "valid",
+    "exit": 0,
+    "interface": "native CLI",
+    "native_stdout_bytes": 628,
+    "elapsed_ns": 96505725,
+    "contents_and_modes_unchanged": true,
+    "private_signing_key_present": false,
+    "response": {
+      "schema": "zcl.result.v1",
+      "command": "dev.land.verify_offer_receipt",
+      "ok": true,
+      "status": "passed",
+      "request_id": "local-0000000000000001",
+      "elapsed_us": 419,
+      "budget_ms": 250,
+      "elapsed_ms": 0,
+      "budget_exceeded": false,
+      "authority": {
+        "policy": "exempt",
+        "agent_session": "none (local operator)"
+      },
+      "data_schema": "zcl.land_verify_offer_receipt.v1",
+      "data": {
+        "leaf": "dev.land.verify_offer_receipt",
+        "commit": "c1321ffbdb7de472e8d877e29aa92eb817dabc37",
+        "base": "5b19ed8fc798781549254d6aeff544cd3f53046f",
+        "signer": "93018e7cf4269fe5f4dcde0514e364fb87b27fb7967c55ea73ce88cd48c74add",
+        "verdict": "ok",
+        "checks": "bundle_sha256,bundle_verify,head,base"
+      },
+      "next": []
+    }
+  },
+  {
+    "phase": "candidate",
+    "fixture": "unavailable",
+    "exit": 1,
+    "interface": "native CLI",
+    "native_stdout_bytes": 807,
+    "elapsed_ns": 110279162,
+    "contents_and_modes_unchanged": true,
+    "private_signing_key_present": false,
+    "response": {
+      "schema": "zcl.result.v1",
+      "command": "dev.land.verify_offer_receipt",
+      "ok": false,
+      "status": "failed",
+      "request_id": "local-0000000000000001",
+      "elapsed_us": 258,
+      "budget_ms": 250,
+      "elapsed_ms": 0,
+      "budget_exceeded": false,
+      "authority": {
+        "policy": "exempt",
+        "agent_session": "none (local operator)"
+      },
+      "error": {
+        "code": "RECEIPT_VERIFIER_UNAVAILABLE",
+        "error_code": "RECEIPT_VERIFIER_UNAVAILABLE",
+        "message": "cannot read local signer state. The receipt remains unverified.",
+        "phase": "receipt",
+        "current_state": "REQUEST_FAILED",
+        "retryable": false,
+        "human_action_required": true,
+        "next_action": "follow the first next command",
+        "mutated": false,
+        "evidence": "signer_key_unreadable",
+        "blockers": []
+      },
+      "next": [
+        {
+          "command": "discover.describe",
+          "input": {
+            "path": "dev.land.verify_offer_receipt"
+          },
+          "reason": "inspect this command's contract and availability"
+        }
+      ]
+    }
+  },
+  {
+    "phase": "candidate",
+    "fixture": "invalid-state",
+    "exit": 1,
+    "interface": "native CLI",
+    "native_stdout_bytes": 807,
+    "elapsed_ns": 102178565,
+    "contents_and_modes_unchanged": true,
+    "private_signing_key_present": false,
+    "response": {
+      "schema": "zcl.result.v1",
+      "command": "dev.land.verify_offer_receipt",
+      "ok": false,
+      "status": "failed",
+      "request_id": "local-0000000000000001",
+      "elapsed_us": 374,
+      "budget_ms": 250,
+      "elapsed_ms": 0,
+      "budget_exceeded": false,
+      "authority": {
+        "policy": "exempt",
+        "agent_session": "none (local operator)"
+      },
+      "error": {
+        "code": "RECEIPT_VERIFIER_UNAVAILABLE",
+        "error_code": "RECEIPT_VERIFIER_UNAVAILABLE",
+        "message": "cannot read local signer state. The receipt remains unverified.",
+        "phase": "receipt",
+        "current_state": "REQUEST_FAILED",
+        "retryable": false,
+        "human_action_required": true,
+        "next_action": "follow the first next command",
+        "mutated": false,
+        "evidence": "signer_key_unreadable",
+        "blockers": []
+      },
+      "next": [
+        {
+          "command": "discover.describe",
+          "input": {
+            "path": "dev.land.verify_offer_receipt"
+          },
+          "reason": "inspect this command's contract and availability"
+        }
+      ]
+    }
+  },
+  {
+    "phase": "candidate",
+    "fixture": "altered",
+    "exit": 1,
+    "interface": "native CLI",
+    "native_stdout_bytes": 787,
+    "elapsed_ns": 111646346,
+    "contents_and_modes_unchanged": true,
+    "private_signing_key_present": false,
+    "response": {
+      "schema": "zcl.result.v1",
+      "command": "dev.land.verify_offer_receipt",
+      "ok": false,
+      "status": "failed",
+      "request_id": "local-0000000000000001",
+      "elapsed_us": 502,
+      "budget_ms": 250,
+      "elapsed_ms": 0,
+      "budget_exceeded": false,
+      "authority": {
+        "policy": "exempt",
+        "agent_session": "none (local operator)"
+      },
+      "error": {
+        "code": "RECEIPT_SIGNATURE_INVALID",
+        "error_code": "RECEIPT_SIGNATURE_INVALID",
+        "message": "the signature does not verify over the receipt fields",
+        "phase": "receipt",
+        "current_state": "REQUEST_FAILED",
+        "retryable": false,
+        "human_action_required": true,
+        "next_action": "follow the first next command",
+        "mutated": false,
+        "evidence": "signature_invalid",
+        "blockers": []
+      },
+      "next": [
+        {
+          "command": "discover.describe",
+          "input": {
+            "path": "dev.land.verify_offer_receipt"
+          },
+          "reason": "inspect this command's contract and availability"
+        }
+      ]
+    }
+  },
+  {
+    "phase": "candidate",
+    "fixture": "untrusted",
+    "exit": 1,
+    "interface": "native CLI",
+    "native_stdout_bytes": 924,
+    "elapsed_ns": 105245539,
+    "contents_and_modes_unchanged": true,
+    "private_signing_key_present": false,
+    "response": {
+      "schema": "zcl.result.v1",
+      "command": "dev.land.verify_offer_receipt",
+      "ok": false,
+      "status": "failed",
+      "request_id": "local-0000000000000001",
+      "elapsed_us": 489,
+      "budget_ms": 250,
+      "elapsed_ms": 0,
+      "budget_exceeded": false,
+      "authority": {
+        "policy": "exempt",
+        "agent_session": "none (local operator)"
+      },
+      "error": {
+        "code": "RECEIPT_SIGNER_UNKNOWN",
+        "error_code": "RECEIPT_SIGNER_UNKNOWN",
+        "message": "the signer is not this box's key and not on its signers.allow list. Establish the expected signer independently through the operator's trust process.",
+        "phase": "receipt",
+        "current_state": "REQUEST_FAILED",
+        "retryable": false,
+        "human_action_required": true,
+        "next_action": "follow the first next command",
+        "mutated": false,
+        "evidence": "df78356b6b07b8a2467fff3f5997aa19cb17babd136da23f5fecdee1fa51b1b1",
+        "blockers": []
+      },
+      "next": [
+        {
+          "command": "discover.describe",
+          "input": {
+            "path": "dev.land.verify_offer_receipt"
+          },
+          "reason": "inspect this command's contract and availability"
+        }
+      ]
+    }
+  },
+  {
+    "phase": "candidate",
+    "fixture": "mismatch",
+    "exit": 1,
+    "interface": "native CLI",
+    "native_stdout_bytes": 866,
+    "elapsed_ns": 106364011,
+    "contents_and_modes_unchanged": true,
+    "private_signing_key_present": false,
+    "response": {
+      "schema": "zcl.result.v1",
+      "command": "dev.land.verify_offer_receipt",
+      "ok": false,
+      "status": "failed",
+      "request_id": "local-0000000000000001",
+      "elapsed_us": 416,
+      "budget_ms": 250,
+      "elapsed_ms": 0,
+      "budget_exceeded": false,
+      "authority": {
+        "policy": "exempt",
+        "agent_session": "none (local operator)"
+      },
+      "error": {
+        "code": "RECEIPT_OFFER_MISMATCH",
+        "error_code": "RECEIPT_OFFER_MISMATCH",
+        "message": "the receipt names another commit, base or bundle sha256 than the offer",
+        "phase": "receipt",
+        "current_state": "REQUEST_FAILED",
+        "retryable": false,
+        "human_action_required": true,
+        "next_action": "follow the first next command",
+        "mutated": false,
+        "evidence": "$CASE/mo.offer.json",
+        "blockers": []
+      },
+      "next": [
+        {
+          "command": "discover.describe",
+          "input": {
+            "path": "dev.land.verify_offer_receipt"
+          },
+          "reason": "inspect this command's contract and availability"
+        }
+      ]
+    }
+  },
+  {
+    "phase": "candidate",
+    "fixture": "no-own-key-or-list",
+    "exit": 1,
+    "interface": "native CLI",
+    "native_stdout_bytes": 924,
+    "elapsed_ns": 101611505,
+    "contents_and_modes_unchanged": true,
+    "private_signing_key_present": false,
+    "response": {
+      "schema": "zcl.result.v1",
+      "command": "dev.land.verify_offer_receipt",
+      "ok": false,
+      "status": "failed",
+      "request_id": "local-0000000000000001",
+      "elapsed_us": 402,
+      "budget_ms": 250,
+      "elapsed_ms": 0,
+      "budget_exceeded": false,
+      "authority": {
+        "policy": "exempt",
+        "agent_session": "none (local operator)"
+      },
+      "error": {
+        "code": "RECEIPT_SIGNER_UNKNOWN",
+        "error_code": "RECEIPT_SIGNER_UNKNOWN",
+        "message": "the signer is not this box's key and not on its signers.allow list. Establish the expected signer independently through the operator's trust process.",
+        "phase": "receipt",
+        "current_state": "REQUEST_FAILED",
+        "retryable": false,
+        "human_action_required": true,
+        "next_action": "follow the first next command",
+        "mutated": false,
+        "evidence": "93018e7cf4269fe5f4dcde0514e364fb87b27fb7967c55ea73ce88cd48c74add",
+        "blockers": []
+      },
+      "next": [
+        {
+          "command": "discover.describe",
+          "input": {
+            "path": "dev.land.verify_offer_receipt"
+          },
+          "reason": "inspect this command's contract and availability"
+        }
+      ]
+    }
+  }
+]

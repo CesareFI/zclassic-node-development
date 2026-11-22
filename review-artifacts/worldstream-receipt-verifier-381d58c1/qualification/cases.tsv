@@ -1,0 +1,7 @@
+valid	public	r.receipt.json	r.bundle.offer.json	0	OK
+unavailable	nosuch-state	r.receipt.json	r.bundle.offer.json	1	RECEIPT_VERIFIER_UNAVAILABLE
+invalid-state	invalid	r.receipt.json	r.bundle.offer.json	1	RECEIPT_VERIFIER_UNAVAILABLE
+altered	public	t1.receipt.json	r.bundle.offer.json	1	RECEIPT_SIGNATURE_INVALID
+untrusted	public	other.receipt.json	r.bundle.offer.json	1	RECEIPT_SIGNER_UNKNOWN
+mismatch	public	r.receipt.json	mo.offer.json	1	RECEIPT_OFFER_MISMATCH
+no-own-key-or-list	empty	r.receipt.json	r.bundle.offer.json	1	RECEIPT_SIGNER_UNKNOWN

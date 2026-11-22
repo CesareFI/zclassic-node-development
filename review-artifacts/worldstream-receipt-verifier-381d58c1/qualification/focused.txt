@@ -1,0 +1,4 @@
+t-fast-exact: ONLY='test_dev_land_remote,test_dev_proof_signer,test_command_registry_catalog' resolves to exact set test_dev_land_remote,test_dev_proof_signer,test_command_registry_catalog
+SUITE VERDICT mode=cold groups_total=1624 groups_ran=3 groups_cached=0 groups_gated=1621 groups_failed=0 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=303745a0b96d
+ALL TESTS PASSED — 0/3 groups failed, 0 skipped (26.6s wall, 4 workers) [--exact filtered]
+Recorded new registered regression: land.verify_offer_receipt: unavailable local signer state leaves a valid receipt unverified ... OK

@@ -1,0 +1,85 @@
+{
+  "receipt": "admitted account had write access to the synthetic trust directory and allowlist. Unknown exit 1, valid exit 0. Trust directory entries, modes and content identical across both calls. No own key present.",
+  "before": "2e0ef5016cf86f86063c902643a995d8e1e1e25fbf4ff4977c98ee65b49e9f0a",
+  "after_unknown": "2e0ef5016cf86f86063c902643a995d8e1e1e25fbf4ff4977c98ee65b49e9f0a",
+  "after_valid": "2e0ef5016cf86f86063c902643a995d8e1e1e25fbf4ff4977c98ee65b49e9f0a",
+  "unknown": {
+    "schema": "zcl.result.v1",
+    "command": "dev.land.verify_offer_receipt",
+    "ok": false,
+    "status": "failed",
+    "request_id": "local-0000000000000001",
+    "elapsed_us": 374,
+    "budget_ms": 250,
+    "elapsed_ms": 0,
+    "budget_exceeded": false,
+    "authority": {
+      "policy": "exempt",
+      "agent_session": "none (local operator)"
+    },
+    "error": {
+      "code": "RECEIPT_SIGNER_UNKNOWN",
+      "error_code": "RECEIPT_SIGNER_UNKNOWN",
+      "message": "the signer is not this box's key and not on its signers.allow list. Establish the expected signer independently through the operator's trust process.",
+      "phase": "receipt",
+      "current_state": "REQUEST_FAILED",
+      "retryable": false,
+      "human_action_required": true,
+      "next_action": "follow the first next command",
+      "mutated": false,
+      "evidence": "df78356b6b07b8a2467fff3f5997aa19cb17babd136da23f5fecdee1fa51b1b1",
+      "blockers": []
+    },
+    "next": [
+      {
+        "command": "discover.describe",
+        "input": {
+          "path": "dev.land.verify_offer_receipt"
+        },
+        "reason": "inspect this command's contract and availability"
+      }
+    ]
+  },
+  "valid": {
+    "schema": "zcl.result.v1",
+    "command": "dev.land.verify_offer_receipt",
+    "ok": true,
+    "status": "passed",
+    "request_id": "local-0000000000000001",
+    "elapsed_us": 431,
+    "budget_ms": 250,
+    "elapsed_ms": 0,
+    "budget_exceeded": false,
+    "authority": {
+      "policy": "exempt",
+      "agent_session": "none (local operator)"
+    },
+    "data_schema": "zcl.land_verify_offer_receipt.v1",
+    "data": {
+      "leaf": "dev.land.verify_offer_receipt",
+      "commit": "c1321ffbdb7de472e8d877e29aa92eb817dabc37",
+      "base": "5b19ed8fc798781549254d6aeff544cd3f53046f",
+      "signer": "93018e7cf4269fe5f4dcde0514e364fb87b27fb7967c55ea73ce88cd48c74add",
+      "verdict": "ok",
+      "checks": "bundle_sha256,bundle_verify,head,base"
+    },
+    "next": []
+  },
+  "state_records": {
+    "before": [
+      "d 700 ",
+      "f 600 signers.allow",
+      "79a02ad39a4b81937555649da4d7b20763f737737982c6be739d96cbca44416e  ./signers.allow"
+    ],
+    "after-unknown": [
+      "d 700 ",
+      "f 600 signers.allow",
+      "79a02ad39a4b81937555649da4d7b20763f737737982c6be739d96cbca44416e  ./signers.allow"
+    ],
+    "after-valid": [
+      "d 700 ",
+      "f 600 signers.allow",
+      "79a02ad39a4b81937555649da4d7b20763f737737982c6be739d96cbca44416e  ./signers.allow"
+    ]
+  }
+}

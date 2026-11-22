@@ -1,0 +1,14 @@
+  selftest ok: clean fixture passes (rc=0)
+  selftest ok: baseline improvement is noted, not fatal (rc=0)
+  selftest ok: empty exemption parse fails closed (rc=1)
+  selftest ok: missing _WIN32_WINNT floor fails (rc=1)
+  selftest ok: platform flags without floor reference fail (rc=1)
+  selftest ok: missing baseline is fatal (rc=2)
+  selftest ok: absent compiler is UNOBSERVED, not a pass (rc=0)
+  selftest ok: absent required compiler fails acceptance (rc=2)
+  selftest ok: baseline count below live count is a regression (rc=1)
+  selftest ok: changed-file scans preserve baseline and force wide dependency inputs
+  selftest ok: parallel compiles preserve source-order diagnostics
+  selftest ok: parallel output overflow fails promptly
+check-windows-platform-seam selftest: OK
+  OK: --self-test — flag set trips on a POSIX-only violation, passes clean code

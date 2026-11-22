@@ -1,0 +1,32 @@
+{
+  "base-build": {
+    "sha256": "63ac5c02da0ec62f74ae4d6a8ad95e3edb1a918bda8979b304fec6e7a4d631ab",
+    "bytes": 23217,
+    "exit": 0
+  },
+  "candidate-build": {
+    "sha256": "a915b5fa81fea23cd45f36b792d613285684790b7c0d1f4b7e85bfa92de5d3a9",
+    "bytes": 1233,
+    "exit": 0
+  },
+  "focused-invocation-error": {
+    "sha256": "f0ffb3b7cda94f3d68b95c7d4f0dfbc76771b6c51cccb305ae4a3869c884e129",
+    "bytes": 175,
+    "exit": 2
+  },
+  "focused": {
+    "sha256": "e9a4583e5cd28097c85bea971e33f7fd319f2bdff9485f8c32bb6d49d7a02aeb",
+    "bytes": 115748,
+    "exit": 0
+  },
+  "preflight": {
+    "sha256": "91770ac00da27bea2a945908eee73c9415ff16ff57e0d5b80c4356199013d84e",
+    "bytes": 11718,
+    "exit": 0
+  },
+  "impact": {
+    "sha256": "2779bcdac12342c45dc6e6049a4d585f6bc3b3f026a20c69b084f2c96ee43210",
+    "bytes": 671,
+    "exit": 0
+  }
+}

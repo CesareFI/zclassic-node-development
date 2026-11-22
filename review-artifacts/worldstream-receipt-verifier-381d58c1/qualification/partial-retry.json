@@ -1,0 +1,12 @@
+{
+  "status": "interrupted by controller after identifying HOME as the input",
+  "elapsed_trial_verdict": "no suite verdict claimed",
+  "disposition": "Stopped the owned retry before lint-fast. The registered fixture builds its compiler path from HOME, independent of TMPDIR. A direct --self-test called only the separate MinGW syntax probe.",
+  "retained_log_hashes": {
+    "agent-verify.t-fast-exact.log": "55a781bc2921dd19dbb9826cb77856aa076947057fe55769c8183b07a0fe9d1d",
+    "disposition.txt": "8a757fd329e2839fce737e481192217de44460f697a83e944de83db91090c822",
+    "impact.log": "6e666f20cc4744a3c85552e23ed1f336329fc2e676acd902263835246dffc148",
+    "windows-seam-retry.log": "3d19aec46c87251d43453aba7b328877d71988da4e4246a00ce787c6d30c0d03",
+    "agent-verify.rc": "4b8c8ab3f3c7765aca3d2544d6b189cd9f74cdf13b7f4363fd0e1150cef88075"
+  }
+}

@@ -1,0 +1,3 @@
+PASS check-windows-platform-seam                  14151 ms
+precheck: 0 new failure(s) of 156 gates
+lint-fast: OK

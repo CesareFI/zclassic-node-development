@@ -1,0 +1,32 @@
+{
+  "base": "64f7d70dd6a6c783648bcb8156927805a5e190ae",
+  "candidate": "381d58c1b0e1c0b15a19aa1d0c0612d03a61d457",
+  "tree": "80ebc83b9e851c4b444be4908f620916cb3f1132",
+  "changed_files": [
+    "docs/dev/DEVELOPING.md",
+    "engine/composition/commands/dev.def",
+    "tests/harness/src/test_dev_land_remote.c",
+    "tools/command/native_dev_land_offer.c",
+    "tools/dev/dev_proof_signer.c"
+  ],
+  "independent_review": "qualification/independent-review.txt",
+  "artifacts": [
+    {
+      "name": "receipt-verifier.patch",
+      "bytes": 8426,
+      "sha256": "7cfb52bb712fa3fd32251e4934c495db8c429a2799badad34ea065b73a93b7d6"
+    },
+    {
+      "name": "receipt-verifier.bundle",
+      "bytes": 2751,
+      "sha256": "ded3c82f6fce7a1d1aa60fb2d84cf3e2539f32212a94226525d7d9fdab48d8b3"
+    },
+    {
+      "name": "receipt-verifier.bundle.offer.json",
+      "bytes": 269,
+      "sha256": "d64faf40605fe8010e92590602c283478037f8a3144dc558277d5a84d860216c"
+    }
+  ],
+  "baseline_executable": "d76667fcc23d7335a29c0c8ca23637978b9f46518dee057b0569ddf7962df7f9",
+  "candidate_executable": "4e33a96f1966fdb7c3c7fa694702bc8d643381cd634894d034e97dc24bcee68e"
+}

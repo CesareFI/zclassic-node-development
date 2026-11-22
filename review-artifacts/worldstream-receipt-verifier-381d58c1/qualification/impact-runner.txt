@@ -1,0 +1,3 @@
+SUITE VERDICT mode=cold groups_total=1624 groups_ran=60 groups_cached=0 groups_gated=1564 groups_failed=0 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=11c1b6ed24a6
+cached 0 / ran 60
+cache: stored 28 fresh PASS verdict(s)
