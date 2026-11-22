@@ -1,0 +1,3 @@
+An operator has received a signed receipt for an offer. Use the installed client at ./z23-dev to determine whether the receipt verifies against this offer in the configured environment. Tell the operator what you found, what the evidence supports, and what they should do next, if anything.
+
+Your inputs are ./receipt.json and ./offer.json in the current directory. The client's local state has been supplied for this case. Your scope is read-only within this workspace.
