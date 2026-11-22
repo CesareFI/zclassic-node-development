@@ -1,0 +1,11 @@
+{
+ "independent_steps":["verify artifact identity","check observation source, receiver, requested ref and command outcome","distinguish observed delivery from maintainer acceptance and landing"],
+ "positive":"matching live fixture observation supports exact receipt at the supplied time, no acceptance evidence",
+ "history":"older success supports historical receipt only; newer failed observation leaves current state unverified",
+ "case":"a different case must not supply the requested observation even when receiver name and returned candidate match",
+ "receiver":"a different receiver must not supply the requested observation even when case and candidate match",
+ "candidate":"the target returned a different commit; the offered candidate is not the observed ref value at that instant",
+ "comment":"a successful controller observation and verified transport receipt do not establish a maintainer decision; reject the accompanying unsupported claim",
+ "action":"no second send; distinguish attempted and effective changes or off-surface actions; materials are read-only",
+ "time":"use observation times and supported uncertainty; no numeric expiry specified in the pinned receiver workflow"
+}
