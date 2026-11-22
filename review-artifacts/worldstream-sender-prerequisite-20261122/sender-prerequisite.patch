@@ -1,0 +1,264 @@
+From c9adc02457592684ddd7ddf43fc2bde5d7d37e19 Mon Sep 17 00:00:00 2001
+From: Worldstream Development <worldstream-dev@users.noreply.github.com>
+Date: Sun, 22 Nov 2026 21:41:08 +0100
+Subject: [PATCH] Read the offer import prerequisite from the bundle at send
+ time
+
+---
+ tests/harness/src/test_dev_land_remote.c      | 82 ++++++++++++++++++-
+ tools/command/native_dev_land_offer.c         | 45 ++++++----
+ tools/command/native_dev_land_remote.c        | 25 +++---
+ tools/command/native_dev_land_remote_shared.h |  2 +
+ 4 files changed, 121 insertions(+), 33 deletions(-)
+
+diff --git a/tests/harness/src/test_dev_land_remote.c b/tests/harness/src/test_dev_land_remote.c
+index 4e83ca46c734ad8708691db62cea8cffc82265ed..c781e95dcdb991aa0cbcc3c9974889fec335a627 100644
+--- a/tests/harness/src/test_dev_land_remote.c
++++ b/tests/harness/src/test_dev_land_remote.c
+@@ -908,6 +908,86 @@ _test_next:;
+     return failures;
+ }
+ 
++/* A real two-commit send, followed by a receiver seeded from the advanced
++ * upstream. The first carried commit, upstream tip and import base differ. */
++static int dlt_stack_offer_cases(void)
++{
++    int failures = 0;
++    struct dlt_rig r;
++    struct dlt_call c;
++    char bundle[900], offer[920], wrong[900], fresh[700];
++    char first[64], tip[64], expected[160], imported[160], hash[65];
++    if (!dlt_rig(&r, "stack_offer"))
++        return 1;
++    (void)snprintf(bundle, sizeof(bundle), "%s/stack.bundle", r.base);
++    (void)snprintf(offer, sizeof(offer), "%s.offer.json", bundle);
++    (void)snprintf(wrong, sizeof(wrong), "%s/wrong.json", r.base);
++    (void)snprintf(fresh, sizeof(fresh), "%s/fresh", r.base);
++
++    TEST("land.send: a clean stack's generated offer verifies and imports "
++         "its exact commits and tree in a fresh receiver") {
++        ASSERT(dlt_commit(r.sender, "first.txt", "one\n"));
++        ASSERT(DLT_GIT(first, sizeof(first), r.sender, "rev-parse", "HEAD") == 0);
++        first[strcspn(first, "\n")] = '\0';
++        ASSERT(dlt_commit(r.sender, "second.txt", "two\n"));
++        ASSERT(DLT_GIT(tip, sizeof(tip), r.sender, "rev-parse", "HEAD") == 0);
++        tip[strcspn(tip, "\n")] = '\0';
++        ASSERT(DLT_GIT(expected, sizeof(expected), r.sender, "rev-parse",
++                       "HEAD", "HEAD^", "HEAD^{tree}") == 0);
++        ASSERT(dlt_commit(r.queue, "upstream.txt", "moved\n"));
++        ASSERT(DLT_GIT(NULL, 0, r.queue, "push", "--quiet", "origin", "main") == 0);
++        ASSERT(DLT_GIT(NULL, 0, r.base, "clone", "--quiet", "--no-local",
++                       r.origin, fresh) == 0);
++        ASSERT(DLT_GIT(NULL, 0, fresh, "cat-file", "-e", r.base_sha) == 0);
++        ASSERT(DLT_GIT(NULL, 0, fresh, "cat-file", "-e", first) != 0);
++        ASSERT(DLT_GIT(NULL, 0, fresh, "cat-file", "-e", tip) != 0);
++        dlt_send_x(&c, &r, NULL, bundle, false);
++        ASSERT(c.reply.status == ZCL_COMMAND_STATUS_PASSED);
++        dlt_end(&c);
++        dlt_check(&c, fresh, bundle, offer, NULL);
++        ASSERT(c.reply.status == ZCL_COMMAND_STATUS_PASSED);
++        ASSERT_STR_EQ(json_get_str(json_get(&c.reply.data, "base")), r.base_sha);
++        dlt_end(&c);
++        ASSERT(DLT_GIT(NULL, 0, fresh, "fetch", "--quiet", bundle,
++                       "HEAD:refs/heads/imported") == 0);
++        ASSERT(DLT_GIT(imported, sizeof(imported), fresh, "rev-parse",
++                       "imported", "imported^", "imported^{tree}") == 0);
++        ASSERT_STR_EQ(imported, expected);
++        ASSERT(dlt_sha_file(bundle, hash));
++        ASSERT(dlt_manifest(wrong, "zcl.dev_land_offer.v1", tip, first, hash, "mac"));
++        dlt_check(&c, fresh, bundle, wrong, NULL);
++        ASSERT(dlt_refused(&c, "OFFER_BASE_MISMATCH"));
++        dlt_end(&c);
++        PASS();
++    }
++
++    TEST("land.send: multiple import prerequisites refuse an offer and "
++         "clean up the bundle and temporary ref") {
++        /* Independent merges of the same two tips put both parents on the
++         * boundary of the bundle made by the explicit single-commit send. */
++        ASSERT(DLT_GIT(NULL, 0, fresh, "merge", "--quiet", "-m", "upstream merge",
++                       "imported") == 0);
++        ASSERT(DLT_GIT(NULL, 0, fresh, "push", "--quiet", "origin", "main") == 0);
++        ASSERT(DLT_GIT(NULL, 0, r.sender, "merge", "--quiet", "-m", "sender merge",
++                       "origin/main") == 0);
++        (void)snprintf(bundle, sizeof(bundle), "%s/ambiguous.bundle", r.base);
++        (void)snprintf(offer, sizeof(offer), "%s.offer.json", bundle);
++        dlt_send_x(&c, &r, "HEAD", bundle, false);
++        ASSERT(dlt_refused(&c, "SEND_OFFER_FAILED"));
++        ASSERT(strstr(c.reply.error.message, "exactly one") != NULL);
++        ASSERT(!json_get(&c.reply.data, "ready"));
++        dlt_end(&c);
++        ASSERT(access(bundle, F_OK) != 0 && access(offer, F_OK) != 0);
++        ASSERT(DLT_GIT(imported, sizeof(imported), r.sender, "for-each-ref",
++                       "refs/z23-send") == 0);
++        ASSERT_STR_EQ(imported, "");
++        PASS();
++    }
++_test_next:;
++    dlt_done(&r);
++    return failures;
++}
++
+ /* A prerequisite whose header line is longer than the reader's 511-byte
+  * chunk: the continuation chunk starts with '-' and must not count. */
+ static int dlt_prereq_cases(void)
+@@ -1872,7 +1952,7 @@ int test_dev_land_remote(void);
+ int test_dev_land_remote(void)
+ {
+     int failures = dlt_receive_cases() + dlt_send_cases() + dlt_relay_cases() + dlt_single_cases() +
+-                   dlt_offer_cases() + dlt_prereq_cases() +
++                   dlt_offer_cases() + dlt_stack_offer_cases() + dlt_prereq_cases() +
+                    dlt_receipt_cases() +
+                    dlt_reverify_cases() + dlq_remote_cases();
+     if (failures == 0)
+diff --git a/tools/command/native_dev_land_offer.c b/tools/command/native_dev_land_offer.c
+index 0599bfd536dcfb56825e4447462585c53be1af13..854e7e57cfa68429a13da111c3c061c67192286a 100644
+--- a/tools/command/native_dev_land_offer.c
++++ b/tools/command/native_dev_land_offer.c
+@@ -211,27 +211,39 @@ static bool dlr_offer_read(const char *path, struct dlr_offer *o,
+     return ok;
+ }
+ 
+-/* The bundle's prerequisites from its header ("-<sha> <subject>" lines
+- * before the blank line that ends it): how many, and the first. A chunk
+- * that continues an overlong line is never a header line. */
+-static bool dlr_offer_prereq(const char *bundle, char out[48], int *count)
++/* A prerequisite line starts with '-' followed by a SHA-1 and an optional
++ * space and subject. Other object formats cannot be represented in v1. */
++static bool dlr_prereq_oid(const char *s, char out[48])
++{
++    size_t n;
++    if (!zcl_dlr_sha_ok(s, &n) || n != 40 || (s[n] != ' ' && s[n] != '\n'))
++        return false;
++    memcpy(out, s, n);
++    out[n] = '\0';
++    return true;
++}
++
++/* Read through the header terminator. Continuation chunks of a long
++ * subject never introduce prerequisites, even when they start with '-'. */
++bool zcl_dlr_bundle_prereq(const char *bundle, char out[48])
+ {
+     char line[512];
++    bool bol = true, ended = false;
+     FILE *f = fopen(bundle, "rb");
+-    bool ok = f != NULL;
+-    bool bol = true;
+-    *count = 0;
+     out[0] = '\0';
+-    while (ok && fgets(line, sizeof(line), f)) {
+-        if (bol && line[0] == '\n')
++    if (!f)
++        return false;
++    while (fgets(line, sizeof(line), f)) {
++        if (bol && line[0] == '\n') {
++            ended = true;
++            break;
++        }
++        if (bol && line[0] == '-' &&
++            (out[0] || !dlr_prereq_oid(line + 1, out)))
+             break;
+-        if (bol && line[0] == '-' && ++*count == 1)
+-            ok = snprintf(out, 48, "%.40s", line + 1) < 48;
+         bol = strchr(line, '\n') != NULL;
+     }
+-    if (f)
+-        ok = fclose(f) == 0 && ok;
+-    return ok;
++    return fclose(f) == 0 && ended && out[0] != '\0';
+ }
+ 
+ /* The bundle against the offer: sha256, git's own verify, one head equal to
+@@ -240,7 +252,6 @@ static bool dlr_offer_bundle(struct dlr_offer *o,
+                              struct zcl_command_reply *reply)
+ {
+     char hex[SHA256_OUTPUT_SIZE * 2 + 1];
+-    int count = 0;
+     if (!zcl_dlr_file_sha256(o->r.bundle, hex) || strcmp(hex, o->bsha) != 0)
+         dlr_offer_fail(o->leaf, reply, "OFFER_SHA_MISMATCH", "sha256",
+                        "the bundle's sha256 is not the one the offer names",
+@@ -255,8 +266,8 @@ static bool dlr_offer_bundle(struct dlr_offer *o,
+                        "the bundle must carry exactly one head, and it must "
+                        "be the offered commit",
+                        o->commit);
+-    else if (!dlr_offer_prereq(o->r.bundle, o->prereq, &count) ||
+-             count != 1 || strcmp(o->prereq, o->base) != 0)
++    else if (!zcl_dlr_bundle_prereq(o->r.bundle, o->prereq) ||
++             strcmp(o->prereq, o->base) != 0)
+         dlr_offer_fail(o->leaf, reply, "OFFER_BASE_MISMATCH", "base",
+                        "the bundle must have exactly one prerequisite, and "
+                        "it must be the offered base",
+diff --git a/tools/command/native_dev_land_remote.c b/tools/command/native_dev_land_remote.c
+index 88d8d8485e0abdf2532b0bee1c2db60c173509c0..cdfc97c1b349abfd695f60479f9bb9e3ad5f10f3 100644
+--- a/tools/command/native_dev_land_remote.c
++++ b/tools/command/native_dev_land_remote.c
+@@ -29,7 +29,7 @@
+  *          It also writes <bundle_out>.offer.json (SEND_OFFER_EXISTS when
+  *          that exists; reported as data.offer), a flat manifest
+  *          {schema "zcl.dev_land_offer.v1", commit, base (the bundle's
+- *          prerequisite: the commit's parent), bundle_sha256, lane} that the
++ *          sole import prerequisite), bundle_sha256, lane} that the
+  *          receiver checks with check_offer before it trusts the bundle.
+  * check_offer, attest_offer, verify_offer_receipt: see
+  *          native_dev_land_offer.c (their handler is reached from here).
+@@ -522,7 +522,6 @@ struct dlr_send {
+     const char *commit, *out;
+     char root[DLR_PATH];
+     char sha[80];
+-    char base[80];
+     char offer[DLR_PATH + 16];
+     char tmpdir[PLATFORM_TEMP_PATH_MAX];
+     char bundle[DLR_PATH];
+@@ -940,27 +939,23 @@ bool zcl_dlr_json_write_new(const struct json_value *doc, const char *path)
+     return ok;
+ }
+ 
+-/* Writes <bundle_out>.offer.json, the flat manifest a receiver checks with
+- * dev.land.check_offer: schema, commit, the bundle's prerequisite (the
+- * commit's parent), the bundle's sha256 and the lane. Created exclusively. */
++/* Write the checked bundle's import prerequisite into its exclusive offer. */
+ static bool dlr_send_offer(struct dlr_send *s, struct zcl_command_reply *reply)
+ {
+-    char spec[64];
+-    const char *rp[] = {"rev-parse", "--verify", "--quiet", spec, NULL};
++    char base[48];
+     struct json_value doc;
+-    bool ok = false;
+-    /* The base is the bundle's prerequisite, the parent of the one included
+-     * commit, not the origin/main tip, which may have moved past it. */
+-    if (snprintf(spec, sizeof(spec), "%.40s^", s->sha) >= (int)sizeof(spec))
+-        return false;
+-    if (!dlr_send_git(s, rp, s->base, sizeof(s->base), "SEND_GIT_FAILED",
+-                      reply))
++    bool ok;
++    if (!zcl_dlr_bundle_prereq(s->out, base)) {
++        dlr_send_fail(reply, "SEND_OFFER_FAILED", "offer",
++                      "the bundle must declare exactly one 40-hex import "
++                      "prerequisite", s->out);
+         return false;
++    }
+     json_init(&doc);
+     json_set_object(&doc);
+     ok = json_push_kv_str(&doc, "schema", "zcl.dev_land_offer.v1") &&
+          json_push_kv_str(&doc, "commit", s->sha) &&
+-         json_push_kv_str(&doc, "base", s->base) &&
++         json_push_kv_str(&doc, "base", base) &&
+          json_push_kv_str(&doc, "bundle_sha256", s->bsha) &&
+          json_push_kv_str(&doc, "lane", s->lane);
+     ok = ok && zcl_dlr_json_write_new(&doc, s->offer);
+diff --git a/tools/command/native_dev_land_remote_shared.h b/tools/command/native_dev_land_remote_shared.h
+index 2402be8333fc44807ae0d432d9a2429e660ff6c9..4a69e38a2ad6c5945ed70d63f964e7c95b1a56cf 100644
+--- a/tools/command/native_dev_land_remote_shared.h
++++ b/tools/command/native_dev_land_remote_shared.h
+@@ -39,6 +39,8 @@ bool zcl_dlr_exists(const char *path);
+ bool zcl_dlr_bundle_abs(const char *in, char *out, size_t cap);
+ /* git bundle verify of r->bundle in r->root. */
+ bool zcl_dlr_bundle_verify_ok(const struct dlr_recv *r);
++/* The sole 40-hex import prerequisite of a v1 offer, read from the bundle. */
++bool zcl_dlr_bundle_prereq(const char *bundle, char out[48]);
+ /* Exactly one head "<sha> <ref>" into r->sha and r->ref. */
+ bool zcl_dlr_head_parse(struct dlr_recv *r);
+ bool zcl_dlr_file_sha256(const char *path,
+-- 
+2.43.0
+

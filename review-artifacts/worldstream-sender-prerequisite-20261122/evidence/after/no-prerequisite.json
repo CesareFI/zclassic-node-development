@@ -1,0 +1,40 @@
+{
+  "exit": 1,
+  "response": {
+    "schema": "zcl.result.v1",
+    "command": "dev.land.send",
+    "ok": false,
+    "status": "failed",
+    "request_id": "local-0000000000000001",
+    "elapsed_us": 35045,
+    "budget_ms": 900,
+    "elapsed_ms": 35,
+    "budget_exceeded": false,
+    "authority": {
+      "policy": "exempt",
+      "agent_session": "none (local operator)"
+    },
+    "error": {
+      "code": "SEND_OFFER_FAILED",
+      "error_code": "SEND_OFFER_FAILED",
+      "message": "the bundle must declare exactly one 40-hex import prerequisite",
+      "phase": "offer",
+      "current_state": "REQUEST_FAILED",
+      "retryable": false,
+      "human_action_required": true,
+      "next_action": "follow the first next command",
+      "mutated": false,
+      "evidence": "$FIXTURE/no-prerequisite.bundle",
+      "blockers": []
+    },
+    "next": [
+      {
+        "command": "discover.describe",
+        "input": {
+          "path": "dev.land.send"
+        },
+        "reason": "inspect this command's contract and availability"
+      }
+    ]
+  }
+}

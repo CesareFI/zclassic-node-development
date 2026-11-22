@@ -1,0 +1,40 @@
+{
+  "exit": 1,
+  "response": {
+    "schema": "zcl.result.v1",
+    "command": "dev.land.check_offer",
+    "ok": false,
+    "status": "failed",
+    "request_id": "local-0000000000000001",
+    "elapsed_us": 17509,
+    "budget_ms": 250,
+    "elapsed_ms": 17,
+    "budget_exceeded": false,
+    "authority": {
+      "policy": "exempt",
+      "agent_session": "none (local operator)"
+    },
+    "error": {
+      "code": "OFFER_BASE_MISMATCH",
+      "error_code": "OFFER_BASE_MISMATCH",
+      "message": "the bundle must have exactly one prerequisite, and it must be the offered base",
+      "phase": "base",
+      "current_state": "REQUEST_FAILED",
+      "retryable": false,
+      "human_action_required": true,
+      "next_action": "follow the first next command",
+      "mutated": false,
+      "evidence": "b4405409455b4dbf6ea0f0ed085817df62ae7891",
+      "blockers": []
+    },
+    "next": [
+      {
+        "command": "discover.describe",
+        "input": {
+          "path": "dev.land.check_offer"
+        },
+        "reason": "inspect this command's contract and availability"
+      }
+    ]
+  }
+}

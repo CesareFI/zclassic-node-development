@@ -1,0 +1,30 @@
+{
+  "exit": 0,
+  "response": {
+    "schema": "zcl.result.v1",
+    "command": "dev.land.send",
+    "ok": true,
+    "status": "passed",
+    "request_id": "local-0000000000000001",
+    "elapsed_us": 46955,
+    "budget_ms": 900,
+    "elapsed_ms": 46,
+    "budget_exceeded": false,
+    "authority": {
+      "policy": "exempt",
+      "agent_session": "none (local operator)"
+    },
+    "data_schema": "zcl.land_send.v1",
+    "data": {
+      "leaf": "dev.land.send",
+      "bundle": "$FIXTURE/fixture.bundle",
+      "bundle_sha256": "b48553e0384d43fa7388b6fa9b2c21b881e40439f0a28f08dd72a574ffb38696",
+      "commit": "ed31efb61ec875162f001e730f15a96eb0948a00",
+      "lane": "fixture",
+      "offer": "$FIXTURE/fixture.bundle.offer.json",
+      "ready": "READY fixture ed31efb61ec875162f001e730f15a96eb0948a00 bundle_sha256=b48553e0384d43fa7388b6fa9b2c21b881e40439f0a28f08dd72a574ffb38696",
+      "next_action": "run `z23 fleet bundle offer --file=$FIXTURE/fixture.bundle`, then post `READY sha256=b48553e0384d43fa7388b6fa9b2c21b881e40439f0a28f08dd72a574ffb38696 root=<root from the offer> size=584` in room fleet; or carry the file to the queue host and run `dev land receive --bundle=$FIXTURE/fixture.bundle --lane=fixture` there"
+    },
+    "next": []
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "phase": "before",
+  "source": "69c82a5ededecec3ca00ef734b21ae7dcb3360f5",
+  "binary_sha256": "c503254a8f30dcac7d7e98abe257c2f12e2cd0f1e955c5161ac80b3b41e02c50",
+  "base": "5c9591185153d277de58395641b7c5cbeb65163c",
+  "advanced_origin": "bbf696a5fee7367276e79bc207012f23231e4a20",
+  "first_commit": "b4405409455b4dbf6ea0f0ed085817df62ae7891",
+  "tip": "ed31efb61ec875162f001e730f15a96eb0948a00",
+  "tree": "9fcfe175c15e1c9e3c8a438227dc0aee364041be",
+  "bundle_sha256": "b48553e0384d43fa7388b6fa9b2c21b881e40439f0a28f08dd72a574ffb38696",
+  "offer_sha256": "6701a97f0cecac9293525f497a568d249e8f745b818c284bc72fb1344a5e6822",
+  "generated_base": "b4405409455b4dbf6ea0f0ed085817df62ae7891",
+  "header": [
+    "# v2 git bundle",
+    "-5c9591185153d277de58395641b7c5cbeb65163c base",
+    "ed31efb61ec875162f001e730f15a96eb0948a00 HEAD"
+  ],
+  "native_check": "OFFER_BASE_MISMATCH",
+  "carried_commits_absent_initially": true,
+  "imported_exact_chain_and_tree": true,
+  "offer_unchanged": true
+}

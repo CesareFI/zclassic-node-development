@@ -1,0 +1,78 @@
+{
+  "commands": {
+    "registered": "make -s t-list",
+    "candidate-build": "make -j4 dev-bin",
+    "focused": "make -j4 t-fast-exact ONLY=test_dev_land_remote",
+    "preflight": "make -j4 lint-preflight",
+    "impact": "make -j4 agent-verify ONLY=@changed AGENT_VERIFY_BASE=69c82a5ededecec3ca00ef734b21ae7dcb3360f5"
+  },
+  "exit_codes": {
+    "registered": 0,
+    "candidate-build": 0,
+    "focused": 0,
+    "preflight": 0,
+    "impact": 0
+  },
+  "focused": {
+    "literal": "SUITE VERDICT mode=cold groups_total=1625 groups_ran=1 groups_cached=0 groups_gated=1624 groups_failed=0 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=303745a0b96d",
+    "groups_ran": 1,
+    "groups_cached": 0,
+    "groups_failed": 0,
+    "self_skips": 0
+  },
+  "impact": {
+    "literal": "SUITE VERDICT mode=cold groups_total=1625 groups_ran=45 groups_cached=0 groups_gated=1580 groups_failed=0 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=11c1b6ed24a6",
+    "groups_ran": 45,
+    "groups_cached": 0,
+    "groups_failed": 0,
+    "self_skips": 0
+  },
+  "impact_receipt": [
+    "agent-verify: check-file-size-ceiling rc=0 secs=6",
+    "agent-verify: check-cyclomatic-complexity rc=0 secs=8",
+    "agent-verify: dev-proof-producer rc=0 secs=8",
+    "agent-verify: selection exact groups=45 reason=impact-plan detail=- base=69c82a5ededecec3ca00ef734b21ae7dcb3360f5 select_secs=24",
+    "agent-verify: t-fast-exact rc=0 secs=960",
+    "SUITE VERDICT mode=cold groups_total=1625 groups_ran=45 groups_cached=0 groups_gated=1580 groups_failed=0 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=11c1b6ed24a6",
+    "agent-verify: check-capability-closure rc=0 secs=23",
+    "agent-verify: proof-lint-prebuild rc=0 secs=84",
+    "agent-verify: lint-fast rc=0 secs=266",
+    "agent-verify: total secs=1379",
+    "agent-verify: OK"
+  ],
+  "preflight": "lint-preflight: OK",
+  "registered_sender_assertions": [
+    "land.send: a dirty tracked tree refuses SEND_DIRTY_TREE... OK",
+    "land.send: nothing ahead of origin/main refuses SEND_NOTHING_AHEAD... OK",
+    "land.send: a forbidden character in the note refuses... OK",
+    "land.send: bundle holds origin/main..HEAD and the note is one quoted argument... OK",
+    "land.send: --remote_checkout is one quoted --checkout argument... OK",
+    "land.send: a relative or dashed remote_checkout refuses... OK",
+    "land.send: a failing precheck refuses before any bundle or ssh... OK",
+    "land.send: precheck=skip sends with the note marker, no gate runs... OK",
+    "land.send: a bad or caller-supplied `sent` precheck refuses BAD_INPUT... OK",
+    "land.send: serialized remote JSON refusal retains the actual compatibility error... OK",
+    "land.send: serialized non-JSON refusal retains raw diagnostics... OK",
+    "land.send: serialized success still exposes data.remote... OK",
+    "land.send --commit: the second commit of a mixed branch refuses SEND_NOT_SINGLE... OK",
+    "land.send --commit: an unresolvable or dashed commit refuses SEND_BAD_ARGUMENT... OK",
+    "land.send --commit: the first commit sends alone, dirty tree and all... OK",
+    "land.send --bundle_out: writes the bundle and its sha256 with no ssh or scp... OK",
+    "land.send: no lane on branch lane/<x> sends as lane <x>; a branch that is no lane name refuses naming it... OK",
+    "land.send --bundle_out: an existing path refuses SEND_BUNDLE_EXISTS... OK",
+    "land.send: no host and no bundle_out refuses SEND_BAD_ARGUMENT, and a commit outside the revision characters refuses too... OK",
+    "land.send --commit: a commit already on origin/main refuses SEND_NOTHING_AHEAD... OK",
+    "land.send --bundle_out: writes <bundle_out>.offer.json and reports it as data.offer... OK",
+    "land.check_offer: a sent bundle and its manifest check ok... OK",
+    "land.check_offer: one flipped bundle byte refuses OFFER_SHA_MISMATCH... OK",
+    "land.check_offer: a manifest naming another commit refuses OFFER_HEAD_MISMATCH... OK",
+    "land.check_offer: a manifest naming another base refuses OFFER_BASE_MISMATCH... OK",
+    "land.check_offer: a bad schema or malformed commit refuses OFFER_BAD_MANIFEST... OK",
+    "land.send --bundle_out: the offer base is the commit's parent even when origin/main has moved past it... OK",
+    "land.send --bundle_out: an existing .offer.json refuses SEND_OFFER_EXISTS and writes no bundle... OK",
+    "land.send: a clean stack's generated offer verifies and imports its exact commits and tree in a fresh receiver... OK",
+    "land.send: multiple import prerequisites refuse an offer and clean up the bundle and temporary ref... OK",
+    "land.check_offer: a prerequisite over 600 bytes with '-' after the 511-byte read counts as one prerequisite... OK"
+  ],
+  "synthetic_precheck": "Original fixture sends used the documented precheck=skip option in the synthetic three-marker repository. Product qualification and the native contribution sender used the real gates."
+}

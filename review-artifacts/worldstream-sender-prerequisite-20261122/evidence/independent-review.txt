@@ -1,0 +1,7 @@
+Exact-candidate independent static review by inventory_review
+Candidate: c9adc02457592684ddd7ddf43fc2bde5d7d37e19
+Base: 69c82a5ededecec3ca00ef734b21ae7dcb3360f5
+Tree: d08659e1230108a8491d7d8bb53d775ca4b53927
+Result: no blocking findings.
+The reviewer inspected the shared parser, long-subject handling, mandatory header terminator and single 40-hex prerequisite. The checker retains its Git verification, advertised head, digest and base checks. The sender error path removes the bundle and its temporary ref. The new registered regressions cover a clean stack with advanced upstream and ambiguous prerequisites.
+Limits: static review only. The reviewer did not execute tests. The C test additions do not include a dedicated zero-prerequisite or malformed-header test. The independently recorded native CLI zero-prerequisite control is included in the qualification evidence. Git SHA-256 object-format offers are outside the v1 manifest contract.

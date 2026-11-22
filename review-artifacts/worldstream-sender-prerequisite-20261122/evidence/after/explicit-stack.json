@@ -1,0 +1,40 @@
+{
+  "exit": 1,
+  "response": {
+    "schema": "zcl.result.v1",
+    "command": "dev.land.send",
+    "ok": false,
+    "status": "failed",
+    "request_id": "local-0000000000000001",
+    "elapsed_us": 16807,
+    "budget_ms": 900,
+    "elapsed_ms": 16,
+    "budget_exceeded": false,
+    "authority": {
+      "policy": "exempt",
+      "agent_session": "none (local operator)"
+    },
+    "error": {
+      "code": "SEND_NOT_SINGLE",
+      "error_code": "SEND_NOT_SINGLE",
+      "message": "--commit is not exactly one commit beyond origin/main; make a single-commit branch with: git switch -c send/fixture origin/main && git cherry-pick -S HEAD, then send the new commit",
+      "phase": "tree",
+      "current_state": "REQUEST_FAILED",
+      "retryable": false,
+      "human_action_required": true,
+      "next_action": "follow the first next command",
+      "mutated": false,
+      "evidence": "HEAD",
+      "blockers": []
+    },
+    "next": [
+      {
+        "command": "discover.describe",
+        "input": {
+          "path": "dev.land.send"
+        },
+        "reason": "inspect this command's contract and availability"
+      }
+    ]
+  }
+}

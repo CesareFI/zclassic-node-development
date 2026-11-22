@@ -1,0 +1,9 @@
+{
+  "git_object_format": "sha256",
+  "exit": 1,
+  "code": "SEND_OFFER_FAILED",
+  "message": "the bundle must declare exactly one 40-hex import prerequisite",
+  "bundle_exists": false,
+  "offer_exists": false,
+  "ready": false
+}

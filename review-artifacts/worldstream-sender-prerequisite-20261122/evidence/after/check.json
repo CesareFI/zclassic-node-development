@@ -1,0 +1,27 @@
+{
+  "exit": 0,
+  "response": {
+    "schema": "zcl.result.v1",
+    "command": "dev.land.check_offer",
+    "ok": true,
+    "status": "passed",
+    "request_id": "local-0000000000000001",
+    "elapsed_us": 6755,
+    "budget_ms": 250,
+    "elapsed_ms": 6,
+    "budget_exceeded": false,
+    "authority": {
+      "policy": "exempt",
+      "agent_session": "none (local operator)"
+    },
+    "data_schema": "zcl.land_check_offer.v1",
+    "data": {
+      "leaf": "dev.land.check_offer",
+      "commit": "ed31efb61ec875162f001e730f15a96eb0948a00",
+      "base": "5c9591185153d277de58395641b7c5cbeb65163c",
+      "bundle_sha256": "b48553e0384d43fa7388b6fa9b2c21b881e40439f0a28f08dd72a574ffb38696",
+      "verdict": "ok"
+    },
+    "next": []
+  }
+}

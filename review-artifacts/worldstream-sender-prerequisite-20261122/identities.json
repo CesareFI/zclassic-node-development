@@ -1,0 +1,28 @@
+{
+  "candidate": "c9adc02457592684ddd7ddf43fc2bde5d7d37e19",
+  "base": "69c82a5ededecec3ca00ef734b21ae7dcb3360f5",
+  "tree": "d08659e1230108a8491d7d8bb53d775ca4b53927",
+  "files": [
+    "tests/harness/src/test_dev_land_remote.c",
+    "tools/command/native_dev_land_offer.c",
+    "tools/command/native_dev_land_remote.c",
+    "tools/command/native_dev_land_remote_shared.h"
+  ],
+  "artifacts": [
+    {
+      "name": "sender-prerequisite.bundle",
+      "bytes": 15046,
+      "sha256": "7f380e3e9ed5ce63e56a8221799692741cb0ef6664bdd14b3c2a902a27e2e342"
+    },
+    {
+      "name": "sender-prerequisite.patch",
+      "bytes": 12762,
+      "sha256": "2e8ebf38d21f534579f619bb5a721d7ba602e59d59958af1a96d33cba7efc1ab"
+    },
+    {
+      "name": "sender-prerequisite-evidence.tar.gz",
+      "bytes": 6677,
+      "sha256": "d7078cde84f167ad362fc2fa4b9105acc370cda0674b03b542c6310112d03f5a"
+    }
+  ]
+}
