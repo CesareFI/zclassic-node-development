@@ -1,0 +1,4 @@
+Independent static review of a2302436f42f2e68810efc125c4b35cf1c4dd211 against 82df97517f00e260710415117a2163c58ef289ca
+Reviewer: inventory_review
+Result: no material blocker within the allowlist-open scope.
+The reviewer checked both platform implementations of the absence test, the existing signer_key_unreadable mapping, the own-key short circuit and the registered regression. The POSIX helper treats ENOTDIR as absent and the Windows helper treats ERROR_PATH_NOT_FOUND as absent; classification relies on the parent validation already in signer_paths. Later size, short-read, allocation and seed-open behavior is unchanged. Static review only. The reviewer ran no tests and accessed no host signer state.

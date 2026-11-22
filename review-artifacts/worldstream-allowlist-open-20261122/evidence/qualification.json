@@ -1,0 +1,43 @@
+{
+  "upstream": "2a93470e27c2197ff13813e3a6f6f46893c5a538",
+  "prerequisite": "381d58c1b0e1c0b15a19aa1d0c0612d03a61d457",
+  "qualified_parent": "82df97517f00e260710415117a2163c58ef289ca",
+  "candidate": "a2302436f42f2e68810efc125c4b35cf1c4dd211",
+  "tree": "7b3dbd5ee3c4e0a12895e832ca18e3b66667f873",
+  "paths": [
+    "tests/harness/src/test_dev_proof_signer.c",
+    "tools/dev/dev_proof_signer.c",
+    "tools/dev/dev_proof_signer.h"
+  ],
+  "dependency_patch_id": "56a4933683377361cdf98af34f9d61491388e96d",
+  "patch_sha256": "43b087b85293205616156dc9658ec77040cb7fe67f30214cdb27fec3435c02d0",
+  "focused": "SUITE VERDICT mode=cold groups_total=1624 groups_ran=2 groups_cached=0 groups_gated=1622 groups_failed=0 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=303745a0b96d",
+  "impact": [
+    "agent-verify: check-file-size-ceiling rc=0 secs=7",
+    "agent-verify: check-cyclomatic-complexity rc=0 secs=8",
+    "agent-verify: dev-proof-producer rc=0 secs=7",
+    "agent-verify: selection exact groups=56 reason=impact-plan detail=- base=82df97517f00e260710415117a2163c58ef289ca select_secs=24",
+    "agent-verify: t-fast-exact rc=0 secs=1126",
+    "SUITE VERDICT mode=cold groups_total=1624 groups_ran=56 groups_cached=0 groups_gated=1568 groups_failed=0 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=11c1b6ed24a6",
+    "agent-verify: check-capability-closure rc=0 secs=23",
+    "agent-verify: proof-lint-prebuild rc=0 secs=86",
+    "agent-verify: lint-fast rc=0 secs=266",
+    "agent-verify: total secs=1547",
+    "agent-verify: OK"
+  ],
+  "lint": "lint-preflight: OK",
+  "exit_codes": {
+    "registered": 0,
+    "candidate-build": 0,
+    "focused": 0,
+    "preflight": 0,
+    "impact": 0
+  },
+  "commands": [
+    "make -s t-list",
+    "make -j4 dev-bin",
+    "make -j4 t-fast-exact ONLY=test_dev_proof_signer,test_dev_land_remote",
+    "make -j4 lint-preflight",
+    "make -j4 agent-verify ONLY=@changed AGENT_VERIFY_BASE=82df97517f00e260710415117a2163c58ef289ca"
+  ]
+}

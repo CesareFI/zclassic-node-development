@@ -1,0 +1,25 @@
+{
+  "candidate": "a2302436f42f2e68810efc125c4b35cf1c4dd211",
+  "tree": "7b3dbd5ee3c4e0a12895e832ca18e3b66667f873",
+  "tested_parent": "82df97517f00e260710415117a2163c58ef289ca",
+  "import_prerequisite": "2a93470e27c2197ff13813e3a6f6f46893c5a538",
+  "replayed_diagnostic": "381d58c1b0e1c0b15a19aa1d0c0612d03a61d457",
+  "stable_patch_id": "56a4933683377361cdf98af34f9d61491388e96d",
+  "artifacts": [
+    {
+      "file": "allowlist-open.bundle",
+      "bytes": 8085,
+      "sha256": "831c5dc0ac977633fc0d6cec24ca900b7ae5f388156321724414d663be445a66"
+    },
+    {
+      "file": "trust-file-diagnostic.tar.gz",
+      "bytes": 6860,
+      "sha256": "fa98d19f5321b1f4ae74a34ab15f3ada777dcc79fc6cc01e414772a805ad652a"
+    }
+  ],
+  "changed_paths": [
+    "tests/harness/src/test_dev_proof_signer.c",
+    "tools/dev/dev_proof_signer.c",
+    "tools/dev/dev_proof_signer.h"
+  ]
+}

@@ -1,0 +1,73 @@
+{
+  "sender": "dev land send --lane=worldstream-allowlist-open --bundle_out=<package>/allowlist-open.bundle",
+  "sender_precheck": {
+    "precheck_ran": [
+      "check-file-size-ceiling",
+      "check-cyclomatic-complexity",
+      "check-arm-symbol-single",
+      "check-kpi-floor",
+      "check-describe-budget",
+      "check-hardening-ratchet"
+    ],
+    "precheck_skipped": [
+      "check-core-seal"
+    ],
+    "precheck_unproven": "proof-history: land state unavailable",
+    "precheck_timings": [
+      {
+        "gate": "check-file-size-ceiling",
+        "elapsed_ms": 105
+      },
+      {
+        "gate": "check-cyclomatic-complexity",
+        "elapsed_ms": 1462
+      },
+      {
+        "gate": "check-arm-symbol-single",
+        "elapsed_ms": 824
+      },
+      {
+        "gate": "check-kpi-floor",
+        "elapsed_ms": 508
+      },
+      {
+        "gate": "check-describe-budget",
+        "elapsed_ms": 2813
+      },
+      {
+        "gate": "check-hardening-ratchet",
+        "elapsed_ms": 1167
+      }
+    ]
+  },
+  "prior_attempts": [
+    "An initial repository had Git objects but no checked-out project files. Native check_offer returned OFFER_BAD_REPO.",
+    "A retry refused a fetch into a checked-out branch. A fresh repository checked out the genuine upstream tree detached."
+  ],
+  "original_offer_rejection": {
+    "code": "OFFER_BASE_MISMATCH",
+    "phase": "base",
+    "message": "the bundle must have exactly one prerequisite, and it must be the offered base",
+    "mutated": false
+  },
+  "verified_offer": {
+    "leaf": "dev.land.check_offer",
+    "commit": "a2302436f42f2e68810efc125c4b35cf1c4dd211",
+    "base": "2a93470e27c2197ff13813e3a6f6f46893c5a538",
+    "bundle_sha256": "831c5dc0ac977633fc0d6cec24ca900b7ae5f388156321724414d663be445a66",
+    "verdict": "ok"
+  },
+  "git_verify": "allowlist-open.bundle is okay\nThe bundle contains this ref:\na2302436f42f2e68810efc125c4b35cf1c4dd211 HEAD\nThe bundle requires this ref:\n2a93470e27c2197ff13813e3a6f6f46893c5a538 \nThe bundle uses this hash algorithm: sha1\n",
+  "isolated_import": {
+    "initial_history": "2a93470e27c2197ff13813e3a6f6f46893c5a538",
+    "shallow_depth": 1,
+    "alternates": false,
+    "parent_and_candidate_absent_initially": true,
+    "commits_carried": 2,
+    "candidate": "a2302436f42f2e68810efc125c4b35cf1c4dd211",
+    "tree": "7b3dbd5ee3c4e0a12895e832ca18e3b66667f873",
+    "parent": "82df97517f00e260710415117a2163c58ef289ca",
+    "parents_parent": "2a93470e27c2197ff13813e3a6f6f46893c5a538",
+    "git_fsck_connectivity_exit": 0
+  }
+}

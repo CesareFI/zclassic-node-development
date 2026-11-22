@@ -1,0 +1,34 @@
+[
+  {
+    "version": "before",
+    "size": 65536,
+    "code": "ok",
+    "exit": 0,
+    "unchanged": true,
+    "binary_sha256": "4e33a96f1966fdb7c3c7fa694702bc8d643381cd634894d034e97dc24bcee68e"
+  },
+  {
+    "version": "before",
+    "size": 65537,
+    "code": "RECEIPT_SIGNER_UNKNOWN",
+    "exit": 1,
+    "unchanged": true,
+    "binary_sha256": "4e33a96f1966fdb7c3c7fa694702bc8d643381cd634894d034e97dc24bcee68e"
+  },
+  {
+    "version": "after",
+    "size": 65536,
+    "code": "ok",
+    "exit": 0,
+    "unchanged": true,
+    "binary_sha256": "76cfe1dbe980f9cb6f04c0b27e48b12989ecfee826216ec7450aa5b13897a852"
+  },
+  {
+    "version": "after",
+    "size": 65537,
+    "code": "RECEIPT_SIGNER_UNKNOWN",
+    "exit": 1,
+    "unchanged": true,
+    "binary_sha256": "76cfe1dbe980f9cb6f04c0b27e48b12989ecfee826216ec7450aa5b13897a852"
+  }
+]

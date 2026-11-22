@@ -1,0 +1,88 @@
+From a2302436f42f2e68810efc125c4b35cf1c4dd211 Mon Sep 17 00:00:00 2001
+From: Worldstream Development <worldstream-dev@users.noreply.github.com>
+Date: Sun, 22 Nov 2026 16:30:54 +0100
+Subject: [PATCH] Report unopenable signer allowlists as unavailable trust
+ state
+
+---
+ tests/harness/src/test_dev_proof_signer.c | 10 ++++++++++
+ tools/dev/dev_proof_signer.c              |  7 +++----
+ tools/dev/dev_proof_signer.h              |  9 +++++----
+ 3 files changed, 18 insertions(+), 8 deletions(-)
+
+diff --git a/tests/harness/src/test_dev_proof_signer.c b/tests/harness/src/test_dev_proof_signer.c
+index 2bd832dbcc5223d83fa659c0f30504077c7352b9..5a3fb80bf6d5bcb782be08e9aec84184535caea3 100644
+--- a/tests/harness/src/test_dev_proof_signer.c
++++ b/tests/harness/src/test_dev_proof_signer.c
+@@ -296,6 +296,16 @@ static int test_dps_allowlist(void)
+         ASSERT(strcmp(why, "signer_unknown") == 0);
+ 
+         ASSERT(dps_allow_path(allow, sizeof(allow)));
++        /* A directory at the allowlist path fails a regular-file open even
++         * for a privileged test runner. Own-key trust needs no lookup. */
++        ASSERT(mkdir(allow, 0700) == 0);
++        ASSERT(dps_validate(&receipt, why, sizeof(why)));
++        ASSERT(!dps_validate(&parsed, why, sizeof(why)));
++        ASSERT_STR_EQ(why, ZCL_DEV_PROOF_SIGNER_WHY_KEY_UNREADABLE);
++        struct zcl_dev_proof_allowlist_state unavailable;
++        ASSERT(!zcl_dev_proof_signer_allowlist_state(&unavailable, &why_token));
++        ASSERT_STR_EQ(why_token, ZCL_DEV_PROOF_SIGNER_WHY_KEY_UNREADABLE);
++        ASSERT(rmdir(allow) == 0);
+         /* The full physical record, including bytes after NUL, decides trust. */
+         for (unsigned lf = 0; lf < 2; lf++) {
+             int bad_len = snprintf(line, sizeof(line), "%s%cgarbage%s",
+diff --git a/tools/dev/dev_proof_signer.c b/tools/dev/dev_proof_signer.c
+index 2351aa235decde1e6ee0d15ca5f162ae5de027e4..c715381b3dc70d1f38126cc8be31cda89929daf0 100644
+--- a/tools/dev/dev_proof_signer.c
++++ b/tools/dev/dev_proof_signer.c
+@@ -344,7 +344,7 @@ static bool signer_allow_scan(const uint8_t *target, const uint8_t *own,
+         return false;
+     platform_positioned_file_init(&file);
+     if (!platform_positioned_file_open(&file, path))
+-        return true; /* no allowlist is a state, not a failure */
++        return platform_private_path_absent(path);
+     bool sized = platform_positioned_file_size(&file, &size);
+     if (!sized || size > SIGNER_ALLOW_MAX_BYTES) {
+         platform_positioned_file_close(&file);
+@@ -400,7 +400,7 @@ bool zcl_dev_proof_signer_allowlist_state(
+         return false;
+     if (!signer_allow_scan(NULL, own, own_present, &scan)) {
+         signer_why(why, WHY_UNREADABLE);
+-        LOG_FAIL(SIGNER_DOMAIN, "cannot resolve the signer state directory");
++        LOG_FAIL(SIGNER_DOMAIN, "cannot locate or open %s", SIGNER_ALLOW_LEAF);
+     }
+     out->present = scan.present;
+     out->trusted = scan.trusted;
+@@ -430,8 +430,7 @@ bool zcl_dev_proof_signer_verify(
+     if (!trusted) {
+         if (!signer_allow_scan(pubkey, own, own_present, &scan)) {
+             signer_why(why, WHY_UNREADABLE);
+-            LOG_FAIL(SIGNER_DOMAIN,
+-                     "cannot resolve the signer state directory");
++            LOG_FAIL(SIGNER_DOMAIN, "cannot locate or open %s", SIGNER_ALLOW_LEAF);
+         }
+         trusted = scan.found_target;
+     }
+diff --git a/tools/dev/dev_proof_signer.h b/tools/dev/dev_proof_signer.h
+index 18522191ebfb2ad98f8b0dfb09a7f142ed4199ff..7e47b1958fa4f0d41324193867939f1a4ecb08ee 100644
+--- a/tools/dev/dev_proof_signer.h
++++ b/tools/dev/dev_proof_signer.h
+@@ -63,10 +63,11 @@ bool zcl_dev_proof_signer_sign(
+ 
+ /* Verify `signature` over `message` by `pubkey`, and only accept `pubkey`
+  * when this box trusts it: it is this box's own key, or it is listed in
+- * signers.allow. Refuses by name — signer_key_unreadable when this box has a
+- * key file it cannot read, signer_unknown when the key is trusted by nobody
+- * here, signature_invalid when the bytes do not verify. Reading no allowlist
+- * at all is not an error; it means only this box's own key is trusted. */
++ * signers.allow. signer_key_unreadable covers unavailable local signer state,
++ * including an existing allowlist that cannot be opened for a required lookup.
++ * signer_unknown means the signer is untrusted; signature_invalid means the
++ * signature failed verification. An absent allowlist leaves only the box's
++ * own key trusted. */
+ bool zcl_dev_proof_signer_verify(
+     const uint8_t *message, size_t message_len,
+     const uint8_t pubkey[ZCL_DEV_PROOF_SIGNER_PUBKEY_BYTES],
+-- 
+2.43.0
+

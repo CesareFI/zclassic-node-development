@@ -1,0 +1,438 @@
+{
+  "before": [
+    {
+      "case": "readable",
+      "probe": {
+        "uid": 1001,
+        "open_errno": 0,
+        "open_error": null,
+        "parents_traversable": true,
+        "exists": true
+      },
+      "probe_exit": 0,
+      "native_exit": 0,
+      "code": "ok",
+      "evidence": null,
+      "mutated": null,
+      "unchanged": true,
+      "binary_sha256": "4e33a96f1966fdb7c3c7fa694702bc8d643381cd634894d034e97dc24bcee68e",
+      "allow_mode": "0o600",
+      "response": {
+        "schema": "zcl.result.v1",
+        "command": "dev.land.verify_offer_receipt",
+        "ok": true,
+        "status": "passed",
+        "request_id": "local-0000000000000001",
+        "elapsed_us": 458,
+        "budget_ms": 250,
+        "elapsed_ms": 0,
+        "budget_exceeded": false,
+        "authority": {
+          "policy": "exempt",
+          "agent_session": "none (local operator)"
+        },
+        "data_schema": "zcl.land_verify_offer_receipt.v1",
+        "data": {
+          "leaf": "dev.land.verify_offer_receipt",
+          "commit": "c1321ffbdb7de472e8d877e29aa92eb817dabc37",
+          "base": "5b19ed8fc798781549254d6aeff544cd3f53046f",
+          "signer": "93018e7cf4269fe5f4dcde0514e364fb87b27fb7967c55ea73ce88cd48c74add",
+          "verdict": "ok",
+          "checks": "bundle_sha256,bundle_verify,head,base"
+        },
+        "next": []
+      },
+      "snapshot_sha256": "32fffd79c17f91e885e5c6cce99cfb7cbf569bfba8d7267e7078ab992899b0ea",
+      "input_sha256": {
+        "receipt.json": "a5bef31fb777ace604e8efc9f1acc1d4e058a1c8f7cbbe8691ba785eb0866a37",
+        "offer.json": "fd7362a5202b014aeb25915e32adf2d5fa90779102f44652d020ec5571345ddb"
+      }
+    },
+    {
+      "case": "unreadable",
+      "probe": {
+        "uid": 1001,
+        "open_errno": 13,
+        "open_error": "EACCES",
+        "parents_traversable": true,
+        "exists": true
+      },
+      "probe_exit": 1,
+      "native_exit": 1,
+      "code": "RECEIPT_SIGNER_UNKNOWN",
+      "evidence": "93018e7cf4269fe5f4dcde0514e364fb87b27fb7967c55ea73ce88cd48c74add",
+      "mutated": false,
+      "unchanged": true,
+      "binary_sha256": "4e33a96f1966fdb7c3c7fa694702bc8d643381cd634894d034e97dc24bcee68e",
+      "allow_mode": "0o0",
+      "response": {
+        "schema": "zcl.result.v1",
+        "command": "dev.land.verify_offer_receipt",
+        "ok": false,
+        "status": "failed",
+        "request_id": "local-0000000000000001",
+        "elapsed_us": 343,
+        "budget_ms": 250,
+        "elapsed_ms": 0,
+        "budget_exceeded": false,
+        "authority": {
+          "policy": "exempt",
+          "agent_session": "none (local operator)"
+        },
+        "error": {
+          "code": "RECEIPT_SIGNER_UNKNOWN",
+          "error_code": "RECEIPT_SIGNER_UNKNOWN",
+          "message": "the signer is not this box's key and not on its signers.allow list. Establish the expected signer independently through the operator's trust process.",
+          "phase": "receipt",
+          "current_state": "REQUEST_FAILED",
+          "retryable": false,
+          "human_action_required": true,
+          "next_action": "follow the first next command",
+          "mutated": false,
+          "evidence": "93018e7cf4269fe5f4dcde0514e364fb87b27fb7967c55ea73ce88cd48c74add",
+          "blockers": []
+        },
+        "next": [
+          {
+            "command": "discover.describe",
+            "input": {
+              "path": "dev.land.verify_offer_receipt"
+            },
+            "reason": "inspect this command's contract and availability"
+          }
+        ]
+      },
+      "snapshot_sha256": "3c3eab01a8cc6ce06843dc2f53fac5032c3dcd6d942c3d78660cad1938165d44",
+      "input_sha256": {
+        "receipt.json": "a5bef31fb777ace604e8efc9f1acc1d4e058a1c8f7cbbe8691ba785eb0866a37",
+        "offer.json": "fd7362a5202b014aeb25915e32adf2d5fa90779102f44652d020ec5571345ddb"
+      }
+    },
+    {
+      "case": "absent",
+      "probe": {
+        "uid": 1001,
+        "open_errno": 2,
+        "open_error": "ENOENT",
+        "parents_traversable": true,
+        "exists": false
+      },
+      "probe_exit": 1,
+      "native_exit": 1,
+      "code": "RECEIPT_SIGNER_UNKNOWN",
+      "evidence": "93018e7cf4269fe5f4dcde0514e364fb87b27fb7967c55ea73ce88cd48c74add",
+      "mutated": false,
+      "unchanged": true,
+      "binary_sha256": "4e33a96f1966fdb7c3c7fa694702bc8d643381cd634894d034e97dc24bcee68e",
+      "allow_mode": null,
+      "response": {
+        "schema": "zcl.result.v1",
+        "command": "dev.land.verify_offer_receipt",
+        "ok": false,
+        "status": "failed",
+        "request_id": "local-0000000000000001",
+        "elapsed_us": 332,
+        "budget_ms": 250,
+        "elapsed_ms": 0,
+        "budget_exceeded": false,
+        "authority": {
+          "policy": "exempt",
+          "agent_session": "none (local operator)"
+        },
+        "error": {
+          "code": "RECEIPT_SIGNER_UNKNOWN",
+          "error_code": "RECEIPT_SIGNER_UNKNOWN",
+          "message": "the signer is not this box's key and not on its signers.allow list. Establish the expected signer independently through the operator's trust process.",
+          "phase": "receipt",
+          "current_state": "REQUEST_FAILED",
+          "retryable": false,
+          "human_action_required": true,
+          "next_action": "follow the first next command",
+          "mutated": false,
+          "evidence": "93018e7cf4269fe5f4dcde0514e364fb87b27fb7967c55ea73ce88cd48c74add",
+          "blockers": []
+        },
+        "next": [
+          {
+            "command": "discover.describe",
+            "input": {
+              "path": "dev.land.verify_offer_receipt"
+            },
+            "reason": "inspect this command's contract and availability"
+          }
+        ]
+      },
+      "snapshot_sha256": "0b108e8fb53ac0c192cc0471b7862a35a2b00a32672d10f11a9de53d96102fff",
+      "input_sha256": {
+        "receipt.json": "a5bef31fb777ace604e8efc9f1acc1d4e058a1c8f7cbbe8691ba785eb0866a37",
+        "offer.json": "fd7362a5202b014aeb25915e32adf2d5fa90779102f44652d020ec5571345ddb"
+      }
+    },
+    {
+      "case": "restored",
+      "probe": {
+        "uid": 1001,
+        "open_errno": 0,
+        "open_error": null,
+        "parents_traversable": true,
+        "exists": true
+      },
+      "probe_exit": 0,
+      "native_exit": 0,
+      "code": "ok",
+      "evidence": null,
+      "mutated": null,
+      "unchanged": true,
+      "binary_sha256": "4e33a96f1966fdb7c3c7fa694702bc8d643381cd634894d034e97dc24bcee68e",
+      "allow_mode": "0o600",
+      "response": {
+        "schema": "zcl.result.v1",
+        "command": "dev.land.verify_offer_receipt",
+        "ok": true,
+        "status": "passed",
+        "request_id": "local-0000000000000001",
+        "elapsed_us": 425,
+        "budget_ms": 250,
+        "elapsed_ms": 0,
+        "budget_exceeded": false,
+        "authority": {
+          "policy": "exempt",
+          "agent_session": "none (local operator)"
+        },
+        "data_schema": "zcl.land_verify_offer_receipt.v1",
+        "data": {
+          "leaf": "dev.land.verify_offer_receipt",
+          "commit": "c1321ffbdb7de472e8d877e29aa92eb817dabc37",
+          "base": "5b19ed8fc798781549254d6aeff544cd3f53046f",
+          "signer": "93018e7cf4269fe5f4dcde0514e364fb87b27fb7967c55ea73ce88cd48c74add",
+          "verdict": "ok",
+          "checks": "bundle_sha256,bundle_verify,head,base"
+        },
+        "next": []
+      },
+      "snapshot_sha256": "34eb2fafec0b7916ac217f1b2e703f1eacb611a6dd2ff51ebda7b343646b5cb7",
+      "input_sha256": {
+        "receipt.json": "a5bef31fb777ace604e8efc9f1acc1d4e058a1c8f7cbbe8691ba785eb0866a37",
+        "offer.json": "fd7362a5202b014aeb25915e32adf2d5fa90779102f44652d020ec5571345ddb"
+      }
+    }
+  ],
+  "after": [
+    {
+      "case": "readable",
+      "probe": {
+        "uid": 1001,
+        "open_errno": 0,
+        "open_error": null,
+        "parents_traversable": true,
+        "exists": true
+      },
+      "probe_exit": 0,
+      "native_exit": 0,
+      "code": "ok",
+      "evidence": null,
+      "mutated": null,
+      "unchanged": true,
+      "binary_sha256": "76cfe1dbe980f9cb6f04c0b27e48b12989ecfee826216ec7450aa5b13897a852",
+      "allow_mode": "0o600",
+      "response": {
+        "schema": "zcl.result.v1",
+        "command": "dev.land.verify_offer_receipt",
+        "ok": true,
+        "status": "passed",
+        "request_id": "local-0000000000000001",
+        "elapsed_us": 455,
+        "budget_ms": 250,
+        "elapsed_ms": 0,
+        "budget_exceeded": false,
+        "authority": {
+          "policy": "exempt",
+          "agent_session": "none (local operator)"
+        },
+        "data_schema": "zcl.land_verify_offer_receipt.v1",
+        "data": {
+          "leaf": "dev.land.verify_offer_receipt",
+          "commit": "c1321ffbdb7de472e8d877e29aa92eb817dabc37",
+          "base": "5b19ed8fc798781549254d6aeff544cd3f53046f",
+          "signer": "93018e7cf4269fe5f4dcde0514e364fb87b27fb7967c55ea73ce88cd48c74add",
+          "verdict": "ok",
+          "checks": "bundle_sha256,bundle_verify,head,base"
+        },
+        "next": []
+      },
+      "snapshot_sha256": "685f9c95d9958d37bc28e8a225b92492df60e74f11bdfd66069bc9479202fb0e",
+      "input_sha256": {
+        "receipt.json": "a5bef31fb777ace604e8efc9f1acc1d4e058a1c8f7cbbe8691ba785eb0866a37",
+        "offer.json": "fd7362a5202b014aeb25915e32adf2d5fa90779102f44652d020ec5571345ddb"
+      }
+    },
+    {
+      "case": "unreadable",
+      "probe": {
+        "uid": 1001,
+        "open_errno": 13,
+        "open_error": "EACCES",
+        "parents_traversable": true,
+        "exists": true
+      },
+      "probe_exit": 1,
+      "native_exit": 1,
+      "code": "RECEIPT_VERIFIER_UNAVAILABLE",
+      "evidence": "signer_key_unreadable",
+      "mutated": false,
+      "unchanged": true,
+      "binary_sha256": "76cfe1dbe980f9cb6f04c0b27e48b12989ecfee826216ec7450aa5b13897a852",
+      "allow_mode": "0o0",
+      "response": {
+        "schema": "zcl.result.v1",
+        "command": "dev.land.verify_offer_receipt",
+        "ok": false,
+        "status": "failed",
+        "request_id": "local-0000000000000001",
+        "elapsed_us": 373,
+        "budget_ms": 250,
+        "elapsed_ms": 0,
+        "budget_exceeded": false,
+        "authority": {
+          "policy": "exempt",
+          "agent_session": "none (local operator)"
+        },
+        "error": {
+          "code": "RECEIPT_VERIFIER_UNAVAILABLE",
+          "error_code": "RECEIPT_VERIFIER_UNAVAILABLE",
+          "message": "cannot read local signer state. The receipt remains unverified.",
+          "phase": "receipt",
+          "current_state": "REQUEST_FAILED",
+          "retryable": false,
+          "human_action_required": true,
+          "next_action": "follow the first next command",
+          "mutated": false,
+          "evidence": "signer_key_unreadable",
+          "blockers": []
+        },
+        "next": [
+          {
+            "command": "discover.describe",
+            "input": {
+              "path": "dev.land.verify_offer_receipt"
+            },
+            "reason": "inspect this command's contract and availability"
+          }
+        ]
+      },
+      "snapshot_sha256": "aa5a87f6403e30dcc9aee2e49aa6915dc1cca6c0820a1d8ffd34fc1bf8c0214c",
+      "input_sha256": {
+        "receipt.json": "a5bef31fb777ace604e8efc9f1acc1d4e058a1c8f7cbbe8691ba785eb0866a37",
+        "offer.json": "fd7362a5202b014aeb25915e32adf2d5fa90779102f44652d020ec5571345ddb"
+      }
+    },
+    {
+      "case": "absent",
+      "probe": {
+        "uid": 1001,
+        "open_errno": 2,
+        "open_error": "ENOENT",
+        "parents_traversable": true,
+        "exists": false
+      },
+      "probe_exit": 1,
+      "native_exit": 1,
+      "code": "RECEIPT_SIGNER_UNKNOWN",
+      "evidence": "93018e7cf4269fe5f4dcde0514e364fb87b27fb7967c55ea73ce88cd48c74add",
+      "mutated": false,
+      "unchanged": true,
+      "binary_sha256": "76cfe1dbe980f9cb6f04c0b27e48b12989ecfee826216ec7450aa5b13897a852",
+      "allow_mode": null,
+      "response": {
+        "schema": "zcl.result.v1",
+        "command": "dev.land.verify_offer_receipt",
+        "ok": false,
+        "status": "failed",
+        "request_id": "local-0000000000000001",
+        "elapsed_us": 462,
+        "budget_ms": 250,
+        "elapsed_ms": 0,
+        "budget_exceeded": false,
+        "authority": {
+          "policy": "exempt",
+          "agent_session": "none (local operator)"
+        },
+        "error": {
+          "code": "RECEIPT_SIGNER_UNKNOWN",
+          "error_code": "RECEIPT_SIGNER_UNKNOWN",
+          "message": "the signer is not this box's key and not on its signers.allow list. Establish the expected signer independently through the operator's trust process.",
+          "phase": "receipt",
+          "current_state": "REQUEST_FAILED",
+          "retryable": false,
+          "human_action_required": true,
+          "next_action": "follow the first next command",
+          "mutated": false,
+          "evidence": "93018e7cf4269fe5f4dcde0514e364fb87b27fb7967c55ea73ce88cd48c74add",
+          "blockers": []
+        },
+        "next": [
+          {
+            "command": "discover.describe",
+            "input": {
+              "path": "dev.land.verify_offer_receipt"
+            },
+            "reason": "inspect this command's contract and availability"
+          }
+        ]
+      },
+      "snapshot_sha256": "1ff0eef1c194d1f162324e773c62aa4544ab8cf00823d9e23aa5f0c93f17e52f",
+      "input_sha256": {
+        "receipt.json": "a5bef31fb777ace604e8efc9f1acc1d4e058a1c8f7cbbe8691ba785eb0866a37",
+        "offer.json": "fd7362a5202b014aeb25915e32adf2d5fa90779102f44652d020ec5571345ddb"
+      }
+    },
+    {
+      "case": "restored",
+      "probe": {
+        "uid": 1001,
+        "open_errno": 0,
+        "open_error": null,
+        "parents_traversable": true,
+        "exists": true
+      },
+      "probe_exit": 0,
+      "native_exit": 0,
+      "code": "ok",
+      "evidence": null,
+      "mutated": null,
+      "unchanged": true,
+      "binary_sha256": "76cfe1dbe980f9cb6f04c0b27e48b12989ecfee826216ec7450aa5b13897a852",
+      "allow_mode": "0o600",
+      "response": {
+        "schema": "zcl.result.v1",
+        "command": "dev.land.verify_offer_receipt",
+        "ok": true,
+        "status": "passed",
+        "request_id": "local-0000000000000001",
+        "elapsed_us": 443,
+        "budget_ms": 250,
+        "elapsed_ms": 0,
+        "budget_exceeded": false,
+        "authority": {
+          "policy": "exempt",
+          "agent_session": "none (local operator)"
+        },
+        "data_schema": "zcl.land_verify_offer_receipt.v1",
+        "data": {
+          "leaf": "dev.land.verify_offer_receipt",
+          "commit": "c1321ffbdb7de472e8d877e29aa92eb817dabc37",
+          "base": "5b19ed8fc798781549254d6aeff544cd3f53046f",
+          "signer": "93018e7cf4269fe5f4dcde0514e364fb87b27fb7967c55ea73ce88cd48c74add",
+          "verdict": "ok",
+          "checks": "bundle_sha256,bundle_verify,head,base"
+        },
+        "next": []
+      },
+      "snapshot_sha256": "b8ea8e41107e23cd2c034625df538bcfa62794681b9b96118d6511e65a44cdab",
+      "input_sha256": {
+        "receipt.json": "a5bef31fb777ace604e8efc9f1acc1d4e058a1c8f7cbbe8691ba785eb0866a37",
+        "offer.json": "fd7362a5202b014aeb25915e32adf2d5fa90779102f44652d020ec5571345ddb"
+      }
+    }
+  ]
+}
