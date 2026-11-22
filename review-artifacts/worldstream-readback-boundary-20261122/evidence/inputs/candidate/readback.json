@@ -1,0 +1,15 @@
+{
+  "source": "offline Git controller observation; case resume; receiver receiver.git",
+  "reader": "local fixture controller",
+  "observed_utc": "2026-11-22T11:03:58.597711+00:00",
+  "command": [
+    "git",
+    "ls-remote",
+    "--refs",
+    "./receiver.git",
+    "refs/heads/main"
+  ],
+  "exit": 0,
+  "stdout": "5b19ed8fc798781549254d6aeff544cd3f53046f\trefs/heads/main\n",
+  "stderr": ""
+}

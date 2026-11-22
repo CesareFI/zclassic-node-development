@@ -1,0 +1,283 @@
+{
+  "operation": "os.open(name, O_RDONLY | O_NONBLOCK); os.read(fd, 32) on success",
+  "result_encoding": "0 means open and read succeeded; -1 means an OSError was raised; the actual descriptor number is immaterial.",
+  "same_uid_and_cwd_control": [
+    {
+      "target": "case-relative",
+      "result": 0,
+      "bytes_read": 5
+    },
+    {
+      "target": "case-absolute",
+      "result": 0,
+      "bytes_read": 5
+    },
+    {
+      "target": "case-linked",
+      "result": 0,
+      "bytes_read": 5
+    },
+    {
+      "target": "receiver-direct",
+      "result": 0,
+      "bytes_read": 9
+    },
+    {
+      "target": "receiver-relative",
+      "result": 0,
+      "bytes_read": 9
+    },
+    {
+      "target": "receiver-linked",
+      "result": 0,
+      "bytes_read": 9
+    },
+    {
+      "target": "controller-direct",
+      "result": 0,
+      "bytes_read": 11
+    },
+    {
+      "target": "controller-relative",
+      "result": 0,
+      "bytes_read": 11
+    },
+    {
+      "target": "controller-linked",
+      "result": 0,
+      "bytes_read": 11
+    },
+    {
+      "target": "other-case-direct",
+      "result": 0,
+      "bytes_read": 5
+    },
+    {
+      "target": "other-case-relative",
+      "result": 0,
+      "bytes_read": 5
+    },
+    {
+      "target": "other-case-linked",
+      "result": 0,
+      "bytes_read": 5
+    },
+    {
+      "target": "recorder-relative",
+      "result": -1,
+      "errno": 13,
+      "symbol": "EACCES",
+      "error": "Permission denied"
+    },
+    {
+      "target": "recorder-linked",
+      "result": -1,
+      "errno": 13,
+      "symbol": "EACCES",
+      "error": "Permission denied"
+    }
+  ],
+  "named_profile": [
+    {
+      "target": "case-relative",
+      "result": 0,
+      "bytes_read": 5
+    },
+    {
+      "target": "case-absolute",
+      "result": 0,
+      "bytes_read": 5
+    },
+    {
+      "target": "case-linked",
+      "result": 0,
+      "bytes_read": 5
+    },
+    {
+      "target": "receiver-direct",
+      "result": -1,
+      "errno": 2,
+      "symbol": "ENOENT",
+      "error": "No such file or directory"
+    },
+    {
+      "target": "receiver-relative",
+      "result": -1,
+      "errno": 2,
+      "symbol": "ENOENT",
+      "error": "No such file or directory"
+    },
+    {
+      "target": "receiver-linked",
+      "result": -1,
+      "errno": 2,
+      "symbol": "ENOENT",
+      "error": "No such file or directory"
+    },
+    {
+      "target": "controller-direct",
+      "result": -1,
+      "errno": 2,
+      "symbol": "ENOENT",
+      "error": "No such file or directory"
+    },
+    {
+      "target": "controller-relative",
+      "result": -1,
+      "errno": 2,
+      "symbol": "ENOENT",
+      "error": "No such file or directory"
+    },
+    {
+      "target": "controller-linked",
+      "result": -1,
+      "errno": 2,
+      "symbol": "ENOENT",
+      "error": "No such file or directory"
+    },
+    {
+      "target": "other-case-direct",
+      "result": -1,
+      "errno": 2,
+      "symbol": "ENOENT",
+      "error": "No such file or directory"
+    },
+    {
+      "target": "other-case-relative",
+      "result": -1,
+      "errno": 2,
+      "symbol": "ENOENT",
+      "error": "No such file or directory"
+    },
+    {
+      "target": "other-case-linked",
+      "result": -1,
+      "errno": 2,
+      "symbol": "ENOENT",
+      "error": "No such file or directory"
+    },
+    {
+      "target": "recorder-relative",
+      "result": -1,
+      "errno": 2,
+      "symbol": "ENOENT",
+      "error": "No such file or directory"
+    },
+    {
+      "target": "recorder-linked",
+      "result": -1,
+      "errno": 2,
+      "symbol": "ENOENT",
+      "error": "No such file or directory"
+    }
+  ],
+  "normal_executor": [
+    {
+      "target": "case-relative",
+      "result": 0,
+      "bytes_read": 5
+    },
+    {
+      "target": "case-absolute",
+      "result": 0,
+      "bytes_read": 5
+    },
+    {
+      "target": "case-linked",
+      "result": 0,
+      "bytes_read": 5
+    },
+    {
+      "target": "receiver-direct",
+      "result": -1,
+      "errno": 2,
+      "symbol": "ENOENT",
+      "error": "No such file or directory"
+    },
+    {
+      "target": "receiver-relative",
+      "result": -1,
+      "errno": 2,
+      "symbol": "ENOENT",
+      "error": "No such file or directory"
+    },
+    {
+      "target": "receiver-linked",
+      "result": -1,
+      "errno": 2,
+      "symbol": "ENOENT",
+      "error": "No such file or directory"
+    },
+    {
+      "target": "controller-direct",
+      "result": -1,
+      "errno": 2,
+      "symbol": "ENOENT",
+      "error": "No such file or directory"
+    },
+    {
+      "target": "controller-relative",
+      "result": -1,
+      "errno": 2,
+      "symbol": "ENOENT",
+      "error": "No such file or directory"
+    },
+    {
+      "target": "controller-linked",
+      "result": -1,
+      "errno": 2,
+      "symbol": "ENOENT",
+      "error": "No such file or directory"
+    },
+    {
+      "target": "other-case-direct",
+      "result": -1,
+      "errno": 2,
+      "symbol": "ENOENT",
+      "error": "No such file or directory"
+    },
+    {
+      "target": "other-case-relative",
+      "result": -1,
+      "errno": 2,
+      "symbol": "ENOENT",
+      "error": "No such file or directory"
+    },
+    {
+      "target": "other-case-linked",
+      "result": -1,
+      "errno": 2,
+      "symbol": "ENOENT",
+      "error": "No such file or directory"
+    },
+    {
+      "target": "recorder-relative",
+      "result": -1,
+      "errno": 2,
+      "symbol": "ENOENT",
+      "error": "No such file or directory"
+    },
+    {
+      "target": "recorder-linked",
+      "result": -1,
+      "errno": 2,
+      "symbol": "ENOENT",
+      "error": "No such file or directory"
+    }
+  ],
+  "normal_command": "/bin/bash -c '/usr/bin/python3 -I ./probe.py'",
+  "normal_process_exit": 0,
+  "retained_recorder": {
+    "errors": [
+      "[Errno 13] Permission denied: '.wire-in'",
+      "[Errno 13] Permission denied: '.wire-out'"
+    ],
+    "outer_exit": 0,
+    "outer_exit_note": "The attempted opens failed inside two reader threads; the enclosing process returned zero.",
+    "raw_events_sha256": "5be2932260a313f2ac0b7716fc10198c38635443b38e0735e611c72cb24a83fc",
+    "owner": "controller",
+    "mode": "0620"
+  },
+  "retained_case_probe": "readback readable, receiver HEAD readable, sender checkout config readable: True False False",
+  "standalone_process_exit": 0
+}

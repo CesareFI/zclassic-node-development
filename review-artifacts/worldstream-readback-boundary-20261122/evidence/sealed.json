@@ -1,0 +1,41 @@
+{
+  "order": [
+    "positive",
+    "receiver",
+    "history",
+    "case",
+    "comment",
+    "candidate"
+  ],
+  "workflow": "e8e137fd1d42e2b8163c6fbbc6eac518d93a8dc0",
+  "task_sha256": "fd4b0c4b26e57d1ce343db620ff3339e8dc9bcc67a8b51660bb1574606537603",
+  "configuration_sha256": "df5200ac1bd7613892ffc45364cfc94fd144f78c0201cccc0ac6a379148f89fd",
+  "expectations_sha256": "8cdea50efe7e661d81e1b5b3b3a581c5545b61ef446f4bb3042050de210c33de",
+  "created": "2026-11-22T11:03:58.601399+00:00",
+  "inputs": {
+    "positive": {
+      "checkpoint.txt": "f50353aa9e62aab10ebb2d73de2611bf5150719d2e45ecd07c084982955b9712",
+      "readback.json": "0d2a393fdda65d245fec81ba82ac430606411a4036f512a80c65a3e431aa7953"
+    },
+    "history": {
+      "checkpoint.txt": "8d66549264e03b2e53d73e9a2758a3ff0450c0b8cad186abac81d16e66657540",
+      "readback.json": "e9120e2b32c432aca5e0e9dcae470d255e29c67e58e6362f38dbbdeac5433750"
+    },
+    "case": {
+      "checkpoint.txt": "f50353aa9e62aab10ebb2d73de2611bf5150719d2e45ecd07c084982955b9712",
+      "readback.json": "3363d3df041be9cd9f41a98d347968f8e7dc12646ae5fe74b8ee4bad66087d3e"
+    },
+    "receiver": {
+      "checkpoint.txt": "f50353aa9e62aab10ebb2d73de2611bf5150719d2e45ecd07c084982955b9712",
+      "readback.json": "911e0551517633af9c38da213b26878bd04ddec683bf9f8dc3883762d5d3f46b"
+    },
+    "candidate": {
+      "checkpoint.txt": "f50353aa9e62aab10ebb2d73de2611bf5150719d2e45ecd07c084982955b9712",
+      "readback.json": "360c39dc2850a6528dd566d86795e7567a141445307d8ea30cff6fc128e0a6bb"
+    },
+    "comment": {
+      "checkpoint.txt": "d149d0819ce5b7e752bb7fab587cf304f58c2626e9036aca73b2469edc24f290",
+      "readback.json": "0d2a393fdda65d245fec81ba82ac430606411a4036f512a80c65a3e431aa7953"
+    }
+  }
+}

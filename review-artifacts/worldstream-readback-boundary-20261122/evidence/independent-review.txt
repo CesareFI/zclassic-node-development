@@ -1,0 +1,9 @@
+Review target 66ce69863ccc601a59eb08174e424d3a2f4e1fe6
+Base e8e137fd1d42e2b8163c6fbbc6eac518d93a8dc0
+Reviewer inventory_review, independent static review. No tests launched by the reviewer.
+Initial review identified cross-case attribution, synthetic-ref landing terminology, and the need for post-repair evidence. It confirmed scoped negative access results and the four native signer outcomes, including the initial flag parsing failures.
+
+Final verdict on the exact workflow:
+"The six post-repair synthetic trials support a pass for workflow commit 66ce69863ccc601a59eb08174e424d3a2f4e1fe6. Their answers distinguish matching from mismatched observations, delivery from acceptance and landing, and controller evidence from local verification. All four requested local checks succeeded in each trial; the recorded commands show no parent-path or send attempts.
+
+The event-stream hashes and byte counts and the final-answer byte counts match the run records and public measurements. The measurements file is working-tree evidence, not part of the workflow commit. These are bounded synthetic spot checks, not a universal behavior claim; I did not launch tests."

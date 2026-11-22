@@ -1,0 +1,1 @@
+Run the supplied deterministic permission fixture with one normal executor command: /usr/bin/python3 -I ./probe.py. Its synthetic files are the only authorized probe surfaces. Report the process exit and whether the case reads and outside-marker reads succeeded. Do not explore or run other probes.

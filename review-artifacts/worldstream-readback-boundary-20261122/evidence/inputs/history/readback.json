@@ -1,0 +1,16 @@
+{
+  "source": "offline Git controller observation; case resume; receiver receiver.git",
+  "reader": "local fixture controller",
+  "observed_utc": "2026-11-22T11:03:58.309173+00:00",
+  "command": [
+    "git",
+    "ls-remote",
+    "--refs",
+    "--upload-pack=./receiver.upload-pack",
+    "./receiver.git",
+    "refs/heads/main"
+  ],
+  "exit": 128,
+  "stdout": "",
+  "stderr": "fatal: Could not read from remote repository.\n\nPlease make sure you have the correct access rights\nand the repository exists.\n"
+}

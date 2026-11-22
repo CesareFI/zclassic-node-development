@@ -1,0 +1,44 @@
+{
+  "previous_final_launcher": {
+    "bytes": 1967,
+    "sha256": "efc138880f440b7fd5116de940aefbc4f67c0b997df3b00400e7f09a52a9782e"
+  },
+  "previous_surface_probe": {
+    "bytes": 93,
+    "sha256": "cc75f38d26b1a57d01c38fb17b883c1c1dc22be4b085907ac69237b742c636cf"
+  },
+  "normalized_args_match": true,
+  "initial_workflow": "e8e137fd1d42e2b8163c6fbbc6eac518d93a8dc0",
+  "repaired_workflow": "66ce69863ccc601a59eb08174e424d3a2f4e1fe6",
+  "repaired_instructions": {
+    "bytes": 1939,
+    "sha256": "11068aec591f5244f3ae2d47b659548870ba6e9d9cd3e022ac11fd23a1ca9e89"
+  },
+  "configuration": {
+    "bytes": 1118,
+    "sha256": "df5200ac1bd7613892ffc45364cfc94fd144f78c0201cccc0ac6a379148f89fd"
+  },
+  "launcher": "9a820c17865fa825d04db416818679a9d63bd72e50835c396f496e5684626c9c",
+  "native_verifier_source": "cb8d945680161307d952d8398bdb5f55d2ce221d",
+  "native_verifier": {
+    "bytes": 71418728,
+    "sha256": "d29f55be660e4f7f9de9c1879c68de7808e71b6ced5f0f2e85ceae25495548b8"
+  },
+  "receiver_before": {
+    "invocations": 1,
+    "post_receive_markers": 1
+  },
+  "receiver_after": {
+    "invocations": 1,
+    "post_receive_markers": 1
+  },
+  "case_staging_smoke": {
+    "variant": "case",
+    "exit": 0,
+    "bundle_verified": true
+  },
+  "fixture_setup_history": [
+    "The first checkpoint assembly stopped before participant launch because the verifier result omits a digest output field. It was rebuilt from the returned fields and matching offer.",
+    "An earlier trust-state setup returned signer_key_unreadable for all four cases. Both phases are retained in signer/outcomes.json."
+  ]
+}

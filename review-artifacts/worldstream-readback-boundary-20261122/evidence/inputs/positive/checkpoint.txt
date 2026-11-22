@@ -1,0 +1,5 @@
+Controller's retained transport check
+Command: z23-dev dev land verify_offer_receipt --receipt=transport.receipt.json --offer=offer.json
+Fixture source: previously registered offer-receipt fixture, using the pinned synthetic signer allowlist.
+Exit: 0
+{"base": "5b19ed8fc798781549254d6aeff544cd3f53046f", "checks": "bundle_sha256,bundle_verify,head,base", "commit": "c1321ffbdb7de472e8d877e29aa92eb817dabc37", "signer": "93018e7cf4269fe5f4dcde0514e364fb87b27fb7967c55ea73ce88cd48c74add", "verdict": "ok"}
