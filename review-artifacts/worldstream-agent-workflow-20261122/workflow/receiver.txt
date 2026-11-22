@@ -1,1 +1,3 @@
 Resume the single delivery described by the local offer. The fixture controller supplies the receiver's Git wire observation in readback.json. It includes the original command, observer, observation time, process status and output. Check its source and the offer against the supplied bundle and base repository using Git. Use checkpoint.txt when present. Return the candidate, supported disposition, any unresolved dependency and the evidence for your decision.
+
+All authorized case files are in the current directory. Check ./checkpoint.txt only; absence means this is the first observation. Use the named files and base.git directly. The parent directory, other cases, registry tooling and receiver administration are outside this task.
