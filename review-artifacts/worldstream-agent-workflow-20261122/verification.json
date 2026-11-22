@@ -1,0 +1,117 @@
+{
+  "workflow_commit": "46b6b25408d29c787474b62ad1cfafa188c6a738",
+  "workflow_parent": "20f7427a7742dabd9ab0e20c07740f4f0964c89e",
+  "workflow_files": {
+    "receiver.txt": "ab6d0eceb6764a233450a9dce579f21c9de05d85831884fecd299d35b9919b6e",
+    "registry.txt": "d6f23b84ba07f1b20b45d16c54f7008fead64ede16110be72bd856269be5adf7",
+    "surfaces.json": "57c5c0ed17e104541ccfbe9e41d54963f1463cc920e024d0b7a471652964d886"
+  },
+  "adapter": {
+    "source": "cb8d945680161307d952d8398bdb5f55d2ce221d",
+    "exec_sha256": "d29f55be660e4f7f9de9c1879c68de7808e71b6ced5f0f2e85ceae25495548b8",
+    "argv": [
+      "z23-dev",
+      "mcp",
+      "serve"
+    ],
+    "checkout": null,
+    "datadir": null,
+    "opt_in_flags": []
+  },
+  "worker": {
+    "launcher": "Codex CLI 0.161.0",
+    "launcher_sha256": "9a820c17865fa825d04db416818679a9d63bd72e50835c396f496e5684626c9c",
+    "model": "gpt-6.1-terra",
+    "reasoning_effort": "low",
+    "contexts": "fresh ephemeral contexts, serialized on the existing worker lock; a resumed task receives the previous answer as its checkpoint",
+    "approval": "never",
+    "egress": "disabled; benign socket creation returned EPERM",
+    "case_access": "read-only",
+    "publisher": "none in the model environment",
+    "opt_out_tools": [
+      "external apps",
+      "web search",
+      "plugins",
+      "multi-agent"
+    ]
+  },
+  "owner_read": {
+    "earlier_default_binary_and_hash_match": true,
+    "same_session_refusal_and_followup_ids": [
+      205,
+      207
+    ]
+  },
+  "mock_outbox": {
+    "model_attempts": 0,
+    "probe_request": "open for write without truncation; no write",
+    "probe_errno": 13,
+    "unchanged": true,
+    "sha256": "d8f48aec5f357df01de707dee1d405c6163fa35c73b3541aec724dcde04103b3"
+  },
+  "receiver": {
+    "source_fixture_revision": "512b94ff0c1b27c5586f55565f8e7a08b9e0fa1e",
+    "source_fixture": "tests/harness/src/test_dev_land_adopt_push.c",
+    "receipt_fixture": "tests/harness/src/test_dev_land_remote.c",
+    "transaction_on_synthetic_receiver": {
+      "candidate": "c1321ffbdb7de472e8d877e29aa92eb817dabc37",
+      "base": "5b19ed8fc798781549254d6aeff544cd3f53046f",
+      "receiver_tip": "c1321ffbdb7de472e8d877e29aa92eb817dabc37",
+      "publisher_signal": 9,
+      "publisher_acknowledgements": 0,
+      "receive_invocations": 1,
+      "receive_markers": 1,
+      "observation_rc": 128,
+      "observation_stdout_bytes": 0,
+      "observation_stderr": "fatal: Could not read from remote repository.\n\nPlease make sure you have the correct access rights\nand the repository exists.\n"
+    },
+    "final_invocations": 1,
+    "final_markers": 1,
+    "final_tip": "c1321ffbdb7de472e8d877e29aa92eb817dabc37",
+    "final_probe_both_phases": {
+      "case_readback_visible": true,
+      "receiver_HEAD_visible": false,
+      "sender_admin_config_visible": false,
+      "shared_registry_tool_visible": false
+    }
+  },
+  "registered": [
+    {
+      "source": "cb8d945680161307d952d8398bdb5f55d2ce221d",
+      "groups": [
+        "test_mcp_serve"
+      ],
+      "command": "make -j4 t-fast-exact ONLY=test_mcp_serve T_FAST_EXACT_ARGS=--no-cache ZCL_TEST_WERROR=1",
+      "exit": 0,
+      "verdict": [
+        "SUITE VERDICT mode=cold groups_total=1620 groups_ran=1 groups_cached=0 groups_gated=1619 groups_failed=0 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=1780a13b422a",
+        "ALL TESTS PASSED — 0/1 groups failed, 0 skipped (1.9s wall, 4 workers) [--exact filtered]"
+      ],
+      "private_log_sha256": "34d19939a2b4a69e65bd657823e6e25aba4f40d800141653c764dcc47b3ff908"
+    },
+    {
+      "source": "512b94ff0c1b27c5586f55565f8e7a08b9e0fa1e",
+      "groups": [
+        "test_dev_land_remote",
+        "test_dev_land_shard_03"
+      ],
+      "command": "make -j4 t-fast-exact ONLY=test_dev_land_remote,test_dev_land_shard_03 T_FAST_EXACT_ARGS=--no-cache ZCL_TEST_WERROR=1",
+      "exit": 0,
+      "verdict": [
+        "land: publisher death after remote mutation resumes without another push... OK",
+        "land: final-attempt lost acknowledgement reconciles without duplicate push... OK",
+        "test_dev_land: ran 58 of 191 scenarios (one shard), 0 failed",
+        "SUITE VERDICT mode=cold groups_total=1620 groups_ran=2 groups_cached=0 groups_gated=1618 groups_failed=0 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=1780a13b422a",
+        "ALL TESTS PASSED — 0/2 groups failed, 0 skipped (98.9s wall, 4 workers) [--exact filtered]"
+      ],
+      "private_log_sha256": "c69d16160d3fe9e11e93b60d770e04870a15203deb1f94214463193cf3ba732f"
+    }
+  ],
+  "independent_review": {
+    "reviewer": "independent non-author GPT-6.1-Terra",
+    "commit": "46b6b25408d29c787474b62ad1cfafa188c6a738",
+    "verdict": "No blocker in the bounded workflow or the observed retests.",
+    "check": "Inspected exact three-file workflow, both phase traces and revised exposure, control RPC stream, registered receipts and single-receive evidence. Static review; reviewer ran no tests.",
+    "caveat": "Both final receiver observations were controller-brokered. The first implementation exercised a direct worker lookup."
+  }
+}
