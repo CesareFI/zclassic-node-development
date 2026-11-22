@@ -1,0 +1,9 @@
+Independent static review by the Worldstream review agent inventory_review.
+Candidate 16ba4ded5f21f42c48f02b08e7b96ca269d0451c
+Parent 0fc3c2d38d98cc4e50d0782d22c8bd51228a7c67
+Tree c90a21dbe8f95e3ff801721469ffce7769993c0b
+
+The reviewer verified the three Git object identities using non-root Git and found no blocking findings. Failed status produces -1. The classifier keeps that lane, including in a disposable pool. The changed review projection now preserves the sentinel, and native_ops_host_gc.c emits a signed JSON integer. The review found no inspected local consumer that requires a nonnegative dirty_count. The regression exercises a corrupt synthetic index and checks that apply retains the untracked file. Existing dirty and eligible controls remain present.
+
+Inspected tools/command/host_gc_sweep.c, tools/command/host_gc_sweep.h, tools/command/native_ops_host_gc.c, tests/harness/src/test_host_gc_branch.c, engine/composition/commands/ops.def and docs/dev/HOST_GC.md.
+Scope was static. The reviewer did not execute tests. The new registered assertion checks the report structure. The independent native CLI qualification in this package also checks the serialized JSON field.

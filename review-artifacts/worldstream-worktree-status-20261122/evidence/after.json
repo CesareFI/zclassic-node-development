@@ -1,0 +1,130 @@
+{
+  "source": "16ba4ded5f21f42c48f02b08e7b96ca269d0451c",
+  "binary_sha256": "ce87085f350ba74f6fb0bd8dc036af55f74b803b0d5a732425fd2f5460e70495",
+  "git_status_exit": 128,
+  "git_status_stderr": "fatal: $CASE/repo/.git/worktrees/held/index: index file smaller than expected",
+  "checks": {
+    "apply=false": {
+      "schema": "zcl.result.v1",
+      "command": "ops.host.gc",
+      "ok": true,
+      "status": "passed",
+      "request_id": "local-0000000000000001",
+      "elapsed_us": 53676,
+      "budget_ms": 5000,
+      "elapsed_ms": 53,
+      "budget_exceeded": false,
+      "authority": {
+        "policy": "exempt",
+        "agent_session": "none (local operator)"
+      },
+      "data_schema": "zcl.host_gc.v1",
+      "data": {
+        "apply": false,
+        "floor_hours": 6,
+        "age_days": 7,
+        "classes": [
+          {
+            "class": "lanes",
+            "path": "$CASE/pool",
+            "repo": "$CASE/repo",
+            "present": true,
+            "disposable": false,
+            "registered": 2,
+            "reapable": 1,
+            "too_young": 0,
+            "in_use": 0,
+            "locked": 0,
+            "need_review": 1,
+            "orphaned": 0,
+            "unique_archived": 0,
+            "branch_kept": 1,
+            "kept_on_failure": 0,
+            "bytes_reclaimable": 4226,
+            "bytes_reclaimed": 0
+          }
+        ],
+        "totals": {
+          "registered": 2,
+          "reapable": 1,
+          "bytes_reclaimable": 4226,
+          "bytes_reclaimed": 0
+        },
+        "refusals": [],
+        "needs_review": [
+          {
+            "path": "$CASE/pool/held",
+            "idle_days": 14,
+            "dirty_count": -1
+          }
+        ],
+        "truncated": false
+      },
+      "next": []
+    },
+    "apply=true": {
+      "schema": "zcl.result.v1",
+      "command": "ops.host.gc",
+      "ok": true,
+      "status": "passed",
+      "request_id": "local-0000000000000001",
+      "elapsed_us": 62819,
+      "budget_ms": 5000,
+      "elapsed_ms": 62,
+      "budget_exceeded": false,
+      "authority": {
+        "policy": "exempt",
+        "agent_session": "none (local operator)"
+      },
+      "data_schema": "zcl.host_gc.v1",
+      "data": {
+        "apply": true,
+        "floor_hours": 6,
+        "age_days": 7,
+        "classes": [
+          {
+            "class": "lanes",
+            "path": "$CASE/pool",
+            "repo": "$CASE/repo",
+            "present": true,
+            "disposable": false,
+            "registered": 2,
+            "reapable": 1,
+            "too_young": 0,
+            "in_use": 0,
+            "locked": 0,
+            "need_review": 1,
+            "orphaned": 0,
+            "unique_archived": 0,
+            "branch_kept": 1,
+            "kept_on_failure": 0,
+            "bytes_reclaimable": 4226,
+            "bytes_reclaimed": 4226
+          }
+        ],
+        "totals": {
+          "registered": 2,
+          "reapable": 1,
+          "bytes_reclaimable": 4226,
+          "bytes_reclaimed": 4226
+        },
+        "refusals": [],
+        "needs_review": [
+          {
+            "path": "$CASE/pool/held",
+            "idle_days": 14,
+            "dirty_count": -1
+          }
+        ],
+        "truncated": false
+      },
+      "next": []
+    }
+  },
+  "held_content_after_both_calls": [
+    "58e35a6cf1f7534d27d5242fffef3d3d6922cb94834d3fc7f3bc71edec654a66  pool/held/notes.txt",
+    "becf1978293db8ed1a66f551d4044f8f09eca3130c6b40f1d0dc35d26a9cb78d  repo/.git/worktrees/held/index"
+  ],
+  "eligible_checkout_removed": true,
+  "eligible_branch": "e2c04fc6f8929f0d0aa5ec49984955b774d51c50 refs/heads/eligible"
+}

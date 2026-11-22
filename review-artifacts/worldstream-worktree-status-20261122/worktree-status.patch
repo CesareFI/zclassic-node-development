@@ -1,0 +1,99 @@
+From 16ba4ded5f21f42c48f02b08e7b96ca269d0451c Mon Sep 17 00:00:00 2001
+From: Worldstream Development <worldstream-dev@users.noreply.github.com>
+Date: Sun, 22 Nov 2026 23:00:19 +0100
+Subject: [PATCH] Report unavailable Git status counts in worktree cleanup
+ reviews
+
+---
+ docs/dev/HOST_GC.md                     |  3 ++-
+ engine/composition/commands/ops.def     |  2 +-
+ tests/harness/src/test_host_gc_branch.c | 18 ++++++++++++++++++
+ tools/command/host_gc_sweep.c           |  2 +-
+ tools/command/host_gc_sweep.h           |  2 +-
+ 5 files changed, 23 insertions(+), 4 deletions(-)
+
+diff --git a/docs/dev/HOST_GC.md b/docs/dev/HOST_GC.md
+index 6159c228f5640f680050ac88194831f11bc0476c..7f404c89b9ce58abbdcfba378d26578b673b480e 100644
+--- a/docs/dev/HOST_GC.md
++++ b/docs/dev/HOST_GC.md
+@@ -156,7 +156,8 @@ unlanded or rebased, after `age_days` idle, pinned under `refs/archive/wt`
+ first. Explicit `roots` replace the defaults and do not add this pool.
+ 
+ A dirty worktree is reported under `needs_review` as `{path, idle_days,
+-dirty_count}`. A worktree is also kept when it is locked, in use by a live
++dirty_count}`. If Git status is unavailable, the worktree is kept and
++`dirty_count` is `-1`. A worktree is also kept when it is locked, in use by a live
+ process, a warm donor, or named by a systemd user unit file
+ (`~/.config/systemd/user/*.service|.timer|.path`; `%h`, `~`, `$HOME` and
+ `${HOME}` are expanded before matching; drop-ins are not read). If the unit
+diff --git a/engine/composition/commands/ops.def b/engine/composition/commands/ops.def
+index 217f991748d2a7e2454776949d74561a127630a5..aea331c4a9313d01f86dd241fff1a48ae125a1ea 100644
+--- a/engine/composition/commands/ops.def
++++ b/engine/composition/commands/ops.def
+@@ -949,7 +949,7 @@ ZCL_COMMAND_READY_COMMAND(
+     "archive ref holds is removed after age_days (default 7; 0 keeps it) and "
+     "only once refs/archive/wt/<name> holds that HEAD (unique_archived, "
+     "kept_on_failure). A dirty worktree is never removed; it is listed in "
+-    "needs_review with idle_days and dirty_count. Counts are "
++    "needs_review with idle_days and dirty_count (-1 when status is unavailable). Counts are "
+     "measured at call time from git's own worktree listing and a single "
+     "/proc pass, never cached. Dry run unless apply=true, and even then git's "
+     "own worktree removal goes first; a directory git unregistered but left "
+diff --git a/tests/harness/src/test_host_gc_branch.c b/tests/harness/src/test_host_gc_branch.c
+index 384b73d511ce60d83d0137d13251ab7ee0c7c892..2a88e0184adbfa171d0bfd3239a73b5c3c31afcb 100644
+--- a/tests/harness/src/test_host_gc_branch.c
++++ b/tests/harness/src/test_host_gc_branch.c
+@@ -396,6 +396,24 @@ static int hgb_apply_tests(const struct hgb_fix *f)
+         ASSERT_STR_EQ(got, f->old_sha);
+         PASS();
+     }
++
++    TEST("host gc branch: failed status keeps the lane and reports its count as unknown") {
++        static const char *const status[] = { "--no-optional-locks", "status",
++            "--porcelain", "--untracked-files=all", NULL };
++        char index[HGB_PATH + 64], note[HGB_PATH + 32];
++        (void)snprintf(index, sizeof(index), "%s/.git/worktrees/lane-dirty/index",
++                       f->repo);
++        (void)snprintf(note, sizeof(note), "%s/notes.txt", f->dirty);
++        ASSERT(hgb_write(index, "bad index\n"));
++        ASSERT(!hgb_git(f->dirty, status));
++        hgb_request(f, &req, HOST_GC_DEFAULT_AGE_DAYS, true);
++        ASSERT(host_gc_run(&req, &report));
++        ASSERT(hgb_exists(note));
++        ASSERT_EQ(report.nreviews, (size_t)1);
++        ASSERT_STR_EQ(report.reviews[0].path, f->dirty);
++        ASSERT_EQ(report.reviews[0].dirty_count, -1);
++        PASS();
++    }
+ _test_next:;
+     return failures;
+ }
+diff --git a/tools/command/host_gc_sweep.c b/tools/command/host_gc_sweep.c
+index 579db314273d891468e072533ad709501ae4bfbc..caf6e31717827b0087b6c1cce05930714e60a3d1 100644
+--- a/tools/command/host_gc_sweep.c
++++ b/tools/command/host_gc_sweep.c
+@@ -1263,7 +1263,7 @@ static void hg_note_review(struct host_gc_report *report,
+     if (!hg_copy(r->path, sizeof(r->path), c->path))
+         return;
+     r->idle_days = idle < 0 ? -1 : (int)(idle / 86400);
+-    r->dirty_count = c->dirty > 0 ? c->dirty : 0;
++    r->dirty_count = c->dirty;
+     report->nreviews++;
+ }
+ 
+diff --git a/tools/command/host_gc_sweep.h b/tools/command/host_gc_sweep.h
+index 73f12f30e000ffae9be18ae6057ab3c6417b4d5f..2184b34bb6fd633d98f06dcf5f774010c292e003 100644
+--- a/tools/command/host_gc_sweep.h
++++ b/tools/command/host_gc_sweep.h
+@@ -151,7 +151,7 @@ struct host_gc_refusal {
+ struct host_gc_review {
+     char path[HOST_GC_PATH_CAP];
+     int idle_days;                    /* -1 unknown */
+-    int dirty_count;                  /* lines of git status */
++    int dirty_count;                  /* status lines, or -1 when unavailable */
+ };
+ 
+ struct host_gc_request {
+-- 
+2.43.0
+

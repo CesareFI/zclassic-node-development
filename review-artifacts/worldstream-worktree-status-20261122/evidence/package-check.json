@@ -1,0 +1,65 @@
+{
+  "sender_precheck": {
+    "precheck_ran": [
+      "check-file-size-ceiling",
+      "check-cyclomatic-complexity",
+      "check-arm-symbol-single",
+      "check-kpi-floor",
+      "check-describe-budget",
+      "check-hardening-ratchet",
+      "check-no-new-bash",
+      "check-capability-closure"
+    ],
+    "precheck_skipped": [
+      "check-core-seal"
+    ],
+    "precheck_unproven": "proof-history: land state unavailable",
+    "precheck_timings": [
+      {
+        "gate": "check-file-size-ceiling",
+        "elapsed_ms": 105
+      },
+      {
+        "gate": "check-cyclomatic-complexity",
+        "elapsed_ms": 1433
+      },
+      {
+        "gate": "check-arm-symbol-single",
+        "elapsed_ms": 831
+      },
+      {
+        "gate": "check-kpi-floor",
+        "elapsed_ms": 500
+      },
+      {
+        "gate": "check-describe-budget",
+        "elapsed_ms": 2826
+      },
+      {
+        "gate": "check-hardening-ratchet",
+        "elapsed_ms": 1180
+      },
+      {
+        "gate": "check-no-new-bash",
+        "elapsed_ms": 118
+      },
+      {
+        "gate": "check-capability-closure",
+        "elapsed_ms": 5405
+      }
+    ]
+  },
+  "checker": {
+    "leaf": "dev.land.check_offer",
+    "commit": "16ba4ded5f21f42c48f02b08e7b96ca269d0451c",
+    "base": "0fc3c2d38d98cc4e50d0782d22c8bd51228a7c67",
+    "bundle_sha256": "b6b73df598b32b013be04746925ff623ebdacff02daa8f0f254fa040f06597b5",
+    "verdict": "ok"
+  },
+  "offer_unchanged": true,
+  "initial_receiver_checkout": "0fc3c2d38d98cc4e50d0782d22c8bd51228a7c67",
+  "initially_missing_candidate": true,
+  "imported_tree": "c90a21dbe8f95e3ff801721469ffce7769993c0b",
+  "imported_commit": "16ba4ded5f21f42c48f02b08e7b96ca269d0451c",
+  "patch_replayed_tree": "c90a21dbe8f95e3ff801721469ffce7769993c0b"
+}

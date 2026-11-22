@@ -1,0 +1,29 @@
+{
+  "base": "0fc3c2d38d98cc4e50d0782d22c8bd51228a7c67",
+  "candidate": "16ba4ded5f21f42c48f02b08e7b96ca269d0451c",
+  "tree": "c90a21dbe8f95e3ff801721469ffce7769993c0b",
+  "files": [
+    "docs/dev/HOST_GC.md",
+    "engine/composition/commands/ops.def",
+    "tests/harness/src/test_host_gc_branch.c",
+    "tools/command/host_gc_sweep.c",
+    "tools/command/host_gc_sweep.h"
+  ],
+  "artifacts": [
+    {
+      "name": "worktree-status.bundle",
+      "bytes": 1976,
+      "sha256": "b6b73df598b32b013be04746925ff623ebdacff02daa8f0f254fa040f06597b5"
+    },
+    {
+      "name": "worktree-status.patch",
+      "bytes": 4936,
+      "sha256": "e2d3b6e75d234e94bb13d4a5e01f36d2749c5772881c91b434142b36d305def3"
+    },
+    {
+      "name": "worktree-status-evidence.tar.gz",
+      "bytes": 7405,
+      "sha256": "99b22fe09abb5040fd4a6ecf732016d122d6653ec32886dee5470bf8ba33f424"
+    }
+  ]
+}

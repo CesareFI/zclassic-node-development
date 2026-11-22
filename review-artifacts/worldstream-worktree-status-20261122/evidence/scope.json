@@ -1,0 +1,18 @@
+{
+  "base": "0fc3c2d38d98cc4e50d0782d22c8bd51228a7c67",
+  "checkpoint": {
+    "author": "Rhett Creighton",
+    "committer": "Rhett Creighton",
+    "html_url": "https://github.com/z23c/z23/commit/3ed9d6ada9eeb83879e82ae2e65ec5322cc5dc27",
+    "sha": "3ed9d6ada9eeb83879e82ae2e65ec5322cc5dc27"
+  },
+  "disposition": "Ancestor of selected upstream main. No separate private disposition asserted.",
+  "follow_on": "Scoped local no-card contribution for an unavailable dirty_count in the cleanup review row.",
+  "claimed_paths": [
+    "tools/command/host_gc_sweep.c",
+    "tools/command/host_gc_sweep.h",
+    "tests/harness/src/test_host_gc_branch.c",
+    "docs/dev/HOST_GC.md",
+    "engine/composition/commands/ops.def"
+  ]
+}

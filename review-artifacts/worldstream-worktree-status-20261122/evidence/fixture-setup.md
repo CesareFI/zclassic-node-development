@@ -1,0 +1,5 @@
+# Replaying the synthetic cleanup check
+
+Use a non-root worker with Git, jq, GNU touch and coreutils. Create a new empty directory in its approved disposable workspace for each version. The archive includes the byte-exact fixture as `fixture-as-executed.sh`. The displayed script trims a trailing blank line. Copy the selected built executable there as `z23-dev` and the supplied `fixture.sh` as `probe.sh`. Create an empty marker named `synthetic-case`. Before entering the private process namespace, record `readlink /proc/self/ns/pid` in `parent-pidns`. Start the existing offline launcher in that directory, with write access limited to the fixture and a private process namespace, and execute `/bin/sh ./probe.sh`.
+
+The script refuses an existing repo or pool. It uses an explicit pool, a synthetic HOME and disposable branches. Inspect `git-status.exit`, `git-status.err`, `gc-false.json` and `gc-true.json`. The two JSON files capture preview and apply. The file checks and surviving branch comparison must pass on both versions.

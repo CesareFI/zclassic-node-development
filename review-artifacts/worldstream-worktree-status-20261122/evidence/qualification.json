@@ -1,0 +1,251 @@
+{
+  "commands": {
+    "registered": "make -s t-list",
+    "candidate-build": "make -j4 dev-bin",
+    "focused": "make -j4 t-fast-exact ONLY=test_host_gc,test_host_gc_branch",
+    "preflight": "make -j4 lint-preflight",
+    "impact": "make -j4 agent-verify ONLY=@changed AGENT_VERIFY_BASE=0fc3c2d38d98cc4e50d0782d22c8bd51228a7c67"
+  },
+  "exit_codes": {
+    "registered": 0,
+    "candidate-build": 0,
+    "focused": 0,
+    "preflight": 0,
+    "impact": 2
+  },
+  "focused": {
+    "literal": "SUITE VERDICT mode=cold groups_total=1625 groups_ran=2 groups_cached=0 groups_gated=1623 groups_failed=0 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=303745a0b96d",
+    "groups_ran": 2,
+    "groups_cached": 0,
+    "groups_gated": 1623,
+    "groups_failed": 0,
+    "self_skips": 0,
+    "env_unobserved": 0,
+    "load_flaky": 0
+  },
+  "impact": {
+    "literal": "SUITE VERDICT mode=cold groups_total=1625 groups_ran=1609 groups_cached=0 groups_gated=16 groups_failed=8 self_skips=31 env_unobserved=8 load_flaky=0 toolkey=11c1b6ed24a6",
+    "groups_ran": 1609,
+    "groups_cached": 0,
+    "groups_gated": 16,
+    "groups_failed": 8,
+    "self_skips": 31,
+    "env_unobserved": 8,
+    "load_flaky": 0,
+    "failed_groups": {
+      "test_wallet_spend_rule": "1",
+      "test_wallet_shield_address": "1",
+      "test_z23kernel_build": "1",
+      "test_retrieval_profile_sweep": "1",
+      "test_retrieval_prefix_sweep": "1",
+      "test_boot_phase": "1",
+      "test_mesh_terminal_worker": "1",
+      "test_mesh_terminal_hub": "1"
+    },
+    "self_skip_groups": {
+      "test_sapling": "4",
+      "test_sha3_256_x4": "1",
+      "test_onion_bootstrap": "1",
+      "test_cold_start_sync": "1",
+      "test_kill9_recovery": "1",
+      "test_shielded_payment_gate": "1",
+      "test_store_e2e_gate": "1",
+      "test_store_e2e_shielded": "1",
+      "test_fleet_board": "1",
+      "test_wallet_destruction_drill": "1",
+      "test_phgr13_fix": "1",
+      "test_groth16_selfverify": "1",
+      "test_native_spend_proof": "1",
+      "test_snark_kat": "1",
+      "test_sapling_prover_rng_determinism": "1",
+      "test_chain_advance_atomicity": "1",
+      "test_os_sandbox": "1",
+      "test_simnet_wallet_reorg": "1",
+      "test_event_log_kill9": "1",
+      "test_event_log_benchmark": "1",
+      "test_golden_dev_cycle": "1",
+      "test_proof_validate_stage": "1",
+      "test_pv_lookahead": "1",
+      "test_reducer_block_ingest_gate": "1",
+      "test_onion_bootstrap_slice": "1",
+      "test_shielded_receive_slice": "1",
+      "test_shielded_receive_persist": "1",
+      "test_reducer_forward_progress_gate": "1",
+      "test_parity_slice": "1",
+      "test_shielded_spend_slice": "1",
+      "test_params_fetch": "2"
+    },
+    "unobserved_groups": {
+      "test_device_host_runtime": "2",
+      "test_simnet_shielded_wallet_e2e": "1",
+      "test_wallet_shield_address": "1",
+      "test_simnet_sapling_shielded_send": "1",
+      "test_simnet_zmsg_onchain": "1",
+      "test_wallet_e2e_regtest": "1",
+      "test_simnet_wallet_diversified_send": "1",
+      "test_sapling_proving_pair": "1"
+    },
+    "isolated_retries": [
+      [
+        "test_device_host_runtime",
+        "printed UNOBSERVED"
+      ],
+      [
+        "test_simnet_shielded_wallet_e2e",
+        "printed UNOBSERVED"
+      ],
+      [
+        "test_wallet_spend_rule",
+        "FAILED"
+      ],
+      [
+        "test_wallet_shield_address",
+        "FAILED"
+      ],
+      [
+        "test_z23kernel_build",
+        "FAILED"
+      ],
+      [
+        "test_retrieval_profile_sweep",
+        "FAILED"
+      ],
+      [
+        "test_retrieval_prefix_sweep",
+        "FAILED"
+      ],
+      [
+        "test_boot_phase",
+        "FAILED"
+      ],
+      [
+        "test_mesh_terminal_worker",
+        "FAILED"
+      ],
+      [
+        "test_mesh_terminal_hub",
+        "FAILED"
+      ],
+      [
+        "test_simnet_sapling_shielded_send",
+        "printed UNOBSERVED"
+      ],
+      [
+        "test_simnet_zmsg_onchain",
+        "printed UNOBSERVED"
+      ],
+      [
+        "test_wallet_e2e_regtest",
+        "printed UNOBSERVED"
+      ],
+      [
+        "test_simnet_wallet_diversified_send",
+        "printed UNOBSERVED"
+      ],
+      [
+        "test_sapling_proving_pair",
+        "printed UNOBSERVED"
+      ]
+    ]
+  },
+  "impact_receipt": [
+    "agent-verify: check-file-size-ceiling rc=0 secs=7",
+    "agent-verify: check-cyclomatic-complexity rc=0 secs=8",
+    "agent-verify: dev-proof-producer rc=0 secs=7",
+    "agent-verify: selection universal groups=1609 reason=closure-universal detail=capacity_origin=include capacity_cause=group-cap capacity_input=engine/composition/commands/ops.def capacity_node=known:tests/harness/src/test_workpool.c base=0fc3c2d38d98cc4e50d0782d22c8bd51228a7c67 select_secs=24",
+    "agent-verify: selection is universal: tests run if capability closure passes",
+    "agent-verify: check-capability-closure rc=0 secs=23",
+    "agent-verify: t-fast-exact rc=2 secs=4053",
+    "SUITE VERDICT mode=cold groups_total=1625 groups_ran=1609 groups_cached=0 groups_gated=16 groups_failed=8 self_skips=31 env_unobserved=8 load_flaky=0 toolkey=11c1b6ed24a6",
+    "agent-verify: proof-lint-prebuild rc=0 secs=67",
+    "agent-verify: lint-fast rc=0 secs=271",
+    "agent-verify: total secs=4462",
+    "agent-verify: FAILED (t-fast-exact)"
+  ],
+  "preflight": "lint-preflight: OK",
+  "recorded_focused_assertions": [
+    "host gc: the fixture repository and its three generations build... OK",
+    "host gc: native cwd/fd observations and incomplete inventory retain work... OK",
+    "host gc: command accepts typed roots and preserves dry-run class/path... OK",
+    "host gc: command refuses malformed roots, fields and pool counts... OK",
+    "host gc: dry run labels in_use, locked and reapable, and moves nothing... OK",
+    "host gc: a stale pool directory does not disable the whole pool... OK",
+    "host gc: the age floor keeps everything when nothing is old enough... OK",
+    "host gc: apply reclaims the orphan and nothing else... OK",
+    "host gc: a generation git leaves behind is finished, not abandoned... OK",
+    "host gc: a generation nothing can remove is refused by name... OK",
+    "host gc: the newest complete generation per identity is kept as the warm donor... OK",
+    "host gc: every protected leaf is refused by name, never swept... OK",
+    "host gc: a directory holding block files is refused by contents... OK",
+    "host gc clean-only: the fixture repository and its generations build... OK",
+    "host gc clean-only: a dry run lists dirty work and removes nothing... OK",
+    "host gc clean-only: age_days 0 keeps a unique HEAD... OK",
+    "host gc clean-only: apply removes clean trees, pins the unique HEAD, keeps dirty ones... OK",
+    "host gc clean-only: a failed pin keeps the unique worktree... OK",
+    "host gc disposable: the gate-copy fixture builds... OK",
+    "host gc disposable: a dry run classifies idle dirty copies and removes nothing... OK",
+    "host gc disposable: an unreadable process of another non-root uid is ignored, ours or root's is not... OK",
+    "host gc disposable: apply reaps idle dirty copies with their siblings, pinning first... OK",
+    "host gc: inherited Git selectors cannot redirect repository or dirty status... OK",
+    "host gc branch: the fixture repository and its lanes build... OK",
+    "host gc branch: a dry run finds the one clean idle lane and moves nothing... OK",
+    "host gc branch: age_days 0 keeps every lane on a branch... OK",
+    "host gc branch: a disposable pool keeps a copy that sits on a branch... OK",
+    "host gc branch: apply removes the clean idle lane and leaves its branch... OK",
+    "host gc branch: the removed lane comes back from its branch... OK",
+    "host gc branch: failed status keeps the lane and reports its count as unknown... OK",
+    "host gc branch: an unreadable process does not hold an idle branch lane... OK",
+    "host gc branch: a readable process inside the lane holds it beside an unreadable one... OK",
+    "host gc branch: no process listing at all keeps the branch lane... OK"
+  ],
+  "original_failure_evidence": {
+    "wallet proving fixture": "Sapling parameters load failed in both groups. The original synthetic HOME had no proving parameter files.",
+    "compiler fixture": "test_z23kernel_build.c:126, zk_llvm_bin(llvm, sizeof llvm) == 0 failed. The fixture searches the passwd-home toolchain cache.",
+    "retrieval fixtures": "retrieval-gold-identifier-graph-receipt-check: FAIL \u2014 driver commit is unavailable",
+    "disk I/O fixture": "The tmpdir was tmpfs and no disk-backed fallback was found.",
+    "mesh terminal fixtures": "The worker spawn and supervised session checks failed. The OS sandbox group also reported userns unavailable on host."
+  },
+  "targeted_recovery": [
+    {
+      "command": "make -j4 t-fast-exact ONLY=test_boot_phase,test_retrieval_profile_sweep,test_retrieval_prefix_sweep,test_wallet_spend_rule,test_wallet_shield_address ZCL_TEST_WERROR=1",
+      "exit": 0,
+      "results": {
+        "literal": "SUITE VERDICT mode=cold groups_total=1625 groups_ran=5 groups_cached=0 groups_gated=1620 groups_failed=0 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=11c1b6ed24a6",
+        "groups_ran": 5,
+        "groups_cached": 0,
+        "groups_gated": 1620,
+        "groups_failed": 0,
+        "self_skips": 0,
+        "env_unobserved": 0,
+        "load_flaky": 0
+      },
+      "environment": "Disk-backed XDG cache inside the evidence workspace, historical driver 25fe3e353288d2f52e7f5fc07b7b722b27e71f1a fetched from upstream, and four public parameter files verified against repository SHA-256 pins in the synthetic HOME."
+    },
+    {
+      "command": "make -j4 t-fast-exact ONLY=test_z23kernel_build ZCL_TEST_WERROR=1",
+      "exit": 0,
+      "results": {
+        "literal": "SUITE VERDICT mode=cold groups_total=1625 groups_ran=1 groups_cached=0 groups_gated=1624 groups_failed=0 self_skips=0 env_unobserved=0 load_flaky=0 toolkey=11c1b6ed24a6",
+        "groups_ran": 1,
+        "groups_cached": 0,
+        "groups_gated": 1624,
+        "groups_failed": 0,
+        "self_skips": 0,
+        "env_unobserved": 0,
+        "load_flaky": 0
+      },
+      "environment": "Compiler test only. A read-only synthetic user cache pointed at installed LLVM 20. The first fixture launcher had no writable /dev/null and exited 2 before the tests. A private /dev fixed the fixture."
+    }
+  ],
+  "remaining": {
+    "groups": [
+      "test_mesh_terminal_worker",
+      "test_mesh_terminal_hub"
+    ],
+    "operation": "unshare --user --map-current-user --pid --fork /usr/bin/true",
+    "exit": 1,
+    "stderr": "unshare: write failed /proc/self/uid_map: Operation not permitted",
+    "required_next_action": "Verify both registered groups in an admitted Linux lane whose normal worker is permitted to create the per-session user/PID namespace. Worldstream left its existing host policy in place.",
+    "local_disposition": "HOLD for full-suite acceptance. Targeted retries do not replace the recorded universal gate."
+  }
+}
