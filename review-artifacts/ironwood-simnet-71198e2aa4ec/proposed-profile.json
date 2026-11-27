@@ -1,0 +1,39 @@
+{
+  "profile": "zcl-iw-exp1",
+  "source_base": "ddd29074e8b95c9f8c1534997348501f977b2e79",
+  "activation_heights": {
+    "sprout": 0,
+    "testdummy": -1,
+    "overwinter": 1,
+    "sapling": 1,
+    "bubbles": 2,
+    "diffadj": 3,
+    "buttercup": 4,
+    "ironwood": 200
+  },
+  "genesis": {
+    "header_version": 4,
+    "time": 1795651200,
+    "bits": "200f0f0f",
+    "previous": "zero256",
+    "final_sapling_root": "zero256",
+    "equihash": [
+      200,
+      9
+    ],
+    "coinbase_version": 1,
+    "coinbase_script_sig": "single push of the 32 raw bytes of this profile digest",
+    "coinbase_output": "zero-value OP_RETURN; unspendable",
+    "genesis_solution": "generate offline; freeze the full serialized block and SHA256d header hash before launch"
+  },
+  "p2p_port": 28033,
+  "rpc_port": 28232,
+  "peer_policy": "explicit lab peers only; default loopback",
+  "p2pkh_prefix": "30a1",
+  "p2sh_prefix": "30a2",
+  "sapling_hrp": "ziwsapling",
+  "unified_hrp": "uziw",
+  "key_scope": "fresh synthetic seeds per node; reject foreign address and key encodings",
+  "identity_derivation": "first four SHA-256 bytes of ASCII digest-hex / label; no spaces or newline; labels wire, overwinter, sapling, bubbles, diffadj, buttercup, ironwood; branch IDs are big-endian integers",
+  "shared_overrides": false
+}

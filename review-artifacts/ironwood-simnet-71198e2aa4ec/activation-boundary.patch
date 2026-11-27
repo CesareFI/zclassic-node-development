@@ -1,0 +1,103 @@
+diff --git a/tests/harness/src/test_simnet_sapling_activation.c b/tests/harness/src/test_simnet_sapling_activation.c
+index ce54c94058..3acb402d1a 100644
+--- a/tests/harness/src/test_simnet_sapling_activation.c
++++ b/tests/harness/src/test_simnet_sapling_activation.c
+@@ -17,6 +17,9 @@
+ #include "test/test_core.h"
+ 
+ #include "sim/simnet.h"
++#include "primitives/block.h"
++#include "validation/connect_block.h"
++#include "consensus/validation.h"
+ #include "chain/chainparams.h"
+ #include "consensus/params.h"
+ #include "consensus/upgrades.h"
+@@ -41,12 +44,75 @@
+  * sits one below, so the first minted block is at this height. */
+ #define SIM_FIRST_MINT_HEIGHT 100
+ 
++/* Only the header root differs from the accepted block. Rebuild its parent
++ * in a disposable sim: connect_block can write its coins view before refusing
++ * the root. The original simulation must remain usable for the next height. */
++static bool sa_zero_root_refused(struct block *block, int height, int activation)
++{
++    struct simnet parent;
++    if (!simnet_init(&parent))
++        return false;
++    simnet_activate_sapling_at(&parent, activation);
++
++    bool refused = false;
++    if (simnet_mint_to_height(&parent, height - 1)) {
++        struct block_index index;
++        block_index_init(&index);
++        index.nHeight = height;
++        index.pprev = &parent.tip;
++        struct validation_state state;
++        validation_state_init(&state);
++        uint256_set_null(&block->header.hashFinalSaplingRoot);
++        refused = !connect_block(block, &state, &index, &parent.view,
++                                 &parent.params, false) &&
++                  strcmp(state.reject_reason, "bad-sapling-root-zeroed") == 0;
++    }
++    simnet_free(&parent);
++    return refused;
++}
++
++static int sa_cross_activation(const struct uint256 *empty_root)
++{
++    int failures = 0;
++    const int activation = SIM_FIRST_MINT_HEIGHT + 1;
++    struct simnet sim;
++    if (!simnet_init(&sim))
++        return 1;
++    simnet_activate_sapling_at(&sim, activation);
++    const struct uint256 zero = {0};
++    for (int height = activation - 1; height <= activation + 1; ++height) {
++        struct block block;
++        block_init(&block);
++        int captured_height;
++        bool minted = simnet_mint_txs_capture(&sim, NULL, 0, &block,
++                                              &captured_height);
++        printf("height %d: ", height);
++        SA_CHECK("connected block reached expected tip",
++                 minted && captured_height == height && simnet_tip_height(&sim) == height);
++        if (minted) {
++            const struct uint256 *expected = height < activation ? &zero : empty_root;
++            SA_CHECK("accepted header has the expected Sapling root",
++                     uint256_cmp(&block.header.hashFinalSaplingRoot, expected) == 0);
++            if (height >= activation)
++                SA_CHECK("zero-root sibling rejected with bad-sapling-root-zeroed",
++                         sa_zero_root_refused(&block, height, activation));
++        }
++        block_free(&block);
++        if (!minted)
++            break;
++    }
++    simnet_free(&sim);
++    return failures;
++}
++
+ int test_simnet_sapling_activation(void)
+ {
+     int failures = 0;
+ 
+     /* ── No-leak baseline (BEFORE): mainnet params untouched. ─────── */
+     const struct chain_params *mp = chain_params_get();
++    unsigned char mainnet_before[sizeof *mp];
++    memcpy(mainnet_before, mp, sizeof mainnet_before);
+     SA_CHECK("mainnet Sapling activation is 476969 (before)",
+              mp->consensus.vUpgrades[UPGRADE_SAPLING].nActivationHeight
+                  == MAINNET_SAPLING_HEIGHT);
+@@ -116,9 +182,12 @@ int test_simnet_sapling_activation(void)
+                  == SIM_FIRST_MINT_HEIGHT + 1);
+ 
+     simnet_free(&s);
++    failures += sa_cross_activation(&empty_root);
+ 
+     /* ── No-leak (AFTER): the sim mutation did NOT touch mainnet. ──── */
+     const struct chain_params *mp2 = chain_params_get();
++    SA_CHECK("mainnet parameter bytes identical after simulated activations",
++             memcmp(mainnet_before, mp2, sizeof mainnet_before) == 0);
+     SA_CHECK("mainnet Sapling activation STILL 476969 (after)",
+              mp2->consensus.vUpgrades[UPGRADE_SAPLING].nActivationHeight
+                  == MAINNET_SAPLING_HEIGHT);

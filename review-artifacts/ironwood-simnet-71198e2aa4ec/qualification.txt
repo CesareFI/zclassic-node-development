@@ -1,0 +1,33 @@
+Z23 simulated Sapling activation boundary — contributor execution receipt
+
+Owner-directed no-card harness work. Native story ironwood-simnet-activation-boundary. Original native file-claim ledger row SHA-256 53e08ba7b0040525e9a367b59fb931744fa283b73e50c8923e825b64e6796849. The lease covered only tests/harness/src/test_simnet_sapling_activation.c. The writer refreshed its scope before the edit and commit and subsequently released one claim.
+Base ddd29074e8b95c9f8c1534997348501f977b2e79.
+Candidate 71198e2aa4ecfc45c70a609a490ca5c2b73411b3.
+Tree 553fb1f6b8b8625978669d7b4109e813aabd7b16.
+The test file gained 69 lines. The existing registered group ran the new case.
+The packaging checkout subsequently saw upstream main e5165fb6fd7a8f393f68b5e14b985e48899d4524. Its merge base with the candidate was the qualified parent. The bundle imports against that parent.
+
+Local scheduler execution, four build CPUs and one harness worker
+  make -s t-list ONLY=simnet_sapling_activation
+  exit 0; exact registration test_simnet_sapling_activation.
+  make -j4 t-fast-exact ONLY=simnet_sapling_activation 'T_FAST_EXACT_ARGS=--no-cache --jobs=1'
+  Baseline 2026-11-26T21:41:55Z to 21:47:40Z. Exit 0. 1 group executed cold, 1 passed, zero failed/cached/self-skipped/unobserved; 1641 other groups outside selection.
+  Candidate 2026-11-26T22:15:53Z to 22:15:59Z. Exit 0. 1 group executed cold, 1 passed, zero failed/cached/self-skipped/unobserved; 1641 other groups outside selection. The runner reported a 0.020s group interval.
+  make -j4 lint-fast-preflight
+  Exit 0. 60 gates passed. Automatic differential precheck skipped because HEAD had no merge base with the contributor fork's origin/main.
+  make -j4 -f Makefile -f "$evidence/explicit-base.mk" review-differential
+  Exit 0. Used the exact clean parent and the one changed path with the repository skip list and --skip-heavy. 152 gates compared, 0 newly failing, 0 unbuilt, 64 skipped. Raw labels 131 PASS, 8 FIXED, 13 PREEXISTING. No inference that the source change fixed unrelated gates.
+  git diff --check and git bundle verify both exited 0.
+  Native sender precheck ran 6 gates and skipped 4: check-file-size-ceiling, check-core-seal, proof-compile-changed, check-capability-closure. Canonical proof history unavailable to the sender. Independent static review approved the one-file diff. Full lint, full native proof and independent runner execution NOT RUN in this receipt.
+
+Candidate harness observations
+  Transparent coinbase-only blocks connected at heights 100, 101 and 102. H=101. Pre-activation header carried zero, post-activation headers carried the computed empty Sapling root. Each post-activation block's zero-root sibling was applied to a freshly reconstructed parent; both were refused with bad-sapling-root-zeroed. A negative candidate only passes the test when validation supplies that exact reason.
+  The complete mainnet chain_params object's byte representation matched before and after, including its pointer values. Pointee contents were not independently hashed. simnet_init value-copies mainnet parameters and redirects its checkpoint pointer into simulator storage. It also resets the existing process-global deferred-proof threshold in the test process.
+  simnet_mint_txs_capture traverses the production connect_block path with just_check=false. Header/transaction structural checks, Merkle-root, size/coinbase/sigops checks, in-memory coin application, reward and activation-specific zero-root enforcement participate. The synthetic tip is at 99; the checkpoint at 1000000 bypasses expensive PoW/Equihash and script execution. Coinbase-only inputs supply no spend script or shielded proof. The optional contextual transaction lane, full contextual block admission, populated shielded-tree comparison, disk persistence, P2P and reorg are outside this case.
+  Simulator references at the base: engine/modules/sim/src/simnet.c:325, :363, :404 and :501. Validation: core/modules/validation/src/connect_block.c:1080 and :1171, core/modules/validation/src/check_block.c:213. Candidate negative/positive comparisons: tests/harness/src/test_simnet_sapling_activation.c:48 and :74, mainnet comparison at :189.
+
+Handoff
+  Native review bundle 1918 bytes; SHA-256 1f5fe49f734399e85f931530236920a47e7800fb3424d08e11487f25a27b5a0f.
+  Native offer root abfd17b201d2dd252b1571f3a1dc01830287dc567c1e2c1300b6fed52e1d89c1.
+  Native contrib need and exact text readback 4b5a59cc3e8f4b7dfb0ab78b635af6d029235d1e044d015e57374e7a5607590b.
+  R1 owns fetch verification, independent qualification, acceptance and landing. The separate proposed experimental network still needs the reference revision and vectors, an independently reproducible genesis, reviewed schedule and real C23 verification.
